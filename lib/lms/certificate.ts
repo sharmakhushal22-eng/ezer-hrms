@@ -69,7 +69,7 @@ export async function certificatePdf(cert: any): Promise<Uint8Array> {
 
   // Helvetica carries WinAnsi only: a name in another script must not stop the PDF.
   const center = (raw: string, y: number, size: number, font = regular, color = ink, maxWidth = W - 160) => {
-    let s = toWinAnsi(String(raw ?? ''))
+    const s = toWinAnsi(String(raw ?? ''))
     let sz = size
     while (font.widthOfTextAtSize(s, sz) > maxWidth && sz > 10) sz -= 1
     page.drawText(s, { x: (W - font.widthOfTextAtSize(s, sz)) / 2, y, size: sz, font, color })

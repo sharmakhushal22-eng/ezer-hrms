@@ -7,9 +7,12 @@
 // A candidate token is only ever accepted here. Nothing else in the app knows the format,
 // which is what keeps a candidate out of ESS and away from employee data.
 import { NextRequest, NextResponse } from 'next/server'
-import { essCaller } from '@/lib/ess/session'
+import { essCaller, type EssCaller } from '@/lib/ess/session'
+import { grantForRequest } from '@/lib/rms/server'
+import { allowedCompanies } from '@/lib/rms/resolve'
 import type { AudienceFacts } from './core'
 import { isCandidateToken, verifyCandidateToken } from './candidate-session'
+import { LMS_MODULES, lmsCaps } from './caps'
 import { must, sb, settingsFor } from './server'
 
 export interface Learner {
@@ -72,6 +75,25 @@ async function employeeLearner(employeeId: string, readOnly: boolean): Promise<L
   }
 }
 
+/** May the person behind this request look at someone else's learning?
+ *
+ *  essCaller lets anyone with any admin module open any portal, in any company. That was
+ *  decided for the portal shell, and it is too wide for assessment results. Here it takes
+ *  learning oversight within the same company, or being that person's manager. */
+export async function mayViewLearner(req: NextRequest, caller: EssCaller): Promise<boolean> {
+  if (!caller.viewAs) return true
+  if (!caller.actorEmployeeId) return true   // the legacy dashboard login, full by definition
+  const { data: target } = await sb.from('employees').select('company_id').eq('id', caller.employeeId).maybeSingle()
+  if (!target?.company_id) return false
+  const g = await grantForRequest(req)
+  const caps = lmsCaps(g)
+  const oversight = caps.viewAssignments || caps.reports
+  const companies = g.crossCompany ? null : LMS_MODULES.flatMap(m => allowedCompanies(g, m))
+  if (oversight && (!companies || companies.includes(target.company_id))) return true
+  const { teamIds } = await import('./team')
+  return (await teamIds(caller.actorEmployeeId)).includes(caller.employeeId)
+}
+
 /** The learner making this request, or the response that refuses them. */
 export async function lmsLearner(req: NextRequest): Promise<{ learner: Learner; error: null } | { learner: null; error: NextResponse }> {
   const token = bearer(req)
@@ -84,6 +106,7 @@ export async function lmsLearner(req: NextRequest): Promise<{ learner: Learner; 
   }
   const c = await essCaller(req)
   if (c.error) return { learner: null, error: c.error }
+  if (!await mayViewLearner(req, c.caller)) return { learner: null, error: NextResponse.json({ error: 'You can only open your own learning.' }, { status: 403 }) }
   const l = await employeeLearner(c.caller.employeeId, c.caller.viewAs)
   if (!l) return { learner: null, error: NextResponse.json({ error: 'No learning record for this login.' }, { status: 404 }) }
   return { learner: l, error: null }

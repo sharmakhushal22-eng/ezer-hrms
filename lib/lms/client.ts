@@ -2,7 +2,7 @@
 // lib/lms/client.ts — the browser's way to the /api/lms routes.
 //
 // Two kinds of caller share the same screens: an employee in ESS, and a candidate on their
-// /learn link who holds a token nothing else accepts. useCandidateSession() switches this
+// /learn link who holds a token nothing else accepts. setCandidateSession() switches this
 // module to the candidate's token; everything above it stays the same.
 import { authHeaders } from '@/lib/auth-headers'
 
@@ -10,7 +10,7 @@ let candidateToken: string | null = null
 /** Set when the page in front of the person is someone else's portal. */
 let viewingEmployee: string | null = null
 
-export function useCandidateSession(token: string | null) { candidateToken = token }
+export function setCandidateSession(token: string | null) { candidateToken = token }
 export function setViewing(employeeId: string | null) { viewingEmployee = employeeId }
 
 export class LmsApiError extends Error {

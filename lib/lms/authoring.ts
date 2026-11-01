@@ -49,18 +49,18 @@ export async function listCourses(companies: string[]) {
   const [versions, cats, enrols, thumbs] = await Promise.all([
     ids.length ? sb.from('lms_course_versions').select('id, course_id, version_no, status').in('course_id', ids).in('status', ['DRAFT', 'IN_REVIEW', 'PUBLISHED']) : { data: [] },
     sb.from('lms_categories').select('id, name').in('company_id', companies),
-    sb.rpc('lms_overview', { p_companies: companies }),
+    sb.rpc('lms_course_counts', { p_companies: companies }),
     thumbnails(rows.map(r => r.thumbnail_asset_id)),
   ])
   const cat = new Map(((cats as any).data || []).map((c: any) => [c.id, c.name]))
-  const byCourse = new Map((((enrols as any).data?.by_course) || []).map((c: any) => [c.course_id, c]))
+  const counts = ((enrols as any).data || {}) as Record<string, { enrolled: number; completed: number; overdue: number }>
   return rows.map(r => {
     const vs = ((versions as any).data || []).filter((v: any) => v.course_id === r.id)
-    const stats: any = byCourse.get(r.id)
+    const stats = counts[r.id]
     return {
       ...r, category: cat.get(r.category_id) || null, thumbnail: thumbs.get(r.thumbnail_asset_id) || null,
       draft: vs.find((v: any) => v.status !== 'PUBLISHED') || null, live: vs.find((v: any) => v.status === 'PUBLISHED') || null,
-      enrolled: stats?.total || 0, completed: stats?.completed || 0, overdue: stats?.overdue || 0,
+      enrolled: stats?.enrolled || 0, completed: stats?.completed || 0, overdue: stats?.overdue || 0,
     }
   })
 }

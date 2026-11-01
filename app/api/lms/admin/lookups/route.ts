@@ -13,8 +13,8 @@ export async function GET(req: NextRequest) {
   if (error) return error
   try {
     const [company] = await readCompanies(actor, req.nextUrl.searchParams.get('company'))
-    let q = () => {
-      let x = sb.from('employees').select('id, emp_code, full_name, designation, grade, employment_type, employee_category, team_name, confirmation_status, department_id, location_id').eq('company_id', company).eq('employment_status', 'Active').neq('is_test', true)
+    const q = () => {
+      let x = sb.from('employees').select('id, emp_code, full_name, designation, grade, employment_type, employee_category, team_name, confirmation_status, department_id, location_id').eq('company_id', company).eq('employment_status', 'Active').not('is_test', 'is', true)
       if (actor.locationId) x = x.eq('location_id', actor.locationId)
       return x.order('full_name')
     }

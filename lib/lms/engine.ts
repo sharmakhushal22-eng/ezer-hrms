@@ -183,14 +183,17 @@ export async function openLesson(l: Learner, enrollmentId: string, lessonId: str
   if (e.status !== 'COMPLETED') await assertReachable(l, e, lessonId, tree, rows, now)
 
   let row = rows.find(r => r.lesson_id === lessonId)
-  if (!row) {
-    const made = await sb.from('lms_lesson_progress').upsert(
-      { company_id: e.company_id, enrollment_id: e.id, lesson_id: lessonId, opened_at: new Date(now).toISOString() },
-      { onConflict: 'enrollment_id,lesson_id', ignoreDuplicates: true },
-    ).select(PROGRESS_COLS)
-    row = (made.data || [])[0] || (await loadProgress(e.id)).find(r => r.lesson_id === lessonId)
+  // Someone viewing this portal sees the lesson and leaves no mark on the learner's record.
+  if (!l.readOnly) {
+    if (!row) {
+      const made = await sb.from('lms_lesson_progress').upsert(
+        { company_id: e.company_id, enrollment_id: e.id, lesson_id: lessonId, opened_at: new Date(now).toISOString() },
+        { onConflict: 'enrollment_id,lesson_id', ignoreDuplicates: true },
+      ).select(PROGRESS_COLS)
+      row = (made.data || [])[0] || (await loadProgress(e.id)).find(r => r.lesson_id === lessonId)
+    }
+    await touchEnrollment(e, lessonId, now)
   }
-  if (!l.readOnly) await touchEnrollment(e, lessonId, now)
 
   let url: string | null = null, poster: string | null = null, duration: number | null = null, mime: string | null = null, name: string | null = null
   if (lesson.asset_id) {
@@ -287,7 +290,17 @@ async function expireStale(enrollmentId: string, lessonId: string, now: number) 
   if (!data?.expires_at) return null
   if (new Date(data.expires_at).getTime() + SUBMIT_GRACE_S * 1000 >= now) return data
   await sb.from('lms_quiz_attempts').update({ status: 'EXPIRED', submitted_at: new Date(now).toISOString(), score: 0, pct: 0, passed: false }).eq('id', data.id)
+  // That may have been the last attempt, and HR's report should say so.
+  await recompute(enrollmentId, now)
   return null
+}
+
+/** Daily: timed attempts somebody walked away from. */
+export async function settleAbandonedAttempts(now = Date.now()) {
+  const cutoff = new Date(now - SUBMIT_GRACE_S * 1000).toISOString()
+  const { data } = await sb.from('lms_quiz_attempts').select('enrollment_id, lesson_id').eq('status', 'IN_PROGRESS').lt('expires_at', cutoff).limit(500)
+  for (const a of data || []) await expireStale(a.enrollment_id, a.lesson_id, now)
+  return (data || []).length
 }
 
 /** Start or resume an attempt. The attempt counts from here rather than from submission:
@@ -351,6 +364,7 @@ function paperResponse(a: any, quiz: any, questions: QuestionFull[], now: number
 
 export async function submitQuiz(l: Learner, enrollmentId: string, attemptId: string, answers: Record<string, Answer>, now = Date.now()) {
   const e = await myEnrollment(l, enrollmentId)
+  assertOpen(e)
   const { data: a } = await sb.from('lms_quiz_attempts').select('*').eq('id', attemptId).eq('enrollment_id', e.id).maybeSingle()
   if (!a) throw notFound('That attempt')
   if (a.status !== 'IN_PROGRESS') throw new LmsError('This attempt has already been submitted.', 409)

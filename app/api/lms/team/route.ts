@@ -2,6 +2,7 @@
 // on the server from the session. A candidate token cannot get here: essCaller refuses it.
 import { NextRequest, NextResponse } from 'next/server'
 import { essRoute } from '@/lib/ess/session'
+import { mayViewLearner } from '@/lib/lms/learner'
 import { decideRequest, managerAssign, teamView } from '@/lib/lms/team'
 import { errorResponse, LmsError } from '@/lib/lms/server'
 
@@ -11,6 +12,7 @@ export async function GET(req: NextRequest) {
   const { ctx, error } = await essRoute(req)
   if (error) return error
   try {
+    if (!await mayViewLearner(req, ctx.caller)) throw new LmsError('You can only open your own team.', 403)
     if (!ctx.companyId) return NextResponse.json({ is_manager: false, people: [], rows: [], requests: [] })
     return NextResponse.json(await teamView(ctx.caller.employeeId, ctx.companyId))
   } catch (e) { return errorResponse(e) }

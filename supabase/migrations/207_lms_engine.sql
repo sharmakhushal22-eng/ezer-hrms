@@ -728,8 +728,24 @@ RETURNS JSONB LANGUAGE sql STABLE AS $$
   )
 $$;
 
--- Who failed which assessment, and how often: the assessment analytics a report and a
--- quiz author both want. p_quiz narrows it to one quiz; question_stats is per question.
+-- Per-course figures for the course list. Separate from lms_overview, whose breakdowns stop
+-- at the top 25, or every course past that would read as having nobody enrolled.
+CREATE OR REPLACE FUNCTION lms_course_counts(p_companies UUID[]) RETURNS JSONB
+LANGUAGE sql STABLE AS $$
+  SELECT COALESCE(jsonb_object_agg(x.course_id, jsonb_build_object('enrolled', x.enrolled, 'completed', x.completed, 'overdue', x.overdue)), '{}'::jsonb)
+    FROM (
+      SELECT e.course_id,
+             count(*) AS enrolled,
+             count(*) FILTER (WHERE e.status IN ('COMPLETED','EXPIRED')) AS completed,
+             count(*) FILTER (WHERE e.status IN ('NOT_STARTED','IN_PROGRESS') AND e.due_at < now()) AS overdue
+        FROM lms_enrollments e
+       WHERE e.company_id = ANY(p_companies) AND e.status NOT IN ('CANCELLED','REJECTED','PENDING_APPROVAL','WAIVED')
+       GROUP BY e.course_id
+    ) x
+$$;
+
+-- Who failed which assessment, and how often: the analytics a report and a quiz author both
+-- want. p_course narrows it to one course.
 CREATE OR REPLACE FUNCTION lms_quiz_stats(p_companies UUID[], p_course UUID DEFAULT NULL) RETURNS JSONB
 LANGUAGE sql STABLE AS $$
   SELECT COALESCE(jsonb_agg(x ORDER BY x.pass_rate NULLS LAST), '[]'::jsonb) FROM (

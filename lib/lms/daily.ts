@@ -7,6 +7,7 @@ import { allRows, audit, sb, settingsFor, type LmsSettings } from './server'
 import { appBase, digestHtml, mailLearner, notifyPerson, shell, type DigestLine } from './notify'
 import { preboardingSweep } from './preboarding'
 import { publishProblems } from './core'
+import { settleAbandonedAttempts } from './engine'
 
 /** Mails per run. Gmail caps a day's sending, and what does not go today goes tomorrow. */
 const MAIL_BUDGET = 300
@@ -148,6 +149,7 @@ export async function runLmsDaily(now = Date.now()) {
   const pre = await preboardingSweep()
   const { data: sweep, error } = await sb.rpc('lms_daily_sweep')
   if (error) throw new Error(error.message)
+  const abandoned = await settleAbandonedAttempts(now)
   const rem = await reminders(now)
-  return { scheduled, sweep, preboarding: pre, reminders: rem }
+  return { scheduled, sweep, preboarding: pre, abandoned_attempts: abandoned, reminders: rem }
 }
