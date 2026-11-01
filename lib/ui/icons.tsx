@@ -199,6 +199,10 @@ export const IconHeart = (p: IconProps) => (
 export const IconAward = (p: IconProps) => (
   <Svg {...p}><circle cx="10" cy="7.5" r="4.5" /><path d="M7.2 11 6 17.5l4-2 4 2-1.2-6.5" /></Svg>
 );
+/** An open book — Learning. */
+export const IconLearning = (p: IconProps) => (
+  <Svg {...p}><path d="M10 5.5C8.5 4.2 6.4 3.6 3 3.6V15c3.4 0 5.5.6 7 1.9 1.5-1.3 3.6-1.9 7-1.9V3.6c-3.4 0-5.5.6-7 1.9Z" /><path d="M10 5.5v11.4" /></Svg>
+);
 /** A game controller — Fun Zone. */
 export const IconGame = (p: IconProps) => (
   <Svg {...p}><path d="M6 6.5h8a4 4 0 0 1 3.9 4.9l-.6 2.6a2 2 0 0 1-3.4.9L12.4 13H7.6l-1.5 1.9a2 2 0 0 1-3.4-.9l-.6-2.6A4 4 0 0 1 6 6.5Z" /><path d="M6.5 9v3M5 10.5h3" /><path d="M13 10h.01M14.5 11.5h.01" /></Svg>

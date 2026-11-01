@@ -53,7 +53,7 @@ import {
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
   IconOrgChart, IconBuilding, IconPerformance, IconLogout, IconChevron, IconChevronDown,
-  IconUser, IconHeart, IconAward, IconGame, IconMore, IconCheck, IconAlert,
+  IconUser, IconHeart, IconAward, IconGame, IconLearning, IconMore, IconCheck, IconAlert,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 // The shell's sidebar, top bar, headings and sub-tabs (hover states and the like).
@@ -83,6 +83,7 @@ const SectionLoading = () => (
 // analyses them statically, and hoisting them into a shared const fails the
 // build with "next/dynamic options must be an object literal" once per call.
 
+const LearningHub          = dynamic(() => import('@/components/learning/LearningHub'), { ssr: false, loading: SectionLoading })
 const MyDocumentsToSign    = dynamic(() => import('@/components/esign/MyDocumentsToSign'), { ssr: false, loading: SectionLoading })
 const FlexiTdsCalculator   = dynamic(() => import('@/components/ess/FlexiTdsCalculator'), { ssr: false, loading: SectionLoading })
 const FunZone              = dynamic(() => import('@/components/ess/FunZone'), { ssr: false, loading: SectionLoading })
@@ -3163,7 +3164,7 @@ const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => R
   // Every section has its own glyph now — Org Chart, Company and Reports had none and
   // sat out of line in the rail, and Social / RNR / Fun Zone shared two between them.
   orgchart: IconOrgChart, company: IconBuilding, reports: IconReports,
-  social: IconHeart, rnr: IconAward, funzone: IconGame,
+  social: IconHeart, rnr: IconAward, funzone: IconGame, learning: IconLearning,
   // The same glyph the dashboard rail gives this module, so the employee side
   // and the back office are recognisably the same thing.
   expenses: IconReceipt,
@@ -3265,6 +3266,12 @@ const SECTIONS: NavSection[] = [
     desc:'Attrition, regime comparison, declaration status, TDS register, span of control',
     items:[{ k:'reports', label:'Reports' }] },
 
+  // ONE ITEM ON PURPOSE, like Social: the hub draws its own tabs, because Team appears
+  // only for someone with reports, which is decided from org data inside it.
+  { k:'learning', label:'Learning', short:'Learn', icon:'', status:'ready',
+    desc:'Your assigned training, the course catalogue and your certificates',
+    items:[{ k:'learning', label:'Learning' }]},
+
   // Which tabs a person sees inside this is decided by the component from org
   // data — everyone gets My KRAs, managers additionally get My Team, HODs get
   // Department. One section, three audiences.
@@ -3331,7 +3338,7 @@ const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 const NAV_GROUPS: { label: string | null; keys: string[] }[] = [
   { label: null,              keys: ['home', 'inbox'] },
   { label: 'Time & pay',      keys: ['attendance', 'leave', 'payroll', 'expenses'] },
-  { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance'] },
+  { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance', 'learning'] },
   { label: 'Workplace',       keys: ['hris', 'company', 'reports'] },
   { label: 'Community',       keys: ['social', 'rnr', 'funzone'] },
 ]
@@ -3587,7 +3594,7 @@ const ESS_KEYWORDS: Record<string, string> = {
   inbox: 'messages notifications mail', directory: 'team directory people colleagues employees',
   requests: 'raise request helpdesk ticket', approvals: 'tasks approvals pending approve leave travel resignation offers interviews',
   exit: 'resign resignation exit separation', company: 'company headcount attrition', reports: 'reports export',
-  performance: 'pms performance goals kra appraisal review', social: 'social wall fame appreciate', funzone: 'games fun zone',
+  learning: 'learning training course courses lms catalogue certificate quiz compliance', performance: 'pms performance goals kra appraisal review', social: 'social wall fame appreciate', funzone: 'games fun zone',
 }
 
 function scoreEntry(e: SearchEntry, q: string): number {
@@ -4001,7 +4008,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   const adminGroups = ADMIN_NAV_GROUPS
     .map(g => ({ group: g.group, items: g.items.filter(i => i.roles
       ? roleEntryOpen(i, essMenu.roles.map(r => r.code), !!essMenu.super_admin)   // role-gated (Help → TDS Calculator)
-      : essMenu.super_admin || (!!i.module && atLeast(essMenu.modules[i.module] as AccessLevel, 'VIEW'))) }))
+      : essMenu.super_admin || (i.anyModule || (i.module ? [i.module] : [])).some(m => atLeast(essMenu.modules[m] as AccessLevel, 'VIEW'))) }))
     .filter(g => g.items.length > 0)
 
   const meta = viewMeta(view)
@@ -4089,6 +4096,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
       case 'documents':     return <Documents emp={emp} notify={notify} />
       case 'letters':       return <MyLetters emp={emp} />
       case 'to-sign':       return <MyDocumentsToSign />
+      case 'learning':      return <LearningHub employeeId={emp.id} viewAs={!!adminMode} />
 
       case 'team':          return <MyTeam emp={emp} isMobile={isMobile} />
       case 'orgchart':      return <AdminModuleHost moduleKey="org-chart" />

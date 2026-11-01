@@ -22,9 +22,9 @@ import Link from 'next/link';
 import { usePathname } from 'next/navigation';
 import { supabase } from '@/lib/supabase';
 import { useGrant } from '@/lib/rms/client';
-import { moduleForPath, type Module } from '@/lib/rms/modules';
+import { modulesForPath, type Module } from '@/lib/rms/modules';
 import { NAV_GROUPS, roleEntryOpen } from '@/lib/rms/nav';
-import { canSee, hasAdminAccess, type Grant } from '@/lib/rms/resolve';
+import { canSee, canSeeAny, hasAdminAccess, type Grant } from '@/lib/rms/resolve';
 import { C, F, W, S, R, E, M, UIKeyframes } from '@/lib/ui';
 import { ThemeToggle } from '@/lib/ui/ThemeToggle';
 import { Logo, LogoStyles } from '@/lib/ui/Logo';
@@ -33,13 +33,13 @@ import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconOrgChart, IconUpload, IconTransfer,
   IconPerformance,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
-  IconReceipt, IconDot,
+  IconReceipt, IconDot, IconLearning,
   IconLoans, IconCompliance, IconLetters, IconMobile, IconAdmin, IconPolicies,
   IconSliders, IconBuilding, IconReports, IconDatabase, IconAi, IconSupport, IconTemplates,
   IconChevron, IconLogout, type IconProps,
 } from '@/lib/ui/icons';
 
-interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement; module: Module | null; roles?: string[] }
+interface NavItem { label: string; href: string; Icon: (p: IconProps) => React.ReactElement; module: Module | null; anyModule?: Module[]; roles?: string[] }
 
 // ── One hue per destination ─────────────────────────────────────────────────
 // Twenty-seven rows all drawn in C.railMuted on a transparent ground is why
@@ -85,7 +85,7 @@ const ICON: Record<string, (p: IconProps) => React.ReactElement> = {
   expenses: IconReceipt, loans: IconLoans,
   compliance: IconCompliance, letters: IconLetters, policies: IconPolicies, reports: IconReports,
   ess: IconMobile, admin: IconAdmin, configuration: IconTemplates, 'flexi-policy': IconSliders, 'company-profile': IconBuilding, 'db-export': IconDatabase,
-  ai: IconAi, support: IconSupport, 'tds-calculator': IconPayroll,
+  ai: IconAi, support: IconSupport, 'tds-calculator': IconPayroll, learning: IconLearning,
 }
 
 // Every href here is identical to the previous flat list. Nothing moved except
@@ -96,7 +96,7 @@ const NAV: NavGroup[] = NAV_GROUPS.map(g => ({
   // so one nav key missing from ICON above throws inside EVERY row and takes the
   // whole dashboard down, not just its own. That is what adding `expenses` to
   // lib/rms/nav.ts without an icon did.
-  items: g.items.map(i => ({ label: i.label, href: i.href, module: i.module, roles: i.roles, Icon: ICON[i.key] ?? IconDot })),
+  items: g.items.map(i => ({ label: i.label, href: i.href, module: i.module, anyModule: i.anyModule, roles: i.roles, Icon: ICON[i.key] ?? IconDot })),
 }));
 
 const OPEN_W = 244;
@@ -406,8 +406,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
   // Every route is filtered through the same grant a direct URL is checked
   // against below — a module the sidebar hides is a module the URL guard
   // blocks too, from one source of truth (lib/rms).
-  const current = moduleForPath(path);
-  const blocked = current !== null && !canSee(grant, current);
+  const blocked = !canSeeAny(grant, modulesForPath(path));
 
   return (
     <div style={{ display: 'flex', minHeight: '100vh', fontFamily: F.family, background: C.canvas }}>
@@ -894,7 +893,7 @@ export default function Layout({ children }: { children: React.ReactNode }) {
           {NAV.map((g, i) => {
             const items = g.items.filter(item => item.roles
               ? roleEntryOpen(item, grant.roles.map(r => r.role_code), grant.isSuperAdmin || grant.legacy)
-              : canSee(grant, item.module));
+              : item.anyModule ? canSeeAny(grant, item.anyModule) : canSee(grant, item.module));
             if (!items.length) return null;
             return (
               <GroupBlock key={g.group || 'root'} group={g.group} index={i}
