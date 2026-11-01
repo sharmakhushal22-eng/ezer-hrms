@@ -28,6 +28,7 @@ import { loadAppointment, appointmentLetterPdf } from '@/lib/onboarding/appointm
 import { apptProblems, defaultEmail, type ApptDraft, type ApptFields } from '@/lib/onboarding/appointment-letter'
 import { docIdFor } from '@/lib/letters/catalog'
 import { saveFilledToRecord } from '@/lib/letters/record-save'
+import { letterBlockedFor } from '@/lib/letters/applicability'
 
 export const runtime = 'nodejs' // pdfkit + nodemailer
 export const dynamic = 'force-dynamic'
@@ -84,6 +85,8 @@ async function contextFor(req: NextRequest, ref: { onboarding_id?: any; employee
   const ctx = await loadAppointment(sb, onboardingId ? { onboardingId } : { employeeId })
   if (!ctx) return { error: bad(onboardingId ? 'Onboarding record not found.' : 'Employee not found.', 404) }
   if (!ctx.onboarding.employee_code) return { error: bad('Generate the employee code first — the appointment letter follows it.', 409) }
+  const blocked = letterBlockedFor('APT', ctx.onboarding.employment_type)
+  if (blocked) return { error: bad(blocked, 409) }
   const g = await grantForRequest(req)
   if (!(g.crossCompany || g.isSuperAdmin || g.legacy || !g.companyId)) {
     const scope = [...new Set([...allowedCompanies(g, 'HR Letters'), ...allowedCompanies(g, 'Onboarding')])]

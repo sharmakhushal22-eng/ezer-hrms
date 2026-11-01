@@ -184,7 +184,7 @@ export async function computeFnf(sb: Sb, resignationId: string, o: { force?: boo
   if (!o.force && !DEPTS.every(d => isCleared(byDept[d]?.status))) return null
   const { data: existing } = await sb.from('fnf_settlements').select('*').eq('resignation_id', resignationId).maybeSingle()
   if (existing && existing.status !== 'CALCULATED') return existing
-  const { data: res } = await sb.from('employee_resignation').select('id, employee_id, final_lwd, lwd_as_per_policy, date_of_resignation, notice_period_days').eq('id', resignationId).maybeSingle()
+  const { data: res } = await sb.from('employee_resignation').select('*').eq('id', resignationId).maybeSingle()
   if (!res) return null
   const { data: emp } = await sb.from('employees').select('id, company_id, company_doj, date_of_joining').eq('id', res.employee_id).maybeSingle()
   const lwd = String(res.final_lwd || res.lwd_as_per_policy || today())
@@ -210,7 +210,7 @@ export async function computeFnf(sb: Sb, resignationId: string, o: { force?: boo
     const adv = fin.advance?.amount != null ? Number(fin.advance.amount) : f.advance
     deductions.push({ key: 'loan', label: 'Pending loan recovery', amount: Math.round(loan || 0), note: f.loanNote || 'Loan module', editable: true })
     deductions.push({ key: 'advance', label: 'Salary advance recovery', amount: Math.round(adv || 0), editable: true })
-    const ns = noticeShortfallOf(f.grossMonthly, Number(res.notice_period_days) || 0, res.date_of_resignation, lwd, { waived: NO_NOTICE_RECOVERY.includes(reason.code) })
+    const ns = noticeShortfallOf(f.grossMonthly, Number(res.notice_period_days) || 0, res.date_of_resignation, lwd, { waived: NO_NOTICE_RECOVERY.includes(reason.code), waivedDays: Number((res as any).notice_waived_days) || 0 })
     deductions.push({ key: 'notice', label: 'Notice shortfall', amount: ns.amount, note: ns.note, editable: true })
     for (const d of DEPTS) {
       const r = byDept[d]; if (!r) continue

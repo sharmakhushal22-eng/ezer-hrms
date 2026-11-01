@@ -12,7 +12,7 @@ const s = (v: any) => { const t = v == null ? '' : String(v).trim(); return /^[.
 
 export interface EmployeeFacts {
   values: Values
-  employee: { id: string; full_name: string; emp_code: string | null; company_id: string | null; email: string | null; designation: string | null; status: string | null }
+  employee: { id: string; full_name: string; emp_code: string | null; company_id: string | null; email: string | null; designation: string | null; status: string | null; employment_type: string | null }
   company: any
   /** The onboarding record (when there is one): the appointment letter is drawn from it. */
   onboardingId: string | null
@@ -93,7 +93,7 @@ export async function employeeFacts(sb: any, employeeId: string): Promise<Employ
   for (const k of Object.keys(v)) if (!v[k]) delete v[k]
   return {
     values: v,
-    employee: { id: e.id, full_name: e.full_name, emp_code: e.emp_code, company_id: e.company_id, email: e.office_email || e.personal_email || null, designation: e.designation, status: e.employment_status },
+    employee: { id: e.id, full_name: e.full_name, emp_code: e.emp_code, company_id: e.company_id, email: e.office_email || e.personal_email || null, designation: e.designation, status: e.employment_status, employment_type: e.employment_type || null },
     company,
     onboardingId: oc?.id || null,
   }

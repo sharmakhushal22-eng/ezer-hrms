@@ -19,8 +19,10 @@ export function canExitOthers(roleCodes: string[], superAdmin: boolean): boolean
 export const OPEN_EXIT = ['INITIATED', 'PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER', 'RETENTION_HOLD', 'RECOVERY_PENDING']
 
 // ── Stages: the self-resignation chain, in its order ─────────────────────────────
+// Since 01-Nov-2026 (migration 208) only the Reporting Manager (L1) approves, then the HR
+// Manager sets the final LWD. RM_L2 / HOD stay as keys for the chains stored before that.
 export type StageKey = 'RM_L1' | 'RM_L2' | 'HOD' | 'HR_MANAGER'
-export const STAGE_ORDER: StageKey[] = ['RM_L1', 'RM_L2', 'HOD', 'HR_MANAGER']
+export const STAGE_ORDER: StageKey[] = ['RM_L1', 'HR_MANAGER']
 export const STAGES: Record<StageKey, { label: string }> = {
   RM_L1: { label: 'Reporting Manager (L1)' },
   RM_L2: { label: 'L2 Manager' },
@@ -29,7 +31,7 @@ export const STAGES: Record<StageKey, { label: string }> = {
 }
 /** The action labels the resignation cards use (lib/ess/pending.ts), and their codes. */
 export const ACTIONS = {
-  ACKNOWLEDGED: 'Acknowledge & forward', ACCEPTED_WITH_DATE: 'Accept with my date', REQUESTED_RETENTION: 'Request retention',
+  ACKNOWLEDGED: 'Acknowledge & forward', ACCEPTED_WITH_DATE: 'Approve with LWD', REQUESTED_RETENTION: 'Request retention',
   RESUMED: 'Resume chain', FINAL_LWD_SET: 'Set final LWD',
 } as const
 export type ActionCode = keyof typeof ACTIONS
@@ -148,6 +150,9 @@ export function advance(chain: ChainStep[], now = new Date().toISOString()): { c
   const open = next.findIndex(s => s.status === 'PENDING' || s.status === 'HOLD')
   if (open >= 0) return { chain: next, current: open, done: false }
   for (;;) {
+    // A stage no longer in the chain (L2 / HOD on a request from before migration 208) is passed.
+    const gone = next.findIndex(s => s.status === 'WAITING' && !STAGE_ORDER.includes(s.stage as StageKey))
+    if (gone >= 0) { next[gone] = { ...next[gone], status: 'SKIPPED', acted_at: now, note: 'Removed from the approval flow (L1 and HR Manager only)' }; continue }
     const i = next.findIndex(s => s.status === 'WAITING')
     if (i < 0) return { chain: next, current: null, done: true }
     const acted = new Set(next.slice(0, i).filter(s => s.status === 'APPROVED' && s.acted_by).map(s => s.acted_by!.id))
@@ -161,10 +166,11 @@ export function actionsFor(step: ChainStep | null | undefined): ActionCode[] {
   if (!step) return []
   if (step.status === 'HOLD') return ['RESUMED']
   if (step.status !== 'PENDING') return []
-  return step.stage === 'HR_MANAGER' ? ['FINAL_LWD_SET'] : ['ACKNOWLEDGED', 'ACCEPTED_WITH_DATE', 'REQUESTED_RETENTION']
+  // Every approver sets a last working day (lib/exit/lwd.ts): managers approve with a date.
+  return step.stage === 'HR_MANAGER' ? ['FINAL_LWD_SET'] : ['ACCEPTED_WITH_DATE', 'REQUESTED_RETENTION']
 }
 
-/** The newest date a manager proposed with Accept with my date (HR starts from it). */
+/** The newest date a manager approved with (HR starts from it). */
 export const proposedLwd = (chain: ChainStep[]): string | null =>
   [...chain].reverse().find(s => s.action === 'ACCEPTED_WITH_DATE' && s.lwd)?.lwd || null
 
@@ -185,7 +191,7 @@ export function act(chain: ChainStep[], o: { actor: Person; action: string; note
   }
   const note = String(o.note || '').trim() || null
   const lwd = o.lwd && /^\d{4}-\d{2}-\d{2}$/.test(o.lwd) ? o.lwd : null
-  if ((code === 'ACCEPTED_WITH_DATE' || code === 'FINAL_LWD_SET') && !lwd) throw new Error(code === 'FINAL_LWD_SET' ? 'Enter the final last working day.' : 'Enter the last working day you accept.')
+  if ((code === 'ACCEPTED_WITH_DATE' || code === 'FINAL_LWD_SET') && !lwd) throw new Error(code === 'FINAL_LWD_SET' ? 'Enter the final last working day.' : 'Enter the last working day you approve.')
   const next = chain.map(s => ({ ...s }))
   if (code === 'REQUESTED_RETENTION') { next[i] = { ...step, status: 'HOLD', action: 'REQUESTED_RETENTION', note, acted_at: o.now }; return { chain: next, finalLwd: null, hold: true } }
   if (code === 'RESUMED') { next[i] = { ...step, status: 'PENDING', action: null, note: note ? `Resumed: ${note}` : step.note, acted_at: null }; return { chain: next, finalLwd: null, hold: false } }
@@ -203,6 +209,6 @@ export function stepWords(s: ChainStep): string {
   if (s.status === 'REJECTED') return 'Rejected'
   if (s.status === 'PENDING') return 'Waiting'
   if (s.status === 'WAITING') return 'Not reached yet'
-  return s.action === 'STARTED' ? 'Started the exit' : s.action === 'ACCEPTED_WITH_DATE' ? 'Accepted with date'
+  return s.action === 'STARTED' ? 'Started the exit' : s.action === 'ACCEPTED_WITH_DATE' ? 'Approved with LWD'
     : s.action === 'FINAL_LWD_SET' ? 'Final LWD set' : 'Acknowledged'
 }

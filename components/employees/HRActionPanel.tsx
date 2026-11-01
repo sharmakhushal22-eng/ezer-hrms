@@ -5,6 +5,7 @@
 import { useState, useEffect, useCallback } from 'react'
 import * as HR from '@/lib/employees/hr-actions'
 import HrExitSection from './HrExitSection'
+import ExitLwdPanel from './ExitLwdPanel'
 import { supabase } from '@/lib/supabase'
 import { authHeaders } from '@/lib/auth-headers'
 // Design tokens, aliased as TK — many of these files already declare
@@ -661,6 +662,8 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
       {!states.sabbatical && <SabbaticalForm onSave={(p) => run(() => HR.markSabbatical(employee.id, p, by), 'Sabbatical marked')} />}
       {/* Exit (took the place of "Initiate resignation"): reason, approval flow, cancel / reset. */}
       <HrExitSection employeeId={employee.id} onChanged={() => { reload(); onRefresh?.() }} />
+      {/* An approved exit's last working day and notice: the HR Manager may change / waive them. */}
+      <ExitLwdPanel employeeId={employee.id} onChanged={() => { reload(); onRefresh?.() }} />
       {!states.abscond && <AbscondForm onSave={(d) => run(() => HR.markAbscond(employee.id, d, by), 'Marked abscond')} />}
       {!states.resignation && !states.abscond && <TransferForm employee={employee} companies={companies} branches={branches} managers={managers} shifts={shifts} departments={departments}
         onIntra={(p) => run(() => HR.initiateLocationTransfer({ ...p, employee_ids: [employee.id] }, by), 'Location transfer initiated')}

@@ -18,8 +18,9 @@ import { C, W, E, R, Z } from '@/lib/ui'
 import { LETTERS, LETTER_BY_CODE, STAGE_ORDER, missingFields, type LetterDef, type LetterField, type Values } from '@/lib/letters/catalog'
 import AppointmentLetterModal from '@/components/onboarding/AppointmentLetterModal'
 import { filledMissing, RECORD_FIELDS } from '@/lib/letters/record-save'
+import { letterBlockedFor } from '@/lib/letters/applicability'
 
-type Emp = { id: string; emp_code: string | null; full_name: string; designation: string | null; status?: string | null; company?: string | null; email?: string | null }
+type Emp = { id: string; emp_code: string | null; full_name: string; designation: string | null; status?: string | null; company?: string | null; email?: string | null; employment_type?: string | null }
 type Pending = { id: string; full_name: string; employee_code: string | null; designation: string | null; date_of_joining: string | null; email: string | null }
 type Issued = { id: string; employee_id?: string | null; letter_name: string | null; letter_type?: string | null; doc_id?: string | null; letter_date: string; generated_at: string; emailed_at: string | null; published_to_ess_at: string | null; sent_to?: string | null; generated_by_name?: string | null; employees?: { full_name: string; emp_code: string | null } | null }
 type Tab = 'pending' | 'issue' | 'issued'
@@ -156,7 +157,7 @@ function EmployeeSearch({ value, onPick, onClear }: { value: Emp | null; onPick:
       <Avatar name={value.full_name} size={40} />
       <div style={{ minWidth: 0, flex: 1 }}>
         <div style={{ fontWeight: W.semi, fontSize: 14, color: C.ink }}>{value.full_name} <span style={{ color: C.muted, fontWeight: W.medium }}>· {value.emp_code}</span></div>
-        <div style={{ fontSize: 12, color: C.muted }}>{[value.designation, value.company].filter(Boolean).join(' · ') || '—'}</div>
+        <div style={{ fontSize: 12, color: C.muted }}>{[value.designation, value.employment_type, value.company].filter(Boolean).join(' · ') || '—'}</div>
       </div>
       {value.status && value.status !== 'Active' && <span style={pill(C.warning, C.warningTint)}>{value.status}</span>}
       <button type="button" style={btn('secondary', true)} onClick={onClear}>Change</button>
@@ -178,7 +179,7 @@ function EmployeeSearch({ value, onPick, onClear }: { value: Emp | null; onPick:
               <Avatar name={h.full_name} size={30} />
               <span style={{ flex: 1, minWidth: 0 }}>
                 <span style={{ display: 'block', fontSize: 13, fontWeight: W.semi, color: C.ink }}>{h.full_name}</span>
-                <span style={{ display: 'block', fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[h.designation, h.company].filter(Boolean).join(' · ') || '—'}</span>
+                <span style={{ display: 'block', fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{[h.designation, h.employment_type, h.company].filter(Boolean).join(' · ') || '—'}</span>
               </span>
               <span style={{ fontSize: 12, fontWeight: W.semi, color: C.inkSoft, fontFamily: 'ui-monospace, monospace' }}>{h.emp_code}</span>
               {h.status && h.status !== 'Active' && <span style={pill(C.muted, C.sunken)}>{h.status}</span>}
@@ -191,8 +192,10 @@ function EmployeeSearch({ value, onPick, onClear }: { value: Emp | null; onPick:
   )
 }
 
-/** The letter type: a searchable list grouped by stage, plus the common ones as chips. */
-function LetterPicker({ value, onPick }: { value: LetterDef | null; onPick: (d: LetterDef) => void }) {
+/** The letter type: a searchable list grouped by stage, plus the common ones as chips. A letter
+ *  the employee's engagement type rules out (lib/letters/applicability) is shown, disabled, with
+ *  the reason. */
+function LetterPicker({ value, onPick, employmentType }: { value: LetterDef | null; onPick: (d: LetterDef) => void; employmentType?: string | null }) {
   const [q, setQ] = useState('')
   const [open, setOpen] = useState(false)
   const ref = useRef<HTMLDivElement>(null)
@@ -223,17 +226,21 @@ function LetterPicker({ value, onPick }: { value: LetterDef | null; onPick: (d: 
               return (
                 <div key={stage}>
                   <div style={{ padding: '8px 10px 4px', fontSize: 10.5, fontWeight: W.bold, letterSpacing: '.08em', textTransform: 'uppercase', color: C.muted }}>{stage}</div>
-                  {list.map(l => (
-                    <button key={l.code} type="button" role="option" aria-selected={value?.code === l.code} onClick={() => { onPick(l); setQ(''); setOpen(false) }}
-                      style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: R.sm, border: 'none', cursor: 'pointer', fontFamily: 'inherit', background: value?.code === l.code ? C.brandTint : 'transparent' }}>
-                      <span style={{ fontSize: 10.5, fontWeight: W.bold, color: C.brand, background: C.brandTint, border: `1px solid ${C.brandEdge}`, borderRadius: R.sm, padding: '2px 6px', minWidth: 32, textAlign: 'center' }}>{l.code}</span>
-                      <span style={{ flex: 1, minWidth: 0 }}>
-                        <span style={{ display: 'block', fontSize: 13, fontWeight: W.semi, color: C.ink }}>{l.name}</span>
-                        <span style={{ display: 'block', fontSize: 12, color: C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{l.about}</span>
-                      </span>
-                      {!l.ess && <span style={pill(C.warning, C.warningTint)}>Not in ESS</span>}
-                    </button>
-                  ))}
+                  {list.map(l => {
+                    const blocked = letterBlockedFor(l.code, employmentType)
+                    return (
+                      <button key={l.code} type="button" role="option" aria-selected={value?.code === l.code} aria-disabled={!!blocked} disabled={!!blocked} title={blocked || undefined}
+                        onClick={() => { if (blocked) return; onPick(l); setQ(''); setOpen(false) }}
+                        style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', textAlign: 'left', padding: '8px 10px', borderRadius: R.sm, border: 'none', cursor: blocked ? 'not-allowed' : 'pointer', fontFamily: 'inherit', background: value?.code === l.code ? C.brandTint : 'transparent', opacity: blocked ? .5 : 1 }}>
+                        <span style={{ fontSize: 10.5, fontWeight: W.bold, color: blocked ? C.muted : C.brand, background: blocked ? C.sunken : C.brandTint, border: `1px solid ${blocked ? C.line : C.brandEdge}`, borderRadius: R.sm, padding: '2px 6px', minWidth: 32, textAlign: 'center' }}>{l.code}</span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: W.semi, color: blocked ? C.muted : C.ink }}>{l.name}</span>
+                          <span style={{ display: 'block', fontSize: 12, color: blocked ? C.critical : C.muted, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{blocked || l.about}</span>
+                        </span>
+                        {blocked ? <span style={pill(C.muted, C.sunken)}>Not applicable</span> : !l.ess && <span style={pill(C.warning, C.warningTint)}>Not in ESS</span>}
+                      </button>
+                    )
+                  })}
                 </div>
               )
             })}
@@ -241,11 +248,15 @@ function LetterPicker({ value, onPick }: { value: LetterDef | null; onPick: (d: 
         </div>
       )}
       <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 10 }}>
-        {QUICK.map(c => LETTER_BY_CODE[c]).filter(Boolean).map(l => (
-          <button key={l.code} type="button" onClick={() => onPick(l)}
-            style={{ height: 28, padding: '0 10px', borderRadius: R.pill, fontSize: 12, fontWeight: W.medium, fontFamily: 'inherit', cursor: 'pointer',
-              border: `1px solid ${value?.code === l.code ? C.brand : C.line}`, background: value?.code === l.code ? C.brandTint : C.surface, color: value?.code === l.code ? C.brand : C.inkSoft }}>{l.name.replace(/^Letter of /, '')}</button>
-        ))}
+        {QUICK.map(c => LETTER_BY_CODE[c]).filter(Boolean).map(l => {
+          const blocked = letterBlockedFor(l.code, employmentType)
+          return (
+            <button key={l.code} type="button" disabled={!!blocked} title={blocked || undefined} onClick={() => !blocked && onPick(l)}
+              style={{ height: 28, padding: '0 10px', borderRadius: R.pill, fontSize: 12, fontWeight: W.medium, fontFamily: 'inherit', cursor: blocked ? 'not-allowed' : 'pointer', opacity: blocked ? .45 : 1,
+                textDecoration: blocked ? 'line-through' : 'none',
+                border: `1px solid ${value?.code === l.code ? C.brand : C.line}`, background: value?.code === l.code ? C.brandTint : C.surface, color: value?.code === l.code ? C.brand : C.inkSoft }}>{l.name.replace(/^Letter of /, '')}</button>
+          )
+        })}
       </div>
     </div>
   )
@@ -329,6 +340,12 @@ export default function LettersStudio() {
     })()
     return () => { alive = false }
   }, [emp])
+  // A letter the newly picked employee's engagement rules out is dropped (with the reason).
+  const [dropped, setDropped] = useState('')
+  useEffect(() => {
+    const why = def && emp ? letterBlockedFor(def.code, emp.employment_type) : null
+    if (why) { setDropped(`${def!.name} was cleared — ${emp!.full_name} is a ${emp!.employment_type}. ${why}`); setDef(null) }
+  }, [emp, def])
   // A new letter or employee invalidates the preview.
   useEffect(() => { setPdfUrl(''); setPdfName(''); setSaveToRecord(false) }, [def, emp])
 
@@ -460,11 +477,12 @@ export default function LettersStudio() {
           <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(min(480px, 100%), 1fr))', gap: 16, alignItems: 'start' }}>
             <div style={{ display: 'grid', gap: 14, minWidth: 0 }}>
               <Section step={1} title="Employee" hint="Search by employee code or name" done={!!emp}>
-                <EmployeeSearch value={emp} onPick={setEmp} onClear={() => setEmp(null)} />
+                <EmployeeSearch value={emp} onPick={e => { setDropped(''); setEmp(e) }} onClear={() => { setDropped(''); setEmp(null) }} />
               </Section>
               <Section step={2} title="Letter type" hint={def ? def.about : 'Choose from the letter catalogue'} done={!!def}
                 right={def && <span style={def.ess ? pill(C.positive, C.positiveTint) : pill(C.warning, C.warningTint)}>{def.ess ? 'Visible in ESS' : 'Not shown in ESS'}</span>}>
-                <LetterPicker value={def} onPick={setDef} />
+                <LetterPicker value={def} onPick={d => { setDropped(''); setDef(d) }} employmentType={emp?.employment_type} />
+                {dropped && <div style={{ marginTop: 10, padding: '9px 12px', borderRadius: R.md, background: C.warningTint, border: `1px solid ${C.warningEdge}`, fontSize: 12.5, color: C.ink, display: 'flex', gap: 8 }}><Icon name="alert" color={C.warning} />{dropped}</div>}
               </Section>
               <Section step={3} title="Letter details" done={ready}
                 hint={def && emp && !loadingEmp ? `${autoCount} of ${def.fields.length} fields filled from the record` : 'Auto-filled from the employee record'}

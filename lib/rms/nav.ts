@@ -44,7 +44,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { key: 'onboarding',        label: 'Onboarding',              href: '/dashboard/onboarding',      module: 'Onboarding' },
     { key: 'pms',               label: 'Performance',             href: '/dashboard/pms',             module: 'Performance' },
     { key: 'employees',         label: 'Employees',               href: '/dashboard/employees',       module: 'Employees' },
-    { key: 'org-chart',         label: 'Org Chart',               href: '/dashboard/org-chart',       module: 'Employees' },
+    // Org Chart is not listed under People: everyone reaches it from the ESS sidebar (Org Chart).
     { key: 'bulk-upload',       label: 'Bulk Uploader',           href: '/dashboard/bulk-upload',     module: 'Bulk Upload' },
     { key: 'transfer',          label: 'Transfer',                href: '/dashboard/transfer',        module: 'Transfer' },
     // Pending appointment letters and the twenty HR letters (EZER Letters & Documents spec).

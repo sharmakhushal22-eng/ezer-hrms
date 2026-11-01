@@ -23,6 +23,7 @@ import { sendMail } from '@/lib/mail/send'
 import { LETTER_BY_CODE, missingFields, docIdFor, type Values } from '@/lib/letters/catalog'
 import { employeeFacts } from '@/lib/letters/facts'
 import { saveFilledToRecord } from '@/lib/letters/record-save'
+import { letterBlockedFor, noAppointmentFor } from '@/lib/letters/applicability'
 import { letterPdf } from '@/lib/letters/render-pdf'
 
 export const runtime = 'nodejs'
@@ -47,11 +48,11 @@ export async function GET(req: NextRequest) {
   if (sp.has('search')) {
     const q = String(sp.get('search') || '').trim().replace(/[%,()]/g, ' ')
     if (q.length < 2) return NextResponse.json({ employees: [] })
-    let qq = sb.from('employees').select('id, emp_code, full_name, designation, employment_status, company_id, companies!employees_company_id_fkey(company_name)')
+    let qq = sb.from('employees').select('id, emp_code, full_name, designation, employment_status, employment_type, company_id, companies!employees_company_id_fkey(company_name)')
       .or(`emp_code.ilike.%${q}%,full_name.ilike.%${q}%`).not('is_test', 'is', true).order('emp_code').limit(20)
     if (scope) qq = qq.in('company_id', scope)
     const { data } = await qq
-    return NextResponse.json({ employees: ((data as any[]) || []).map(e => ({ id: e.id, emp_code: e.emp_code, full_name: e.full_name, designation: e.designation, status: e.employment_status, company: e.companies?.company_name || null })) })
+    return NextResponse.json({ employees: ((data as any[]) || []).map(e => ({ id: e.id, emp_code: e.emp_code, full_name: e.full_name, designation: e.designation, status: e.employment_status, employment_type: e.employment_type || null, company: e.companies?.company_name || null })) })
   }
 
   if (sp.get('employee_id')) {
@@ -62,7 +63,7 @@ export async function GET(req: NextRequest) {
   }
 
   if (sp.get('pending')) {
-    let q = sb.from('onboarding_candidates').select('id, full_name, employee_code, employee_id, designation, date_of_joining, email, company_id, updated_at').eq('status', 'EMPLOYEE_CREATED').order('updated_at', { ascending: false }).limit(500)
+    let q = sb.from('onboarding_candidates').select('id, full_name, employee_code, employee_id, designation, date_of_joining, email, company_id, updated_at, employment_type').eq('status', 'EMPLOYEE_CREATED').order('updated_at', { ascending: false }).limit(500)
     if (scope) q = q.in('company_id', scope)
     const { data: coded } = await q
     const ids = ((coded as any[]) || []).map(c => c.id)
@@ -71,7 +72,8 @@ export async function GET(req: NextRequest) {
       const { data } = await sb.from('onboarding_audit_log').select('onboarding_id').eq('action', 'APPOINTMENT_LETTER_SENT').in('onboarding_id', ids.slice(i, i + 150))
       for (const r of (data as any[]) || []) sent.add(r.onboarding_id)
     }
-    const items = ((coded as any[]) || []).filter(c => !sent.has(c.id))
+    // Apprentices, contractors and consultants get no appointment letter (lib/letters/applicability).
+    const items = ((coded as any[]) || []).filter(c => !sent.has(c.id) && !noAppointmentFor(c.employment_type))
     return NextResponse.json({ items })
   }
 
@@ -99,6 +101,8 @@ export async function POST(req: NextRequest) {
   const f = await employeeFacts(sb, String(b.employee_id || ''))
   if (!f) return bad('Pick the employee.', 404)
   if (!inScope(await scopeOf(req), f.employee.company_id)) return bad('This employee belongs to another company.', 403)
+  const blocked = letterBlockedFor(def.code, f.employee.employment_type)
+  if (blocked) return bad(blocked, 409)
 
   // The form's values over the record's; only the letter's own fields, trimmed and bounded.
   const values: Values = { ...f.values }

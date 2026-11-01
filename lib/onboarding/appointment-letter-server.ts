@@ -35,7 +35,7 @@ export { negotiatedSalary }
 export interface ApptContext {
   draft: ApptDraft
   company: any
-  onboarding: { id: string | null; status: string | null; employee_id: string | null; employee_code: string | null; company_id: string | null }
+  onboarding: { id: string | null; status: string | null; employee_id: string | null; employee_code: string | null; company_id: string | null; employment_type: string | null }
   to: string
   salary_source: string
 }
@@ -43,7 +43,7 @@ export interface ApptContext {
 /** Everything the letter is filled from. Null when neither record exists. */
 export async function loadAppointment(sb: any, ref: string | { onboardingId?: string | null; employeeId?: string | null }): Promise<ApptContext | null> {
   const want = typeof ref === 'string' ? { onboardingId: ref, employeeId: null } : ref
-  const OC_COLS = 'id, status, company_id, candidate_id, employee_id, employee_code, full_name, email, designation, department, department_id, location_id, date_of_joining, offered_ctc, annual_ctc, pt_state, form_data, notice_period_days'
+  const OC_COLS = 'id, status, company_id, employment_type, candidate_id, employee_id, employee_code, full_name, email, designation, department, department_id, location_id, date_of_joining, offered_ctc, annual_ctc, pt_state, form_data, notice_period_days'
   let oc: any = null
   if (want.onboardingId) ({ data: oc } = await sb.from('onboarding_candidates').select(OC_COLS).eq('id', want.onboardingId).maybeSingle())
   else if (want.employeeId) ({ data: oc } = await sb.from('onboarding_candidates').select(OC_COLS).eq('employee_id', want.employeeId).order('created_at', { ascending: false }).limit(1).maybeSingle())
@@ -185,7 +185,7 @@ export async function loadAppointment(sb: any, ref: string | { onboardingId?: st
   return {
     draft: { fields, sections: buildSections(fields), annexure: ann.annexure },
     company,
-    onboarding: { id: oc?.id || null, status: oc?.status || null, employee_id: employeeId, employee_code: fields.emp_code || null, company_id: companyId },
+    onboarding: { id: oc?.id || null, status: oc?.status || null, employee_id: employeeId, employee_code: fields.emp_code || null, company_id: companyId, employment_type: s(emp?.employment_type) || s(oc?.employment_type) || null },
     to: s(oc?.email) || s(emp?.personal_email) || s(emp?.office_email),
     salary_source: negotiated?.label || fallback?.label || 'No CTC on record',
   }
