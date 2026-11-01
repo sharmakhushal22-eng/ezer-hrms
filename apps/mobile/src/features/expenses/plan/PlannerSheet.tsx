@@ -95,8 +95,8 @@ function StepBar({ steps, step, bad, onGo }: { steps: PlanStep[]; step: PlanStep
             </View>
             {on ? (
               <View style={{ flex: 1, minWidth: 0 }}>
-                <Txt size={12.5} w={700} color={isBad ? C.critical : C.ink} numberOfLines={1}>{s.title}</Txt>
-                <Txt size={10} tone="muted" numberOfLines={1}>{s.sub}</Txt>
+                <Txt size={12.5} w={700} color={isBad ? C.critical : C.ink}>{s.title}</Txt>
+                <Txt size={10} tone="muted">{s.sub}</Txt>
               </View>
             ) : null}
           </Pressable>

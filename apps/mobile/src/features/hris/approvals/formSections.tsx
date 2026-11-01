@@ -160,7 +160,7 @@ export function DocCard({ doc, onOpen }: { doc: Doc; onOpen?: (d: Doc) => void }
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={12.5} w={600}>{doc.label}</Txt>
-        <Txt size={11} tone="muted" numberOfLines={2}>
+        <Txt size={11} tone="muted">
           {doc.file_name || 'no file'}{doc.uploaded_at ? ` · ${day(doc.uploaded_at)}` : ''}
           {doc.ai_status === 'VERIFIED' ? <Txt size={11} w={600} tone="positive"> · AI verified</Txt> : null}
           {doc.hr_verified === true ? <Txt size={11} w={600} tone="positive"> · accepted</Txt> : null}

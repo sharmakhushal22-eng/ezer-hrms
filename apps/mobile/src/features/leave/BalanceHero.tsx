@@ -53,7 +53,7 @@ function useCountUp(target: number, live: boolean, reduce: boolean) {
 
 function Tile({ b, i, reduce }: { b: Balance; i: number; reduce: boolean }) {
   const { C, isDark } = useTheme()
-  const total = Number(b.opening || 0) + Number(b.accrued || 0)
+  const total = Math.round((Number(b.opening || 0) + Number(b.accrued || 0)) * 100) / 100
   const av = avail(b)
   const pct = total > 0 ? Math.round(av / total * 100) : 0
   const width = Math.min(100, Math.max(0, pct))
@@ -74,12 +74,12 @@ function Tile({ b, i, reduce }: { b: Balance; i: number; reduce: boolean }) {
         <View style={{ paddingHorizontal: 7, paddingVertical: 1, borderRadius: R.pill, backgroundColor: isDark ? DARK_CHIP : C.brandTint }}>
           <Txt size={10} w={700} color={isDark ? DARK_INK : C.brand}>{b.leave_types?.short_name}</Txt>
         </View>
-        <Txt size={F.micro} color={sub} numberOfLines={1} style={{ flex: 1 }}>{b.leave_types?.name}</Txt>
+        <Txt size={F.micro} color={sub} style={{ flex: 1 }}>{b.leave_types?.name}</Txt>
       </View>
       <Txt size={21} w={700} color={isDark ? DARK_INK : C.ink} style={{ lineHeight: 24, marginBottom: 6 }}>
         {av}<Txt size={F.micro} w={500} color={sub}> / {total}</Txt>
       </Txt>
-      {Number(b.pending) > 0 && <Txt size={F.micro} color={sub} numberOfLines={1}>{b.pending} pending approval</Txt>}
+      {Number(b.pending) > 0 && <Txt size={F.micro} color={sub}>{b.pending} pending approval</Txt>}
       <View accessibilityRole="image" accessibilityLabel={`${av} of ${total} days left`}
         style={{ height: 5, borderRadius: 3, overflow: 'hidden', marginTop: 4, backgroundColor: isDark ? DARK_TRACK : C.sunken }}>
         <Animated.View style={{

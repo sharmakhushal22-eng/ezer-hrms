@@ -7,8 +7,9 @@
 // expose its scroll ref. The heading below mirrors TabScreen's own markup.
 import * as React from 'react'
 import { RefreshControl, ScrollView, View, type LayoutChangeEvent } from 'react-native'
-import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { TabScreen } from '@/features/shell/TabScreen'
+import { FrameHead } from '@/ui/Screen'
+import { useFieldAboveKeyboard } from '@/ui/keyboard'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Notice, Txt } from '@/ui/primitives'
@@ -19,17 +20,6 @@ import { RequestsPanel } from './RequestsPanel'
 import { HolidaysPanel } from './HolidaysPanel'
 import { dayRules, earliestApplyDate, iso } from './logic'
 
-const HEADING = 'Leave'
-const DESC = 'Apply for leave, track your requests and plan around holidays'
-
-function Heading() {
-  return (
-    <View style={{ marginBottom: S.lg }}>
-      <Txt size={F.page} w={700}>{HEADING}</Txt>
-      <Txt size={F.small} tone="muted" style={{ marginTop: 2 }}>{DESC}</Txt>
-    </View>
-  )
-}
 
 function Skeleton() {
   const { C } = useTheme()
@@ -46,7 +36,6 @@ function Skeleton() {
 
 export default function LeaveScreen() {
   const { C } = useTheme()
-  const insets = useSafeAreaInsets()
   const q = useLeave()
   const data = q.data
   const [busy, setBusy] = React.useState(false)
@@ -63,6 +52,8 @@ export default function LeaveScreen() {
     setRefreshing(true)
     try { await q.refetch() } finally { setRefreshing(false) }
   }, [q])
+
+  useFieldAboveKeyboard(scrollRef)
 
   let body: React.ReactNode
   if (q.error && !data) {
@@ -88,11 +79,11 @@ export default function LeaveScreen() {
   }
 
   return (
-    <TabScreen scroll={false} padded={false}>
+    <TabScreen scroll={false} padded={false} ownFrame>
       <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled"
-        contentContainerStyle={{ padding: S.lg, paddingBottom: 96 + insets.bottom }}
+        contentContainerStyle={{ padding: S.lg, paddingBottom: S.xl }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.brand} colors={[C.brand]} />}>
-        <Heading />
+        <FrameHead />
         {body}
       </ScrollView>
     </TabScreen>

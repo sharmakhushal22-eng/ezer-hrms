@@ -145,7 +145,7 @@ export function CoChip({ name }: { name: string }) {
   const { C } = useTheme()
   return (
     <View style={{ height: 19, maxWidth: '100%', flexShrink: 1, paddingHorizontal: 8, borderRadius: 999, justifyContent: 'center', backgroundColor: C.sunken, borderWidth: 1, borderColor: C.line }}>
-      <Txt size={10.5} w={700} tone="muted" numberOfLines={1} style={{ letterSpacing: 0.2 }}>{name}</Txt>
+      <Txt size={10.5} w={700} tone="muted" style={{ letterSpacing: 0.2 }}>{name}</Txt>
     </View>
   )
 }

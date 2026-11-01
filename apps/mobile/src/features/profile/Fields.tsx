@@ -80,7 +80,7 @@ export function FieldCard({ f, payload, self, onAct, cols }: { f: ProfileField; 
   const content = (
     <>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-        <Txt size={F.micro} w={700} tone="muted" upper style={{ flex: 1 }} numberOfLines={2}>{f.label}</Txt>
+        <Txt size={F.micro} w={700} tone="muted" upper style={{ flex: 1 }}>{f.label}</Txt>
         {act ? <ModeChip mode={mode} />
           : self && f.state === 'locked' && !restricted
             ? <View accessibilityLabel="Maintained by HR. Ask HR to correct it."><LockGlyph color={C.faint} /></View> : null}

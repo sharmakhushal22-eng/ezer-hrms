@@ -34,7 +34,7 @@ export function TeSteps({ on, kind, way, onTo }: { on: 1 | 2 | 3; kind: FlowKind
               </View>
               <View style={{ flexShrink: 1 }}>
                 <Txt size={10} w={600} upper color={cur ? C.ink : past ? C.inkSoft : C.muted}>{s.small}</Txt>
-                <Txt size={12} w={700} numberOfLines={1} color={cur ? C.ink : past ? C.inkSoft : C.muted} style={{ maxWidth: 96 }}>{s.label}</Txt>
+                <Txt size={12} w={700} color={cur ? C.ink : past ? C.inkSoft : C.muted} style={{ maxWidth: 96 }}>{s.label}</Txt>
               </View>
             </Pressable>
           </React.Fragment>

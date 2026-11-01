@@ -30,8 +30,8 @@ function ScheduleTable({ rows }: { rows: any[] }) {
   const cell = (text: string | number, i: number, head?: boolean) => (
     <View key={i} style={{ width: COLS[i].w, paddingVertical: 6, paddingHorizontal: 8, alignItems: COLS[i].left ? 'flex-start' : 'flex-end' }}>
       {head
-        ? <Txt size={10} w={600} tone="muted" upper numberOfLines={1}>{text}</Txt>
-        : <Txt size={F.micro} numberOfLines={1}>{text}</Txt>}
+        ? <Txt size={10} w={600} tone="muted" upper>{text}</Txt>
+        : <Txt size={F.micro}>{text}</Txt>}
     </View>
   )
   return (

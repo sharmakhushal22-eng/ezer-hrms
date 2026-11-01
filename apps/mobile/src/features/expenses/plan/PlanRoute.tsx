@@ -117,7 +117,7 @@ function PointPanel({ snap, draft, issues, preview, i, edit, onPick, onClose }: 
         <View style={{ borderRadius: R.md, backgroundColor: C.sunken, padding: S.md }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 4 }}>
             <TeIcon name="clock" size="sm" color={C.ink} />
-            <Txt size={F.small} w={700} style={{ flex: 1 }} numberOfLines={1}>{`When you are ${pc.s || 'here'}`}</Txt>
+            <Txt size={F.small} w={700} style={{ flex: 1 }}>{`When you are ${pc.s || 'here'}`}</Txt>
             <Chip plain label="Optional" />
           </View>
           <Txt size={F.tiny} tone="muted" style={{ marginBottom: S.sm }}>
@@ -138,7 +138,7 @@ function PointPanel({ snap, draft, issues, preview, i, edit, onPick, onClose }: 
             {i > 0 ? <TimeField label="Reach at" value={p.arriveAt || ''} onChange={v => setPoint({ arriveAt: v })} style={{ flex: 1 }} /> : null}
             {!p.ret ? <TimeField label={i === 0 ? 'Set off at' : 'Move on at'} value={p.leaveAt || ''} onChange={v => setPoint({ leaveAt: v })} style={{ flex: 1 }} /> : null}
           </View>
-          <Input label="Note for the Travel Desk" value={p.prefNote ?? ''} placeholder="Late check-in; the client office shuts at 6"
+          <Input label="Note for the Travel Desk" value={p.prefNote ?? ''} placeholder="Late check-in; office shuts at 6"
             onChangeText={v => setPoint({ prefNote: v })} />
           <Input label="Link" value={p.prefUrl ?? ''} placeholder="https://…" autoCapitalize="none" keyboardType="url" autoCorrect={false}
             onChangeText={v => setPoint({ prefUrl: v })} style={{ marginBottom: 0 }}
@@ -199,8 +199,8 @@ function PointCard({ snap, draft, issues, preview, i, edit, onPick, select }: {
           style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 56, paddingVertical: 8, paddingRight: L.isStop ? 0 : 10 }}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Txt size={F.micro} tone="muted">{L.label}</Txt>
-            {pc ? <Txt size={F.small} w={700} numberOfLines={1}>{pc.s}</Txt> : <Txt size={F.small} w={600} tone="faint">{placeholder}</Txt>}
-            {meta ? <Txt size={F.micro} tone="muted" numberOfLines={2}>{meta}</Txt> : null}
+            {pc ? <Txt size={F.small} w={700}>{pc.s}</Txt> : <Txt size={F.small} w={600} tone="faint">{placeholder}</Txt>}
+            {meta ? <Txt size={F.micro} tone="muted">{meta}</Txt> : null}
             {bad && issue && !on ? <Txt size={F.micro} w={600} tone="critical">{issue.t}</Txt> : null}
           </View>
           <TeIcon name={on ? 'up' : 'down'} size="sm" color={C.muted} />

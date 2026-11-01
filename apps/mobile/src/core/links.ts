@@ -15,7 +15,7 @@ import { API_URL } from './config'
 
 const VIEW_ROUTE: Record<string, string> = Object.fromEntries(SECTIONS.flatMap(s => s.items.map(i => [i.k, i.route])))
 // The Investment Declaration screen is reachable by key on the website, not from the nav.
-VIEW_ROUTE.declaration = '/payroll/declaration'
+VIEW_ROUTE.declaration = '/payroll?sub=declaration'
 const KEYS = { views: new Set(Object.keys(VIEW_ROUTE)), modules: new Set<string>() }
 
 /** The app route for a website view key, or null. */
@@ -54,7 +54,8 @@ export function openLink(r: string | null | undefined): boolean {
   const t = resolveLink(r)
   if (!t) return false
   if ('external' in t) { void WebBrowser.openBrowserAsync(t.external); return true }
-  router.push((t.query ? `${t.route}?${t.query}` : t.route) as any)
+  // navigate, not push: a section is a place in the shell, not another page on top.
+  router.navigate((t.query ? `${t.route}${t.route.includes('?') ? '&' : '?'}${t.query}` : t.route) as any)
   return true
 }
 

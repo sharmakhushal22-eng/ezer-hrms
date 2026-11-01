@@ -1,7 +1,18 @@
-# Resume here — EZER HRMS Android app (updated 30 Oct 2026)
+# Resume here — EZER HRMS Android app (updated 1 Nov 2026)
 
 Branch **`feat/mobile-app`**. App in `apps/mobile/` (Expo SDK 57, React Native). It mirrors the website's
 employee self-service portal (`/ess`), same backend, admin excluded.
+
+## Phone UI pass (1 Nov 2026, version 1.1.0 / versionCode 2)
+Rebuilt the app's frame on the phone patterns of the website's `feat/mobile-ess` branch (PR #13). That branch is CSS and
+layout for the website, so nothing was merged from it; its ideas were rebuilt natively. No business logic changed.
+* Sections live in `(tabs)`: top bar and thumb bar stay, sub-tabs swap in place (`?sub=` param, `features/shell/Section.tsx`),
+  panels stay mounted. More is a sheet (`features/shell/MoreSheet.tsx`). Only true drill-downs are pushed.
+* No "…" anywhere except previews; `Txt fit` for tight lines; font scale capped at 1.15.
+* Keyboard: `KeyboardAvoidingView` padding on Android, `useFieldAboveKeyboard`, sheets sized to the room left.
+* Tested on a real Android emulator (API 35, 360dp, font 1.15), not only the browser harness. Recipe: Android SDK +
+  AVD, `expo export --platform android`, swap the `.hbc` into the APK's `assets/index.android.bundle`, zipalign, apksigner,
+  `adb install`. A JS-only change reaches the emulator in about 3 minutes with no NDK. Emulator needs `-dns-server 8.8.8.8`.
 
 ## State (30 Oct 2026)
 * All modules built, ported to the website as of commit `379a058` (origin/NayanAhuja), and tested in the

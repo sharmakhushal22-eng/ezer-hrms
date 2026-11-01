@@ -52,7 +52,7 @@ function TabBtn({ label, icon, active, dot, onPress }: { label: string; icon: st
         <TeIcon name={icon} color={fg} />
         {dot && <View style={{ position: 'absolute', top: -2, right: -6, width: 7, height: 7, borderRadius: 4, backgroundColor: C.critical }} />}
       </View>
-      <Txt size={10.5} w={600} color={fg} numberOfLines={1}>{label}</Txt>
+      <Txt size={10.5} w={600} color={fg} fit>{label}</Txt>
     </Pressable>
   )
 }

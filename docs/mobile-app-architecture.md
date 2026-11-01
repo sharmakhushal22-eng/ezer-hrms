@@ -59,8 +59,9 @@ apps/mobile/                      Expo SDK 57 · React Native 0.86 · TypeScript
     app/                          Expo Router routes (thin files; the screens live in features/)
       _layout.tsx                 providers + sign-in gate
       login.tsx
-      (tabs)/                     Home · Payroll · Attendance · Leave · More (the website's MOBILE_PRIMARY)
-      profile/ team orgchart performance inbox/ hris/ company reports social funzone rnr expenses/ payroll/ section/[key]
+      (tabs)/                     the shell: top bar + thumb bar around every section. Home · Payroll · Attendance · Leave
+                                  (the website's MOBILE_PRIMARY) plus the sections opened from the More sheet
+      expenses/ inbox/[id] profile/id-card   drill-downs pushed over the shell, with a back arrow
     core/                         no UI
       config.ts                   backend URLs (public values only)
       api.ts                      fetch → website /api with Bearer token, ApiError, multipart files

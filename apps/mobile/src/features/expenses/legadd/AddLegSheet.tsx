@@ -143,7 +143,7 @@ function LegAdd({ snap, detail, onAdded }: { snap: Snapshot; detail: TeTripDetai
 
       <Sec>
         <H4 style={{ marginTop: 0 }}>Why you are going</H4>
-        <Input label="Reason for this journey" value={why} placeholder="Second client meeting at their Bandra office"
+        <Input label="Reason for this journey" value={why} placeholder="Second client meeting in Bandra"
           onChangeText={v => { setWhy(v); setError('') }}
           help="Your approver and the travel desk read this. It was not in the plan they approved, so say what it is for." />
       </Sec>

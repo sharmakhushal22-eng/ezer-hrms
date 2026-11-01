@@ -86,17 +86,18 @@ export function LineNode({ name, sub, rank }: { name: string | null; sub: string
   const { C } = useTheme()
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, paddingVertical: 10 }}>
-      <TeamAvatar name={name} />
+      {/* Solid behind the avatar's tint, so the rail stops at it rather than showing through. */}
+      <View style={{ backgroundColor: C.surface, borderRadius: 12 }}><TeamAvatar name={name} /></View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>
-          <Txt size={F.small} w={600} numberOfLines={1} style={{ flexShrink: 1 }}>{name || '-'}</Txt>
+          <Txt size={F.small} w={600} style={{ flexShrink: 1 }}>{name || '-'}</Txt>
           {!!rank && (
             <View style={{ paddingHorizontal: 7, paddingVertical: 2, borderRadius: R.sm, backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandEdge }}>
-              <Txt size={10.5} w={700} tone="brand" numberOfLines={1}>{rank}</Txt>
+              <Txt size={10.5} w={700} tone="brand">{rank}</Txt>
             </View>
           )}
         </View>
-        <Txt size={11.5} tone="muted" numberOfLines={1}>{sub || '-'}</Txt>
+        <Txt size={11.5} tone="muted">{sub || '-'}</Txt>
       </View>
     </View>
   )

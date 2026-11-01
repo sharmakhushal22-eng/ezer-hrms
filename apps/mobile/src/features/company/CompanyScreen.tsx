@@ -27,7 +27,7 @@ interface CompanyData {
 function KV({ k, v, color, bold }: { k: string; v: React.ReactNode; color?: string; bold?: boolean }) {
   return (
     <View style={{ flexBasis: '30%', flexGrow: 1 }}>
-      <Txt size={10} w={700} tone="muted" upper>{k}</Txt>
+      <Txt size={10} w={700} tone="muted" upper fit>{k}</Txt>
       {typeof v === 'string' || typeof v === 'number' ? <Txt size={F.small} w={bold ? 700 : 500} color={color}>{v}</Txt> : v}
     </View>
   )

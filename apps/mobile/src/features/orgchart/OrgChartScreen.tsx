@@ -22,7 +22,7 @@ import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Card, Gap, Input, PickerField, Txt } from '@/ui/primitives'
 import { SelectSheet } from '@/ui/overlays'
-import { Screen } from '@/ui/Screen'
+import { FrameHead, Screen } from '@/ui/Screen'
 import { IconSearch } from '@/ui/icons'
 import { loadCompanies, loadDiagnostics, loadGrant, loadTree, type OrgTreeNode } from './api'
 import { DiagPanel, Legend, OrgRow, visibleRows } from './tree'
@@ -122,9 +122,10 @@ export default function OrgChartScreen() {
   const companyLabel = companyId ? companies.find(c => c.id === companyId)?.company_name || '' : 'All companies'
 
   return (
-    <Screen title="Org Chart" subtitle="See how the whole company fits together" scroll={false} padded={false}>
+    <Screen title="Org Chart" subtitle="See how the whole company fits together" scroll={false} padded={false} ownFrame>
       <ScrollView ref={scrollRef} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: S.lg, paddingBottom: S.xxl + S.lg }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.brand} colors={[C.brand]} />}>
+        <FrameHead />
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
           <LinearGradient colors={[C.brand, C.brandDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }}
             style={{ width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center' }}>
@@ -142,7 +143,7 @@ export default function OrgChartScreen() {
         <Card style={{ padding: S.md }}>
           <PickerField value={companyLabel} placeholder="All companies" onPress={() => setPickCompany(true)} style={{ marginBottom: S.sm }} />
           <View style={{ flexDirection: 'row', gap: S.sm, alignItems: 'flex-start' }}>
-            <Input value={q} onChangeText={setQ} placeholder="Find by name or employee code…" returnKeyType="search" onSubmitEditing={search}
+            <Input value={q} onChangeText={setQ} placeholder="Name or employee code" returnKeyType="search" onSubmitEditing={search}
               autoCapitalize="none" autoCorrect={false} style={{ flex: 1, marginBottom: 0 }}
               right={<View style={{ paddingRight: S.md }}><IconSearch size={16} color={C.faint} /></View>} />
             <Button title="Find" variant="outline" onPress={search} />

@@ -47,7 +47,7 @@ function ContinueRow({ x, onGo }: { x: ReturnType<typeof continueItems>[number];
   return (
     <View style={{ padding: 12, paddingHorizontal: 14, borderRadius: R.lg, borderWidth: 1, borderColor: edge, backgroundColor: bg, gap: S.sm }}>
       <View>
-        <Txt size={F.micro} w={700} tone="muted" upper numberOfLines={1}>{x.trip}</Txt>
+        <Txt size={F.micro} w={700} tone="muted" upper>{x.trip}</Txt>
         <Txt size={F.body} w={700}>{x.title}</Txt>
         <Txt size={F.tiny} tone="muted">{x.sub}</Txt>
       </View>

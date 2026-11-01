@@ -9,7 +9,7 @@
 // inside another component, so typing in an input never remounts it.
 import * as React from 'react'
 import {
-  ActivityIndicator, Platform, Pressable, StyleSheet, Text, TextInput, View,
+  ActivityIndicator, Animated, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View,
   type StyleProp, type TextInputProps, type TextStyle, type ViewStyle,
 } from 'react-native'
 import { LinearGradient } from 'expo-linear-gradient'
@@ -17,6 +17,11 @@ import { Image } from 'expo-image'
 import { useTheme } from './ThemeProvider'
 import { elevation, F, FONT, R, S, toneOf, type Tone } from './theme'
 import { IconAlert, IconCheck, IconChevron } from './icons'
+import { tick } from './feel'
+
+/** How far a phone's "font size" setting may grow the text. Layouts are built for
+ *  this much; beyond it, labels start to fight for the room numbers need. */
+export const MAX_FONT_SCALE = 1.15
 
 // ── Text ────────────────────────────────────────────────────────────────────
 type Weight = 400 | 500 | 600 | 700 | 800
@@ -33,16 +38,19 @@ export interface TxtProps {
   upper?: boolean
   selectable?: boolean
   onPress?: () => void
+  /** One line that shrinks to fit rather than being cut: amounts, times, short codes. */
+  fit?: boolean
 }
-export function Txt({ children, size = F.body, w = 400, color, tone = 'ink', style, numberOfLines, center, upper, selectable, onPress }: TxtProps) {
+export function Txt({ children, size = F.body, w = 400, color, tone = 'ink', style, numberOfLines, center, upper, selectable, onPress, fit }: TxtProps) {
   const { C } = useTheme()
   const toneColor = {
     ink: C.ink, soft: C.inkSoft, muted: C.muted, faint: C.faint, brand: C.brand, positive: C.positive,
     warning: C.warning, critical: C.critical, info: C.info, onAccent: C.onAccent,
   }[tone]
   return (
-    <Text numberOfLines={numberOfLines} selectable={selectable} onPress={onPress}
-      style={[{ fontFamily: FONT[w], fontSize: size, color: color || toneColor, lineHeight: Math.round(size * 1.38) },
+    <Text numberOfLines={fit ? 1 : numberOfLines} adjustsFontSizeToFit={fit} minimumFontScale={fit ? 0.6 : undefined}
+      maxFontSizeMultiplier={MAX_FONT_SCALE} selectable={selectable} onPress={onPress}
+      style={[{ fontFamily: FONT[w], fontSize: size, color: color || toneColor, lineHeight: Math.round(size * 1.38), flexShrink: 1 },
         center && { textAlign: 'center' }, upper && { textTransform: 'uppercase', letterSpacing: size * 0.08 }, style]}>
       {children}
     </Text>
@@ -60,7 +68,7 @@ export function Card({ children, style, padded = true, onPress }: { children: Re
   const base: ViewStyle = { backgroundColor: C.surface, borderRadius: R.card, borderWidth: 1, borderColor: C.hair, ...elevation(C, 1) }
   if (onPress) {
     return (
-      <Pressable onPress={onPress} style={({ pressed }) => [base, padded && { padding: S.lg }, pressed && { opacity: 0.85 }, style]}>
+      <Pressable onPress={onPress} android_ripple={{ color: C.chip }} style={({ pressed }) => [base, padded && { padding: S.lg }, pressed && Platform.OS !== 'android' && { opacity: 0.85 }, style]}>
         {children}
       </Pressable>
     )
@@ -106,7 +114,7 @@ export interface ButtonProps {
 }
 export function Button({ title, onPress, variant = 'primary', disabled, loading, icon, size = 'md', full, style }: ButtonProps) {
   const { C } = useTheme()
-  const h = size === 'sm' ? 36 : size === 'lg' ? 52 : 46
+  const h = size === 'sm' ? 38 : size === 'lg' ? 52 : 46
   const fs = size === 'sm' ? F.tiny : F.small + 1
   const palette: Record<ButtonVariant, { bg: string; fg: string; edge: string }> = {
     primary: { bg: C.brand, fg: C.onAccent, edge: C.brand },
@@ -119,13 +127,14 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading,
   const p = palette[variant]
   const off = disabled || loading
   const inner = (
-    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: S.sm, height: h, paddingHorizontal: size === 'sm' ? S.md : S.lg }}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: S.sm, minHeight: h, paddingVertical: 6, paddingHorizontal: S.md }}>
       {loading ? <ActivityIndicator size="small" color={p.fg} /> : icon}
-      <Txt size={fs} w={600} color={p.fg} numberOfLines={1}>{title}</Txt>
+      <Txt size={fs} w={600} color={p.fg} center style={{ flexShrink: 1 }}>{title}</Txt>
     </View>
   )
   return (
     <Pressable accessibilityRole="button" accessibilityState={{ disabled: !!off }} onPress={off ? undefined : onPress}
+      android_ripple={off ? undefined : { color: variant === 'primary' || variant === 'positive' ? 'rgba(255,255,255,0.22)' : C.chip }}
       style={({ pressed }) => [{
         borderRadius: R.md, borderWidth: 1, borderColor: p.edge, backgroundColor: variant === 'primary' ? undefined : p.bg,
         overflow: 'hidden', opacity: off ? 0.55 : pressed ? 0.85 : 1, alignSelf: full ? 'stretch' : 'auto',
@@ -138,14 +147,14 @@ export function Button({ title, onPress, variant = 'primary', disabled, loading,
 }
 
 /** Small round icon button (44dp touch target). */
-export function IconButton({ children, onPress, label, badge, style }: { children: React.ReactNode; onPress?: () => void; label: string; badge?: number; style?: StyleProp<ViewStyle> }) {
+export function IconButton({ children, onPress, label, badge, badgeInset = 4, style }: { children: React.ReactNode; onPress?: () => void; label: string; badge?: number; badgeInset?: number; style?: StyleProp<ViewStyle> }) {
   const { C } = useTheme()
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label} onPress={onPress} hitSlop={6}
       style={({ pressed }) => [{ width: 42, height: 42, borderRadius: 21, alignItems: 'center', justifyContent: 'center', backgroundColor: pressed ? C.brandTint : 'transparent' }, style]}>
       {children}
       {!!badge && badge > 0 && (
-        <View style={{ position: 'absolute', top: 4, right: 3, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: C.critical, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
+        <View style={{ position: 'absolute', top: badgeInset, right: badgeInset - 1, minWidth: 17, height: 17, borderRadius: 9, backgroundColor: C.critical, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 4 }}>
           <Txt size={10} w={700} color="#FFFFFF">{badge > 99 ? '99+' : badge}</Txt>
         </View>
       )}
@@ -158,8 +167,8 @@ export function Badge({ label, tone = 'neutral', style }: { label: string; tone?
   const { C } = useTheme()
   const t = toneOf(C, tone)
   return (
-    <View style={[{ alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 3, borderRadius: R.pill, backgroundColor: t.bg, borderWidth: 1, borderColor: t.edge }, style]}>
-      <Txt size={11} w={600} color={t.fg} numberOfLines={1}>{label}</Txt>
+    <View style={[{ alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 3, borderRadius: R.pill, backgroundColor: t.bg, borderWidth: 1, borderColor: t.edge, maxWidth: '100%' }, style]}>
+      <Txt size={11} w={600} color={t.fg}>{label}</Txt>
     </View>
   )
 }
@@ -184,7 +193,7 @@ export function Stat({ label, value, note, tone, style }: { label: string; value
   const fg = tone && tone !== 'neutral' ? toneOf(C, tone).fg : C.ink
   return (
     <Card style={[{ flex: 1, minWidth: 140 }, style]} padded>
-      <Txt size={F.micro} w={700} tone="muted" upper numberOfLines={2}>{label}</Txt>
+      <Txt size={F.micro} w={700} tone="muted" upper>{label}</Txt>
       <Gap h={6} />
       {typeof value === 'string' || typeof value === 'number' ? <Txt size={F.title + 2} w={700} color={fg}>{value}</Txt> : value}
       {!!note && <Txt size={F.tiny} tone="muted" style={{ marginTop: 2 }}>{note}</Txt>}
@@ -210,12 +219,12 @@ export function ListRow({ title, subtitle, left, right, onPress, chevron = true,
 }) {
   const { C } = useTheme()
   return (
-    <Pressable onPress={onPress} disabled={!onPress}
-      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: S.md, paddingVertical: S.md, minHeight: 52, backgroundColor: pressed ? C.brandTint : 'transparent' }, style]}>
+    <Pressable onPress={onPress} disabled={!onPress} android_ripple={onPress ? { color: C.chip } : undefined}
+      style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: S.md, paddingVertical: S.md, minHeight: 52, backgroundColor: pressed && Platform.OS !== 'android' ? C.brandTint : 'transparent' }, style]}>
       {left}
       <View style={{ flex: 1, minWidth: 0 }}>
-        {typeof title === 'string' ? <Txt size={F.body} w={600} numberOfLines={2}>{title}</Txt> : title}
-        {!!subtitle && (typeof subtitle === 'string' ? <Txt size={F.tiny} tone="muted" numberOfLines={3} style={{ marginTop: 2 }}>{subtitle}</Txt> : subtitle)}
+        {typeof title === 'string' ? <Txt size={F.body} w={600}>{title}</Txt> : title}
+        {!!subtitle && (typeof subtitle === 'string' ? <Txt size={F.tiny} tone="muted" style={{ marginTop: 2 }}>{subtitle}</Txt> : subtitle)}
       </View>
       {right}
       {onPress && chevron && <IconChevron size={16} color={C.faint} />}
@@ -224,13 +233,34 @@ export function ListRow({ title, subtitle, left, right, onPress, chevron = true,
 }
 
 // ── States ──────────────────────────────────────────────────────────────────
-export function Loading({ label = 'Loading…', style }: { label?: string; style?: StyleProp<ViewStyle> }) {
+/** A resting block that pulses while its content loads. */
+export function Skeleton({ width = '100%', height = 12, radius = 6, style }: { width?: ViewStyle['width']; height?: number; radius?: number; style?: StyleProp<ViewStyle> }) {
   const { C } = useTheme()
+  return <View style={[{ width, height, borderRadius: radius, backgroundColor: C.sunken }, style]} />
+}
+
+/** The shape of what is coming, in place of a spinner, so a screen opens already
+ *  laid out and the content settles in rather than arriving on a blank page. */
+export function Loading({ label = 'Loading…', style, rows = 3 }: { label?: string; style?: StyleProp<ViewStyle>; rows?: number }) {
+  const [pulse] = React.useState(() => new Animated.Value(1))
+  React.useEffect(() => {
+    const beat = (toValue: number) => Animated.timing(pulse, { toValue, duration: 650, useNativeDriver: Platform.OS !== 'web' })
+    const loop = Animated.loop(Animated.sequence([beat(0.45), beat(1)]))
+    loop.start()
+    return () => loop.stop()
+  }, [pulse])
   return (
-    <View style={[{ padding: S.xxl, alignItems: 'center', gap: S.md }, style]}>
-      <ActivityIndicator color={C.brand} />
-      <Txt size={F.small} tone="muted">{label}</Txt>
-    </View>
+    <Animated.View accessibilityRole="progressbar" accessibilityLabel={label} style={[{ paddingVertical: S.sm, gap: S.lg, opacity: pulse }, style]}>
+      {Array.from({ length: rows }, (_, i) => (
+        <View key={i} style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
+          <Skeleton width={44} height={44} radius={12} />
+          <View style={{ flex: 1, gap: S.sm }}>
+            <Skeleton width="55%" height={13} />
+            <Skeleton width="85%" height={11} />
+          </View>
+        </View>
+      ))}
+    </Animated.View>
   )
 }
 
@@ -293,6 +323,7 @@ export function Input({ label, required, error, hint, help, style, inputStyle, r
           editable={editable}
           multiline={multiline}
           placeholderTextColor={C.faint}
+          maxFontSizeMultiplier={MAX_FONT_SCALE}
           onFocus={e => { setFocus(true); rest.onFocus?.(e) }}
           onBlur={e => { setFocus(false); rest.onBlur?.(e) }}
           style={[{
@@ -322,7 +353,7 @@ export function PickerField({ label, required, value, placeholder, onPress, erro
           backgroundColor: disabled ? C.sunken : pressed ? C.brandTint : C.surface, paddingHorizontal: S.md,
           flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between',
         })}>
-        <Txt size={F.body} color={value ? C.ink : C.faint} numberOfLines={1} style={{ flex: 1 }}>{value || placeholder || 'Select'}</Txt>
+        <Txt size={F.body} color={value ? C.ink : C.faint} style={{ flex: 1, paddingVertical: 10 }}>{value || placeholder || 'Select'}</Txt>
         <View style={{ transform: [{ rotate: '90deg' }] }}><IconChevron size={14} color={C.faint} /></View>
       </Pressable>
       {!!error && <Txt size={F.tiny} tone="critical" style={{ marginTop: 4 }}>{error}</Txt>}
@@ -370,23 +401,40 @@ export function Toggle({ value, onChange, disabled }: { value: boolean; onChange
   )
 }
 
-/** Segmented pills — the website's .ess-seg sub-tab row. Scrolls when it does not fit. */
-export function Segmented<K extends string>({ items, value, onChange, style }: {
-  items: { key: K; label: string; count?: number }[]; value: K; onChange: (k: K) => void; style?: StyleProp<ViewStyle>
+/** Segmented pills — the website's .ess-seg sub-tab row. A row that does not fit
+ *  scrolls sideways inside itself, and the open tab is kept centred, so it can never
+ *  sit past the edge unseen. `bleed` runs it to the screen edges (portal.css, phones):
+ *  the cut-off tab then reads as "swipe for more" rather than as a clipped box. */
+export function Segmented<K extends string>({ items, value, onChange, style, bleed }: {
+  items: { key: K; label: string; count?: number; soon?: boolean }[]; value: K; onChange: (k: K) => void; style?: StyleProp<ViewStyle>; bleed?: boolean
 }) {
   const { C } = useTheme()
+  const row = React.useRef<ScrollView>(null)
+  const boxW = React.useRef(0)
+  const spots = React.useRef<Partial<Record<K, { x: number; w: number }>>>({})
+  const centre = React.useCallback((animated: boolean) => {
+    const at = spots.current[value]
+    if (at && boxW.current) row.current?.scrollTo({ x: Math.max(0, at.x - (boxW.current - at.w) / 2), animated })
+  }, [value])
+  React.useEffect(() => { centre(true) }, [centre])
   return (
-    <View style={[{ flexDirection: 'row', flexWrap: 'wrap', gap: 4, padding: 4, borderRadius: 13, backgroundColor: C.chip, borderWidth: 1, borderColor: C.brandEdge, alignSelf: 'flex-start' }, style]}>
+    <ScrollView ref={row} horizontal showsHorizontalScrollIndicator={false} keyboardShouldPersistTaps="handled"
+      onLayout={e => { boxW.current = e.nativeEvent.layout.width }}
+      style={[{ flexGrow: 0, flexShrink: 0, backgroundColor: C.chip, borderColor: C.brandEdge },
+        bleed ? { borderTopWidth: 1, borderBottomWidth: 1 } : { borderWidth: 1, borderRadius: 13, alignSelf: 'flex-start', maxWidth: '100%' }, style]}
+      contentContainerStyle={{ gap: 4, padding: 4, paddingHorizontal: bleed ? S.md : 4 }}>
       {items.map(it => {
         const on = it.key === value
         return (
-          <Pressable key={it.key} onPress={() => onChange(it.key)} accessibilityRole="tab" accessibilityState={{ selected: on }}
-            style={{ minHeight: 36, paddingHorizontal: 14, borderRadius: 10, justifyContent: 'center', backgroundColor: on ? C.surface : 'transparent', borderBottomWidth: on ? 2.5 : 0, borderBottomColor: C.brand }}>
+          <Pressable key={it.key} onPress={() => { tick(); onChange(it.key) }} accessibilityRole="tab" accessibilityState={{ selected: on }}
+            onLayout={e => { spots.current[it.key] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width }; if (on) centre(false) }}
+            style={{ minHeight: 38, paddingHorizontal: 14, borderRadius: 10, flexDirection: 'row', alignItems: 'center', gap: 6, backgroundColor: on ? C.surface : 'transparent', borderBottomWidth: on ? 2.5 : 0, borderBottomColor: C.brand }}>
             <Txt size={F.small} w={600} color={on ? C.chipInk : C.essInk3}>{it.label}{it.count ? ` · ${it.count}` : ''}</Txt>
+            {it.soon && <Txt size={9.5} w={700} color={C.essInk3} upper>Soon</Txt>}
           </Pressable>
         )
       })}
-    </View>
+    </ScrollView>
   )
 }
 

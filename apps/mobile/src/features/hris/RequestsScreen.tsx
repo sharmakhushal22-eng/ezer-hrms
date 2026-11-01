@@ -51,11 +51,11 @@ function TypeTile({ r, on, onPress }: { r: typeof REQ_TYPES[number]; on: boolean
   const bg = on ? (posh ? C.criticalTint : C.brandTint) : C.surface
   return (
     <Pressable onPress={onPress} accessibilityRole="button" accessibilityState={{ selected: on }}
-      style={({ pressed }) => ({ flexBasis: '47%', flexGrow: 1, flexDirection: 'row', alignItems: 'center', gap: 10, padding: 12, minHeight: 64, borderRadius: R.md, borderWidth: on ? 2 : 1, borderColor: edge, backgroundColor: pressed ? C.brandTint : bg })}>
+      style={({ pressed }) => ({ flexBasis: '47%', flexGrow: 1, gap: 8, padding: 12, minHeight: 64, borderRadius: R.md, borderWidth: on ? 2 : 1, borderColor: edge, backgroundColor: pressed ? C.brandTint : bg })}>
       <View style={{ width: 30, height: 30, borderRadius: 9, alignItems: 'center', justifyContent: 'center', backgroundColor: posh ? C.criticalTint : C.brandTint }}>
         <Ic k={r.ic} size={16} color={posh ? C.critical : C.brand} />
       </View>
-      <View style={{ flex: 1, minWidth: 0 }}>
+      <View>
         <Txt size={12.5} w={600}>{r.label}</Txt>
         <Txt size={11} tone="muted">Routed to {r.assigned || 'HR'}</Txt>
       </View>

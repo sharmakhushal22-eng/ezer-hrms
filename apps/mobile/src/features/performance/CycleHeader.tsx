@@ -32,7 +32,7 @@ export function CycleStepper({ states, detail }: { states: Record<StageKey, Stag
   const openStage = STAGES.find(s => s.key === open)
   return (
     <View>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingVertical: 6 }}>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -16 }} contentContainerStyle={{ paddingVertical: 6, paddingHorizontal: 16 }}>
         {STAGES.map((s, i) => {
           const st = states[s.key] ?? 'upcoming'
           const t = tone(st)

@@ -12,9 +12,9 @@ import { Animated, BackHandler, Easing, Pressable, ScrollView, View, useWindowDi
 import Svg, { Circle, Rect } from 'react-native-svg'
 import { MIND_GAMES, CATEGORY_LABEL, type Category } from '@web/funzone/mindgames'
 import { useEmployeeId } from '@/core/session'
-import { Screen } from '@/ui/Screen'
+import { FrameHead, Screen } from '@/ui/Screen'
 import { Txt } from '@/ui/primitives'
-import { router } from 'expo-router'
+import { router, useFocusEffect } from 'expo-router'
 import { accentOf, alpha, CatProvider, DISPLAY, FzScrollCtx, Key, Stage, useFz, useReduceMotion, ViewIn, type Cat } from './kit'
 import { MemoryMatch, SpinWheel, TicTacToe, Trivia } from './classics'
 import { MemoryVsBot, TicTacToeVsBot, TriviaVsBot } from './vs'
@@ -257,10 +257,11 @@ export default function FunZoneScreen() {
     if (game) { back(); return true }
     return false
   }, [game, mode, back])
-  React.useEffect(() => {
+  // Only while Fun Zone is the open section: it stays mounted behind the others.
+  useFocusEffect(React.useCallback(() => {
     const sub = BackHandler.addEventListener('hardwareBackPress', step)
     return () => sub.remove()
-  }, [step])
+  }, [step]))
 
   let screen: React.ReactNode = null
   if (game === 'wheel') screen = <SpinWheel onBack={back} />
@@ -284,10 +285,11 @@ export default function FunZoneScreen() {
 
   const scrollCtx = React.useMemo(() => ({ setScrollEnabled: setScrollOn }), [])
   return (
-    <Screen title="Fun Zone" subtitle="Take a break: play a quick game with your team" scroll={false} padded={false}
+    <Screen title="Fun Zone" subtitle="Take a break: play a quick game with your team" scroll={false} padded={false} ownFrame
       onBack={() => { if (step()) return; if (router.canGoBack()) router.back(); else router.replace('/') }}>
       <FzScrollCtx.Provider value={scrollCtx}>
         <ScrollView ref={scroll} scrollEnabled={scrollOn} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}>
+          {!screen && <FrameHead />}
           {screen ?? <Hub employeeId={employeeId} onOpen={k => { setGame(k); setMode(null) }} />}
         </ScrollView>
       </FzScrollCtx.Provider>

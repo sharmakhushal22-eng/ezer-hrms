@@ -49,7 +49,7 @@ function RosterCard({ r, dept }: { r: RosterRow; dept: boolean }) {
   return (
     <View style={{ paddingVertical: S.md, borderTopWidth: 1, borderTopColor: C.line, gap: 4 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-        <Txt size={F.small} w={700} style={{ flex: 1 }} numberOfLines={2}>{r.name}</Txt>
+        <Txt size={F.small} w={700} style={{ flex: 1 }}>{r.name}</Txt>
         <Txt size={F.micro} tone="faint" style={{ fontVariant: ['tabular-nums'] }}>{r.code || '-'}</Txt>
       </View>
       <Txt size={F.tiny} tone="soft">{r.designation || '-'}</Txt>

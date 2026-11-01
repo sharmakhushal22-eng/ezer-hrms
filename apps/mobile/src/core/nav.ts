@@ -24,7 +24,7 @@ export type Ready = 'ready' | 'partial' | 'soon'
 export interface NavItem {
   k: string
   label: string
-  /** App route for this item. */
+  /** App route for this item. A section's sub-tab is `/<section>?sub=<key>`. */
   route: string
   /** Website: `needs` marks a placeholder that is not built yet (renders <Placeholder/>). */
   needs?: string
@@ -46,10 +46,10 @@ export const SECTIONS: NavSection[] = [
   { k: 'profile', label: 'Profile', short: 'Profile', status: 'ready', desc: 'Your personal details, documents and letters',
     items: [
       { k: 'profile', label: 'My Details', route: '/profile' },
-      { k: 'documents', label: 'Letter Requests', route: '/profile/letter-requests' },
-      { k: 'letters', label: 'My Letters', route: '/profile/letters' },
+      { k: 'documents', label: 'Letter Requests', route: '/profile?sub=documents' },
+      { k: 'letters', label: 'My Letters', route: '/profile?sub=letters' },
       // EZER Sign (73a2e17): components/esign/MyDocumentsToSign on the website.
-      { k: 'to-sign', label: 'Documents to sign', route: '/esign' },
+      { k: 'to-sign', label: 'Documents to sign', route: '/profile?sub=to-sign' },
     ] },
 
   { k: 'team', label: 'Team', short: 'Team', status: 'ready', desc: 'Your manager, your peers and the people who report to you',
@@ -60,15 +60,15 @@ export const SECTIONS: NavSection[] = [
 
   { k: 'payroll', label: 'Payroll', short: 'Payroll', status: 'partial', desc: 'Salary, benefits, tax declarations and claims',
     items: [
-      { k: 'payslip', label: 'Salary Slip', route: '/payroll/payslip', phase: 3, needs: 'Payslip generation' },
-      { k: 'flexi', label: 'Flexi Benefits', route: '/payroll/flexi' },
-      { k: 'proofs', label: 'Investment Proofs', route: '/payroll/proofs' },
-      { k: 'flexiclaims', label: 'Flexi Claims', route: '/payroll/flexiclaims' },
-      { k: 'vpf', label: 'Voluntary PF', route: '/payroll/vpf' },
-      { k: 'nps', label: 'Corporate NPS', route: '/payroll/nps' },
-      { k: 'loans', label: 'Loans', route: '/payroll/loans' },
-      { k: 'claims', label: 'Travel Claims', route: '/payroll/claims' },
-      { k: 'statutory', label: 'Statutory', route: '/payroll/statutory', phase: 3, needs: 'Payroll' },
+      { k: 'payslip', label: 'Salary Slip', route: '/payroll?sub=payslip', phase: 3, needs: 'Payslip generation' },
+      { k: 'flexi', label: 'Flexi Benefits', route: '/payroll?sub=flexi' },
+      { k: 'proofs', label: 'Investment Proofs', route: '/payroll?sub=proofs' },
+      { k: 'flexiclaims', label: 'Flexi Claims', route: '/payroll?sub=flexiclaims' },
+      { k: 'vpf', label: 'Voluntary PF', route: '/payroll?sub=vpf' },
+      { k: 'nps', label: 'Corporate NPS', route: '/payroll?sub=nps' },
+      { k: 'loans', label: 'Loans', route: '/payroll?sub=loans' },
+      { k: 'claims', label: 'Travel Claims', route: '/payroll?sub=claims' },
+      { k: 'statutory', label: 'Statutory', route: '/payroll?sub=statutory', phase: 3, needs: 'Payroll' },
     ] },
 
   { k: 'attendance', label: 'Attendance', short: 'Attend', status: 'ready', desc: 'Your punches, working hours and monthly calendar',
@@ -85,10 +85,10 @@ export const SECTIONS: NavSection[] = [
 
   { k: 'hris', label: 'HR Services', short: 'HR', status: 'partial', desc: 'Directory, requests, approvals and the exit process',
     items: [
-      { k: 'directory', label: 'Team Directory', route: '/hris/directory', hint: 'Find a colleague' },
-      { k: 'requests', label: 'Raise a Request', route: '/hris/requests', hint: 'Ask HR for help' },
-      { k: 'approvals', label: 'Tasks & Approvals', route: '/hris/approvals', hint: 'What is waiting on you' },
-      { k: 'exit', label: 'Exit Process', route: '/hris/exit', hint: 'Resign or track it' },
+      { k: 'directory', label: 'Team Directory', route: '/hris?sub=directory', hint: 'Find a colleague' },
+      { k: 'requests', label: 'Raise a Request', route: '/hris?sub=requests', hint: 'Ask HR for help' },
+      { k: 'approvals', label: 'Tasks & Approvals', route: '/hris?sub=approvals', hint: 'What is waiting on you' },
+      { k: 'exit', label: 'Exit Process', route: '/hris?sub=exit', hint: 'Resign or track it' },
     ] },
 
   { k: 'company', label: 'Company', short: 'Company', status: 'ready', desc: 'Headcount, attrition and tax-regime trends across the company',

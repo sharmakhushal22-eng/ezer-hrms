@@ -63,7 +63,7 @@ export default function AttendanceScreen() {
 
   return (
     <View style={{ flex: 1 }}>
-      <TabScreen heading="Attendance" desc="Your punches, working hours and monthly calendar" onRefresh={() => invalidate('attendance')}>
+      <TabScreen onRefresh={() => invalidate('attendance')}>
         <MonthHero month={month} year={year} summary={stats} onPrev={prevMonth} onNext={nextMonth}
           onToday={() => { const n = new Date(); go(n.getFullYear(), n.getMonth() + 1) }} isThisMonth={isThisMonth} />
         <SummaryTiles summary={stats} />

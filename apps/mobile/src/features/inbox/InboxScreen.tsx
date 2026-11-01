@@ -41,7 +41,7 @@ function GroupTab({ g, active, count, onPick }: { g: typeof GROUPS[number]; acti
       style={{ flex: 1, minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 5, paddingHorizontal: 6, borderRadius: 10,
         backgroundColor: active ? C.surface : 'transparent', borderBottomWidth: active ? 2.5 : 0, borderBottomColor: C.brand }}>
       <g.Icon size={14} color={ink} />
-      <Txt size={12.5} w={600} color={ink} numberOfLines={1} style={{ flexShrink: 1 }}>{g.label}</Txt>
+      <Txt size={12.5} w={600} color={ink} fit style={{ flexShrink: 1 }}>{g.label}</Txt>
       {count > 0 && (
         <View style={{ minWidth: 18, height: 18, paddingHorizontal: 5, borderRadius: 999, alignItems: 'center', justifyContent: 'center', backgroundColor: active ? C.brand : C.sunken }}>
           <Txt size={10.5} w={700} color={active ? C.onAccent : C.inkSoft}>{count}</Txt>

@@ -18,6 +18,14 @@ const CLASS_OF: Record<DayKind, string> = {
   IN_PROGRESS: 'present', ABSENT: 'absent', LEAVE: 'leave', HALF_LEAVE: 'leave',
   HOLIDAY: 'holiday', WEEKLY_OFF: 'off', UPCOMING: 'next',
 }
+/** The day in one or two characters: a seventh of a phone cannot hold "Weekly off" or a
+ *  punch time. The attendance calendar's own legend, so the two read alike. The full
+ *  words stay in the cell's accessibility label and on the Attendance screen. */
+const CODE_OF: Record<DayKind, string> = {
+  PRESENT: 'P', LATE: 'LT', HALF_DAY: '½', MISS_IN: 'MI', MISS_OUT: 'MO', IN_PROGRESS: 'In',
+  ABSENT: 'A', LEAVE: 'L', HALF_LEAVE: '½L', HOLIDAY: 'H', WEEKLY_OFF: 'WO', UPCOMING: '–',
+}
+
 interface Cell { date: string; kind: DayKind | null; in: string | null; out: string | null; minutes: number | null; note: string | null }
 const SHIFT_H = 9
 /** Hours since `t` (the running punch's live figure). */
@@ -71,11 +79,10 @@ export function WeekStrip({ data, prefs, liveIn }: { data: TodayPayload; prefs: 
           // today.css v3: each day coloured by its status (--d), matching the calendar.
           const hue = cls === 'present' ? C.positive : cls === 'late' || cls === 'half' ? C.warning
             : cls === 'miss' || cls === 'absent' ? C.critical : cls === 'leave' ? C.brand : cls === 'holiday' ? C.info : null
-          let bg = C.sunken, edge = C.line, dd = C.ink, l2c = C.muted, l1c = C.muted, barBg = C.line, barFg = C.positive, op = 1
+          let bg = C.sunken, edge = C.line, dd = C.ink, barBg = C.line, barFg = C.positive, op = 1
           if (hue) {
-            bg = alpha(hue, 0.11); edge = alpha(hue, 0.3); dd = hue; l2c = hue; barBg = alpha(hue, 0.18)
+            bg = alpha(hue, 0.11); edge = alpha(hue, 0.3); dd = hue; barBg = alpha(hue, 0.18)
             if (cls === 'miss') { bg = alpha(C.warning, 0.12); edge = alpha(C.critical, 0.45) }
-            if (cls === 'absent') l1c = hue
             if (cls === 'present' || cls === 'late' || cls === 'half' || cls === 'miss') barFg = hue
           }
           if (cls === 'off') { bg = C.sunken; op = 0.55 }
@@ -86,10 +93,9 @@ export function WeekStrip({ data, prefs, liveIn }: { data: TodayPayload; prefs: 
             <View key={d.date} accessible accessibilityLabel={`${weekday(d.date)} ${new Date(d.date + 'T00:00:00').getDate()}${title ? ` · ${title}` : ''}`}
               style={{ flex: 1, minWidth: 0, borderRadius: 12, paddingVertical: 8, paddingHorizontal: 3, backgroundColor: bg, borderWidth: 1, borderColor: edge, opacity: op, alignItems: 'center' }}>
               <Txt size={11} w={600} tone="faint">{weekday(d.date)}</Txt>
-              <Txt size={17} w={700} color={dd} style={{ marginTop: 2, marginBottom: 3 }}>{new Date(d.date + 'T00:00:00').getDate()}</Txt>
-              <Txt size={9.5} w={600} color={l1c} numberOfLines={1}>{l1 || ' '}</Txt>
-              <Txt size={9.5} w={600} color={l2c} numberOfLines={1}>{l2 || ' '}</Txt>
-              <View style={{ alignSelf: 'stretch', height: 4, borderRadius: 99, backgroundColor: barBg, marginTop: 7, overflow: 'hidden' }}>
+              <Txt size={16} w={700} color={dd} style={{ marginTop: 2, marginBottom: 1 }}>{new Date(d.date + 'T00:00:00').getDate()}</Txt>
+              <Txt size={11} w={700} color={hue ?? C.muted} fit>{d.kind ? CODE_OF[d.kind] : (future ? '–' : ' ')}</Txt>
+              <View style={{ alignSelf: 'stretch', height: 4, borderRadius: 99, backgroundColor: barBg, marginTop: 5, overflow: 'hidden' }}>
                 <View style={{ width: `${w}%`, height: '100%', borderRadius: 99, backgroundColor: barFg }} />
               </View>
             </View>

@@ -17,6 +17,7 @@ import { queryClient } from '@/core/query'
 import { SessionProvider, useSession } from '@/core/session'
 import { ThemeProvider, useTheme } from '@/ui/ThemeProvider'
 import { OverlayProvider } from '@/ui/overlays'
+import { EyeComfortProvider } from '@/ui/EyeComfort'
 import { BellHost } from '@/features/shell/notifications'
 
 SplashScreen.preventAutoHideAsync().catch(() => {})
@@ -59,7 +60,9 @@ export default function RootLayout() {
           <ThemeProvider>
             <SessionProvider>
               <OverlayProvider>
-                <Gate />
+                <EyeComfortProvider>
+                  <Gate />
+                </EyeComfortProvider>
               </OverlayProvider>
             </SessionProvider>
           </ThemeProvider>

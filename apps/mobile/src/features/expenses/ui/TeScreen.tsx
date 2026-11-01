@@ -48,7 +48,7 @@ export function TeScreen({ title, subtitle, tab, live = true, back = true, onBac
   return (
     <View style={{ flex: 1 }}>
       <Screen title={title} subtitle={subtitle} back={back} onBack={onBack} right={right} top={top} footer={footer}
-        onRefresh={refresh} tabBar={false} scroll={scroll}>
+        onRefresh={refresh} scroll={scroll}>
         {liveLeg && snap && (
           <LiveBar leg={liveLeg} tripName={snap.trips.find(t => t.id === liveLeg.tripId)?.name ?? ''}
             placeName={id => placeNameOf(snap)(id)}

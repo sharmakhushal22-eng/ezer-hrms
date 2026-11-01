@@ -12,13 +12,12 @@
 // which the app cannot rasterise without a new native module (view-shot / Skia). Reusing the
 // page also keeps one audited signing flow (OTP, consent, certificate) instead of two.
 import * as React from 'react'
-import { ScrollView, View } from 'react-native'
-import { router } from 'expo-router'
+import { View } from 'react-native'
 import * as WebBrowser from 'expo-web-browser'
 import Svg, { Path } from 'react-native-svg'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
-import { Badge, Button, Card, Notice, Segmented, Txt } from '@/ui/primitives'
+import { Badge, Button, Card, Notice, Txt } from '@/ui/primitives'
 import { IconAlert, IconCheck, IconClock } from '@/ui/icons'
 import { Screen } from '@/ui/Screen'
 import { sectionOf } from '@/core/nav'
@@ -32,23 +31,6 @@ function IconPen({ size = 16, color }: { size?: number; color: string }) {
     <Svg width={size} height={size} viewBox="0 0 20 20" fill="none" stroke={color} strokeWidth={1.6} strokeLinecap="round" strokeLinejoin="round">
       <Path d="M13.6 3.4a1.9 1.9 0 0 1 2.7 2.7L7.2 15.2l-3.6.9.9-3.6 9.1-9.1Z" /><Path d="M12.3 4.7l2.9 2.9" /><Path d="M3 18.2h14" />
     </Svg>
-  )
-}
-
-/** The Profile section's sub-tabs, with this view selected. */
-function ProfileTabs() {
-  const s = sectionOf('profile')
-  const items = (s?.items || []).map(i => ({ key: i.k, label: i.label }))
-  if (!items.some(i => i.key === 'to-sign')) items.push({ key: 'to-sign', label: 'Documents to sign' })
-  const ref = React.useRef<ScrollView>(null)
-  // This tab is last in the row: keep it in view on a narrow phone.
-  return (
-    <ScrollView ref={ref} onContentSizeChange={() => ref.current?.scrollToEnd({ animated: false })} horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ paddingHorizontal: S.lg, paddingVertical: S.sm }}>
-      <Segmented items={items} value="to-sign" onChange={k => {
-        const to = s?.items.find(i => i.k === k)?.route
-        if (k !== 'to-sign' && to) router.replace(to as any)
-      }} />
-    </ScrollView>
   )
 }
 
@@ -115,7 +97,7 @@ export default function DocumentsToSignScreen() {
   const loadErr = q.error ? (q.error as Error).message : ''
 
   return (
-    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} sub={<ProfileTabs />} onRefresh={() => q.refetch()}>
+    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} onRefresh={() => q.refetch()}>
       <View style={{ gap: S.lg }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
           <View style={{ width: 38, height: 38, borderRadius: R.md, backgroundColor: C.brandTint, alignItems: 'center', justifyContent: 'center' }}><IconPen size={18} color={C.brand} /></View>

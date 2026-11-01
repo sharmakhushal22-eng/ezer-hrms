@@ -15,7 +15,6 @@ import { Screen } from '@/ui/Screen'
 import { sectionOf } from '@/core/nav'
 import { myLetterUrl, useMyLetters } from './api'
 import { useEmployeeId } from '@/core/session'
-import { ProfileSubTabs } from './bits'
 
 export default function MyLettersScreen() {
   const { C } = useTheme()
@@ -34,7 +33,7 @@ export default function MyLettersScreen() {
   }
 
   return (
-    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} sub={<ProfileSubTabs current="letters" />} onRefresh={() => q.refetch()}>
+    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} onRefresh={() => q.refetch()}>
       <Card>
         <Txt size={F.micro} w={700} tone="brand" upper style={{ marginBottom: S.sm }}>My Letters</Txt>
         {!!err && <Txt size={F.tiny} tone="critical" style={{ marginBottom: S.sm }}>{err}</Txt>}

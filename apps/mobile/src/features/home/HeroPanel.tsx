@@ -58,7 +58,7 @@ export function HeroPanel({ data, prefs, onPrefs, children }: { data: TodayPaylo
 
   const chip = (label: string) => (
     <View key={label} style={{ height: 22, paddingHorizontal: 9, borderRadius: R.pill, justifyContent: 'center', backgroundColor: H.chipBg || C.surface, borderWidth: 1, borderColor: H.chipEdge || C.line }}>
-      <Txt size={11.5} w={600} color={H.chipFg || C.inkSoft} numberOfLines={1}>{label}</Txt>
+      <Txt size={11.5} w={600} color={H.chipFg || C.inkSoft}>{label}</Txt>
     </View>
   )
   const meta = (label: string, value: string) => (

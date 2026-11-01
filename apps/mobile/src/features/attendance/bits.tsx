@@ -38,7 +38,7 @@ export function KindBadge({ day, compact }: { day: Pick<AttendanceDay, 'kind' | 
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: 9, paddingVertical: 2, borderRadius: R.pill,
                    backgroundColor: m.bg, borderWidth: 1, borderColor: day.kind === 'UPCOMING' ? C.line : 'transparent', alignSelf: 'flex-start', flexShrink: 1 }}>
       <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: m.bar }} />
-      <Txt size={F.micro} w={600} color={m.fg} numberOfLines={1} style={{ flexShrink: 1 }}>{m.label}{extra}</Txt>
+      <Txt size={F.micro} w={600} color={m.fg} style={{ flexShrink: 1 }}>{m.label}{extra}</Txt>
     </View>
   )
 }

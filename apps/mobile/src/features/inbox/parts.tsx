@@ -39,7 +39,7 @@ export function InkPill({ n, ink, size = 18 }: { n: number; ink: string; size?: 
 export function KindChip({ label, color }: { label: string; color: string }) {
   return (
     <View style={{ paddingHorizontal: 6, paddingVertical: 1, borderRadius: 6, backgroundColor: alpha(color, 0.13) }}>
-      <Txt size={10.5} w={700} color={color} numberOfLines={1}>{label}</Txt>
+      <Txt size={10.5} w={700} color={color}>{label}</Txt>
     </View>
   )
 }
@@ -56,7 +56,7 @@ export function ConversationRow({ c, folder, onOpen }: { c: ConversationVM; fold
       <ConvAvatar c={c} ink={ink} />
       <View style={{ flex: 1, minWidth: 0, gap: 3 }}>
         <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: 8 }}>
-          <Txt size={F.small + 0.5} w={un ? 700 : 600} numberOfLines={1} style={{ flex: 1 }}>{c.title}</Txt>
+          <Txt size={F.small + 0.5} w={un ? 700 : 600} style={{ flex: 1 }}>{c.title}</Txt>
           <Txt size={11.5} w={un ? 600 : 400} color={un ? ink : C.faint}>{relTime(c.updatedAt)}</Txt>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7 }}>

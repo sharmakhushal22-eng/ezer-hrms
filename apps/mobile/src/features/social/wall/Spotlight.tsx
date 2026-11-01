@@ -133,7 +133,7 @@ function Step({ r, rank, h, i, n, corner, calm }: { r: LeaderRow; rank: number; 
         {!first && <LinearGradient pointerEvents="none" colors={['rgba(0,0,0,0)', 'rgba(0,0,0,0.16)']} style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0 }} />}
         {first && <Animated.View pointerEvents="none" style={{ position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, backgroundColor: '#FFFFFF', opacity: shimmer.interpolate({ inputRange: [0, 1], outputRange: [0, 0.045] }) }} />}
         <View style={{ position: 'absolute', left: 0, right: 0, top: 0, height: 4, backgroundColor: line, opacity: 0.85 }} />
-        <Txt size={F.micro} w={700} color={first ? g.text : C.ink} numberOfLines={1} center>{r.name.split(/\s+/)[0]}</Txt>
+        <Txt size={F.micro} w={700} color={first ? g.text : C.ink} fit center>{r.name.split(/\s+/)[0]}</Txt>
         <Txt size={11} color={first ? g.soft : C.muted} style={{ marginTop: 1 }}>{r.recognitionCount}</Txt>
         <View style={{ flex: 1 }} />
         <Txt size={first ? 34 : 26} w={700} color={first ? g.ink : C.muted}
@@ -168,8 +168,8 @@ function RankRow({ row, rank, top }: { row: LeaderRow; rank: number; top: number
       <Txt size={F.small} w={700} center color={first ? g.ink : C.faint} style={{ width: 24 }}>{rank}</Txt>
       <Avatar name={row.name} size={34} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={F.small} w={700} color={first ? g.text : C.ink} numberOfLines={1}>{row.name}</Txt>
-        {!!row.designation && <Txt size={F.micro} color={first ? g.soft : C.muted} numberOfLines={1}>{row.designation}</Txt>}
+        <Txt size={F.small} w={700} color={first ? g.text : C.ink}>{row.name}</Txt>
+        {!!row.designation && <Txt size={F.micro} color={first ? g.soft : C.muted}>{row.designation}</Txt>}
         <View style={{ height: 4, borderRadius: 4, marginTop: 6, backgroundColor: first ? g.edge : C.sunken, overflow: 'hidden' }}>
           <View style={{ height: '100%', width: `${pct}%`, borderRadius: 4, backgroundColor: first ? g.ink : C.brand, opacity: first ? 1 : 0.7 }} />
         </View>

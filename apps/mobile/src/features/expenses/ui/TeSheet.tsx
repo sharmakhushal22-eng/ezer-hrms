@@ -13,6 +13,7 @@ import * as React from 'react'
 import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from '@/ui/ThemeProvider'
+import { useFieldAboveKeyboard } from '@/ui/keyboard'
 import { F, S } from '@/ui/theme'
 import { Txt } from '@/ui/primitives'
 import { TeIcon } from './TeIcon'
@@ -37,6 +38,7 @@ export function TeSheet({ title, titleIcon, lead, crumb, back, bar, footer, onCl
   const { C } = useTheme()
   const insets = useSafeAreaInsets()
   const scroll = React.useRef<ScrollView>(null)
+  useFieldAboveKeyboard(scroll)
   React.useEffect(() => { scroll.current?.scrollTo({ y: 0, animated: false }) }, [scrollKey])
 
   return (
@@ -68,7 +70,7 @@ export function TeSheet({ title, titleIcon, lead, crumb, back, bar, footer, onCl
       {bar && (
         <View style={{ paddingHorizontal: S.md, paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: C.line, backgroundColor: C.surface }}>{bar}</View>
       )}
-      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
+      <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
         <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" style={{ backgroundColor: C.surface }}
           contentContainerStyle={{ padding: padded ? S.lg : 0, paddingBottom: (footer ? S.xl : S.xl + insets.bottom) }}>
           {children}

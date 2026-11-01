@@ -48,8 +48,8 @@ function ModeTile({ icon, name, sub, on, onPress }: { icon: string; name: string
         borderWidth: 1.5, borderColor: on ? C.brand : C.line, backgroundColor: on ? C.brandTint : pressed ? C.sunken : C.surface,
       })}>
       <TeIcon name={icon} color={on ? C.brand : C.muted} />
-      <Txt size={F.small} w={700} color={on ? C.brandDeep : C.ink} numberOfLines={1}>{name}</Txt>
-      <Txt size={F.micro} tone="muted" numberOfLines={1}>{sub}</Txt>
+      <Txt size={F.small} w={700} color={on ? C.brandDeep : C.ink}>{name}</Txt>
+      <Txt size={F.micro} tone="muted">{sub}</Txt>
     </Pressable>
   )
 }
@@ -102,8 +102,8 @@ export function SegRow({ snap, draft, issues, i, tried, onDone, edit, onPick, on
           <TeIcon name={md ? modeIcon(md.id) : 'route'} size="sm" color={C.inkSoft} />
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Txt size={F.small} w={700} numberOfLines={2}>{`${a?.s ?? '—'} → ${b?.s ?? '—'}`}</Txt>
-          {bits.length ? <Txt size={F.micro} tone="muted" numberOfLines={1}>{bits.join(' · ')}</Txt> : null}
+          <Txt size={F.small} w={700}>{`${a?.s ?? '—'} → ${b?.s ?? '—'}`}</Txt>
+          {bits.length ? <Txt size={F.micro} tone="muted">{bits.join(' · ')}</Txt> : null}
         </View>
         {md ? (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 7, paddingVertical: 2, borderRadius: R.pill, backgroundColor: C.brandTint }}>
@@ -192,7 +192,7 @@ export function SegRow({ snap, draft, issues, i, tried, onDone, edit, onPick, on
                 <View style={{ width: 22, height: 22, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: C.sunken }}>
                   <Txt size={F.micro} w={700} tone="soft">{n + 1}</Txt>
                 </View>
-                <Txt size={F.tiny} style={{ flex: 1 }} numberOfLines={2}>{`${place(step.from)?.s ?? '—'} → ${place(step.to)?.s ?? '—'}`}</Txt>
+                <Txt size={F.tiny} style={{ flex: 1 }}>{`${place(step.from)?.s ?? '—'} → ${place(step.to)?.s ?? '—'}`}</Txt>
                 <Chip plain label={step.skipped ? 'Nothing to claim' : (snap.cfg.modes.find(m => m.id === step.mode)?.name ?? step.mode)} />
               </View>
             ))}
@@ -233,7 +233,7 @@ export function SegRow({ snap, draft, issues, i, tried, onDone, edit, onPick, on
             onChangeText={v => setSeg({ prefUrl: v })}
             error={badUrl(s.prefUrl ?? '') ? 'That does not look like a web address. Paste the whole link, starting with https://' : undefined}
             help="A flight, train or fare. The desk can open it." />
-          <Input label="Anything else" value={s.prefNote ?? ''} placeholder="Either the 6am or after 8pm; same airline as the outbound"
+          <Input label="Anything else" value={s.prefNote ?? ''} placeholder="Either the 6am or after 8pm"
             onChangeText={v => setSeg({ prefNote: v })} style={{ marginBottom: 0 }} />
         </View>
       ) : null}

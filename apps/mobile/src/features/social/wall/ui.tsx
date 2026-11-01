@@ -104,7 +104,7 @@ export function Pill({ children, tone = 'brand', icon }: { children: React.React
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5, paddingVertical: 3, paddingHorizontal: 10, borderRadius: RAD.pill, backgroundColor: bg, alignSelf: 'flex-start', maxWidth: '100%' }}>
       {icon && <Icon name={icon} size={12} stroke={2} color={fg} />}
-      <Txt size={F.micro} w={600} color={fg} numberOfLines={1}>{children}</Txt>
+      <Txt size={F.micro} w={600} color={fg}>{children}</Txt>
     </View>
   )
 }
@@ -128,7 +128,7 @@ export function WButton({ children, onPress, variant = 'secondary', size = 'md',
     <Pressable onPress={off ? undefined : onPress} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled: !!off, busy: !!busy }}
       style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 7, ...pad, borderRadius: RAD.control, borderWidth: 1, borderColor: l.edge, backgroundColor: pressed && variant === 'ghost' ? C.sunken : l.bg, opacity: busy ? 0.75 : 1, alignSelf: full ? 'stretch' : 'flex-start', transform: [{ translateY: pressed && !off ? 1 : 0 }] }]}>
       {icon && <Icon name={icon} size={size === 'sm' ? 13 : 15} stroke={2} color={l.fg} />}
-      {typeof children === 'string' ? <Txt size={size === 'sm' ? F.micro : F.small} w={700} color={l.fg} numberOfLines={1}>{children}</Txt> : children}
+      {typeof children === 'string' ? <Txt size={size === 'sm' ? F.micro : F.small} w={700} color={l.fg}>{children}</Txt> : children}
     </Pressable>
   )
 }
@@ -314,8 +314,8 @@ export function PersonChip({ name, meta, onRemove }: { name: string; meta?: stri
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, padding: 4, borderRadius: RAD.pill, backgroundColor: C.surface, borderWidth: 1, borderColor: C.brandEdge, maxWidth: '100%' }}>
       <Avatar name={name} size={24} />
       <View style={{ flexShrink: 1 }}>
-        <Txt size={F.micro} w={700} numberOfLines={1}>{name}</Txt>
-        {!!meta && <Txt size={11} tone="faint" numberOfLines={1}>{meta}</Txt>}
+        <Txt size={F.micro} w={700}>{name}</Txt>
+        {!!meta && <Txt size={11} tone="faint">{meta}</Txt>}
       </View>
       <Pressable onPress={onRemove} accessibilityLabel={`Remove ${name}`} hitSlop={10}
         style={{ width: 26, height: 26, borderRadius: 13, alignItems: 'center', justifyContent: 'center' }}>

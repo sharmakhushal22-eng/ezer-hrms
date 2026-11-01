@@ -221,8 +221,8 @@ function PunchButton({ kind, T, live, busy, onPress, label, sub }: {
         <Icon size={18} color={icFg} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={13.5} w={700} color={fg} numberOfLines={1} style={{ lineHeight: 16 }}>{kind === 'in' ? 'Punch in' : 'Punch out'}</Txt>
-        <Txt size={10.5} w={600} color={subFg} numberOfLines={1} style={{ opacity: live && kind === 'in' ? 1 : 0.78 }}>{sub}</Txt>
+        <Txt size={13.5} w={700} color={fg} fit style={{ lineHeight: 16 }}>{kind === 'in' ? 'Punch in' : 'Punch out'}</Txt>
+        <Txt size={10.5} w={600} color={subFg} fit style={{ opacity: live && kind === 'in' ? 1 : 0.78 }}>{sub}</Txt>
       </View>
     </View>
   )

@@ -9,11 +9,12 @@
 // set-password returns the signed token like login does (b9d6455), so it signs in
 // straight away; an older server that answers without one falls back to a login.
 import * as React from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
+import { KeyboardAvoidingView, Platform, Pressable, ScrollView, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { api, ApiError } from '@/core/api'
 import { useSession } from '@/core/session'
 import { useTheme } from '@/ui/ThemeProvider'
+import { useFieldAboveKeyboard } from '@/ui/keyboard'
 import { elevation, F, R, S } from '@/ui/theme'
 import { Button, Gap, Input, Notice, Txt } from '@/ui/primitives'
 import { Logo } from '@/ui/Logo'
@@ -47,6 +48,8 @@ const msg = (e: unknown, fallback: string) => e instanceof ApiError ? (e.status 
 export default function LoginScreen() {
   const { C } = useTheme()
   const insets = useSafeAreaInsets()
+  const scroller = React.useRef<ScrollView>(null)
+  useFieldAboveKeyboard(scroller)
   const { adopt, notice } = useSession()
   const [step, setStep] = React.useState<Step>('email')
   const [identifier, setIdentifier] = React.useState('')
@@ -115,8 +118,9 @@ export default function LoginScreen() {
   })
 
   return (
-    <ScrollView style={{ flex: 1, backgroundColor: C.canvas }} keyboardShouldPersistTaps="handled"
-      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: S.lg, paddingTop: insets.top + S.xl, paddingBottom: insets.bottom + S.xl }}>
+    <KeyboardAvoidingView style={{ flex: 1, backgroundColor: C.canvas, paddingTop: insets.top }} behavior={Platform.OS === 'web' ? undefined : 'padding'}>
+    <ScrollView ref={scroller} style={{ flex: 1 }} keyboardShouldPersistTaps="handled"
+      contentContainerStyle={{ flexGrow: 1, justifyContent: 'center', padding: S.lg, paddingTop: S.xl, paddingBottom: insets.bottom + S.xl }}>
       <View style={{ alignItems: 'center', marginBottom: S.xl }}><Logo height={30} tagline /></View>
 
       <View style={{ backgroundColor: C.surface, borderRadius: R.xl, padding: S.xl, borderWidth: 1, borderColor: C.hair, ...elevation(C, 2) }}>
@@ -173,5 +177,6 @@ export default function LoginScreen() {
       <Gap h={S.lg} />
       <Txt size={F.tiny} tone="faint" center>Need help? Contact your HR team.</Txt>
     </ScrollView>
+    </KeyboardAvoidingView>
   )
 }

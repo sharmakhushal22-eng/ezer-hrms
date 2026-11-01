@@ -11,7 +11,7 @@
 // fixActionFor), not Spouse name for all of them as before. After any save
 // the payload, the request lists and the portal's avatar are refreshed.
 import * as React from 'react'
-import { Pressable, ScrollView, View } from 'react-native'
+import { Pressable, View } from 'react-native'
 import { router } from 'expo-router'
 import { TABS } from '@web/profile/model'
 import { FIX_TAB, fixActionFor } from '@web/profile/self-service'
@@ -25,7 +25,6 @@ import { F, S } from '@/ui/theme'
 import { Card, Loading, Notice, Segmented, Txt } from '@/ui/primitives'
 import { useProfile } from './api'
 import { val } from './format'
-import { ProfileSubTabs } from './bits'
 import { ChainCard, CompletenessCard, HowEditingBody, IdentityCard } from './Identity'
 import { TabPanel } from './TabPanels'
 import { ChangeRequests, RequestsSummary, useChangeRequests } from './ChangeRequests'
@@ -123,9 +122,7 @@ export default function ProfileScreen() {
         </View>
 
         <View style={{ marginTop: S.xl, flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 1 }}>
-            <Segmented items={TABS.map(t => ({ key: t.id, label: t.label }))} value={tab} onChange={setTab} />
-          </ScrollView>
+          <Segmented items={TABS.map(t => ({ key: t.id, label: t.label }))} value={tab} onChange={setTab} style={{ flexShrink: 1 }} />
           {self && <HowBtn onPress={() => setDrawer('how')} />}
         </View>
 
@@ -137,8 +134,7 @@ export default function ProfileScreen() {
 
   const emp = p?.employee
   return (
-    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} sub={<ProfileSubTabs current="profile" />}
-      onRefresh={() => invalidate('profile')}>
+    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} onRefresh={() => invalidate('profile')}>
       {body}
 
       {p && self && (drawer === 'edit' || drawer === 'request') && (

@@ -48,7 +48,7 @@ export function Chip({ label, tone, plain, icon, style }: {
       {!noDot && <View style={{ width: 6, height: 6, borderRadius: 3, backgroundColor: t.fg }} />}
       {!!icon && <TeIcon name={icon} px={12} color={t.fg} />}
       {typeof label === 'string' || typeof label === 'number'
-        ? <Txt size={11.5} w={600} color={t.fg} numberOfLines={1}>{label}</Txt>
+        ? <Txt size={11.5} w={600} color={t.fg}>{label}</Txt>
         : label}
     </View>
   )

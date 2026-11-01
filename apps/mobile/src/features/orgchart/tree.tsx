@@ -119,9 +119,9 @@ export function OrgRow({ row, isSelf, isReport, highlighted, onToggle, onLayoutY
               <Txt size={12.5} w={700} color={C.onAccent}>{initials(n.fullName)}</Txt>
             </LinearGradient>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Txt size={F.small} w={700} numberOfLines={2}>{n.fullName || '-'}</Txt>
+              <Txt size={F.small} w={700}>{n.fullName || '-'}</Txt>
               <Txt size={10.5} tone="muted" style={{ fontVariant: ['tabular-nums'] }}>{n.empCode || '-'}</Txt>
-              <Txt size={11} tone="muted" numberOfLines={2}>{n.designation || '-'}</Txt>
+              <Txt size={11} tone="muted">{n.designation || '-'}</Txt>
               <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 5 }}>
                 <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.pill, backgroundColor: alpha(bar, 0.1) }}>
                   <Txt size={9} w={700} color={bar} upper>{TIER_LABEL[tier]}</Txt>
@@ -210,7 +210,7 @@ export function DiagPanel({ orphans, span, loading }: { orphans: Orphan[]; span:
         {loading ? <Txt size={F.tiny} tone="muted">Loading…</Txt> : span.slice(0, 8).map(s => (
           <View key={s.emp_code} style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 6, borderBottomWidth: 1, borderBottomColor: C.line }}>
             <View style={{ flex: 1, minWidth: 0 }}>
-              <Txt size={11.5} w={600} numberOfLines={1}>{s.full_name}</Txt>
+              <Txt size={11.5} w={600}>{s.full_name}</Txt>
               <Txt size={10.5} tone="muted">{s.department || '-'}</Txt>
             </View>
             <Txt size={F.micro} w={700} color={s.direct_reports >= 15 ? C.critical : C.brandDeep} style={{ marginLeft: 8 }}>{s.direct_reports}</Txt>

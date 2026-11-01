@@ -123,8 +123,8 @@ export function FullModal({ visible, onClose, title, subtitle, children, footer,
       <View style={{ flex: 1, backgroundColor: C.canvas }}>
         <View style={{ paddingTop: insets.top + 8, paddingBottom: 10, paddingHorizontal: S.lg, backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.line, flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Txt size={F.lead + 1} w={800} numberOfLines={2}>{title}</Txt>
-            {!!subtitle && <Txt size={F.tiny} tone="muted" numberOfLines={3}>{subtitle}</Txt>}
+            <Txt size={F.lead + 1} w={800}>{title}</Txt>
+            {!!subtitle && <Txt size={F.tiny} tone="muted">{subtitle}</Txt>}
           </View>
           <Pressable onPress={onClose} accessibilityRole="button" accessibilityLabel={closeLabel} hitSlop={8}
             style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, minHeight: 40, paddingHorizontal: 12, borderRadius: R.sm, borderWidth: 1, borderColor: C.brandEdge, backgroundColor: pressed ? C.brandTint : C.surface })}>

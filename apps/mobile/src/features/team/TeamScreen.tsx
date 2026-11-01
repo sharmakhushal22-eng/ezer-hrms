@@ -23,8 +23,8 @@ function MateChip({ p }: { p: Peer }) {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, paddingVertical: 5, paddingLeft: 5, paddingRight: 12, borderRadius: R.pill, borderWidth: 1, borderColor: C.brandEdge, backgroundColor: C.surface, maxWidth: '100%' }}>
       <TeamAvatar name={p.full_name} size={24} />
       <View style={{ flexShrink: 1 }}>
-        <Txt size={F.tiny} w={600} numberOfLines={1}>{p.full_name || '-'}</Txt>
-        <Txt size={11} tone="muted" numberOfLines={1}>
+        <Txt size={F.tiny} w={600}>{p.full_name || '-'}</Txt>
+        <Txt size={11} tone="muted">
           {p.designation || '-'}
           {p.direct_reports > 0 ? ` · ${p.direct_reports} ${p.direct_reports === 1 ? 'report' : 'reports'}` : ''}
         </Txt>

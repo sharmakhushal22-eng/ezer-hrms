@@ -233,7 +233,7 @@ export function PipRequestTab({ members, today, flagRules }: { members: TeamMemb
       </Banner>
       <PCard title="Raise a PIP request" sub="Every area needs a measurable target and a way to check it. An area without one cannot be reviewed, and a plan nobody can review protects nobody.">
         <PickerField label="Who" value={picked ? label(picked) : ''} placeholder="Choose a team member" onPress={() => setPickWho(true)} />
-        <Input label="Support you are offering" value={support} onChangeText={setSupport} placeholder="Training, mentoring, a change of workload" />
+        <Input label="Support you are offering" value={support} onChangeText={setSupport} placeholder="Training, mentoring, workload" />
         {areas.map((a, i) => (
           <View key={i} style={{ borderWidth: 1, borderColor: C.line, borderRadius: R.md, padding: S.md, marginBottom: S.md }}>
             <Txt size={F.small} w={700} style={{ marginBottom: S.sm }}>#{i + 1}</Txt>

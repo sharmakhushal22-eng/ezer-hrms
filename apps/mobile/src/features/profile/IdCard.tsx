@@ -35,7 +35,7 @@ function Dig({ company, children }: { company: string; children: React.ReactNode
           <View style={{ paddingHorizontal: 6, paddingVertical: 2, borderRadius: 6, backgroundColor: 'rgba(255,255,255,0.2)' }}>
             <Txt size={F.micro} w={800} tone="onAccent">EZ</Txt>
           </View>
-          <Txt size={F.tiny} w={600} tone="onAccent" numberOfLines={1} style={{ flex: 1 }}>{company}</Txt>
+          <Txt size={F.tiny} w={600} tone="onAccent" style={{ flex: 1 }}>{company}</Txt>
         </View>
         {children}
       </LinearGradient>
@@ -51,8 +51,8 @@ function Face({ name, designation, photoUrl }: { name: string; designation: stri
           : <Txt size={F.lead + 1} w={700} tone="onAccent">{ini(name)}</Txt>}
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={F.lead} w={700} tone="onAccent" numberOfLines={2}>{name}</Txt>
-        <Txt size={F.tiny} tone="onAccent" style={{ opacity: 0.85 }} numberOfLines={2}>{designation}</Txt>
+        <Txt size={F.lead} w={700} tone="onAccent">{name}</Txt>
+        <Txt size={F.tiny} tone="onAccent" style={{ opacity: 0.85 }}>{designation}</Txt>
       </View>
     </View>
   )

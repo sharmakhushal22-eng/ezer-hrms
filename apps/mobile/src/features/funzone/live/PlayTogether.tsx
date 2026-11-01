@@ -308,7 +308,7 @@ export default function PlayTogether({ meId }: { meId: string }) {
             <Lbl>Who</Lbl>
             {who ? (
               <View style={[fieldBox(C), { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 8 }]}>
-                <Txt size={F.small} numberOfLines={1} style={{ flex: 1 }}>
+                <Txt size={F.small} style={{ flex: 1 }}>
                   {chosen ? `${chosen.name}${chosen.code ? ` (${chosen.code})` : ''}` : ''}
                 </Txt>
                 <Pressable onPress={clearPicker} accessibilityRole="button" hitSlop={10} style={{ minHeight: 36, justifyContent: 'center' }}>

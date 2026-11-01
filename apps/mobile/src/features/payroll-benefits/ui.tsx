@@ -52,7 +52,7 @@ export function Callout({ bg, children, style }: { bg: string; children: React.R
 export function Pill({ bg, fg, text }: { bg: string; fg: string; text: string }) {
   return (
     <View style={{ alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 2, borderRadius: 99, backgroundColor: bg }}>
-      <Txt size={10} w={600} color={fg} numberOfLines={1}>{text}</Txt>
+      <Txt size={10} w={600} color={fg}>{text}</Txt>
     </View>
   )
 }
@@ -81,7 +81,7 @@ export function SmallAction({ title, color, onPress, disabled, filled }: { title
         minHeight: 38, paddingHorizontal: 14, borderRadius: R.sm, alignItems: 'center', justifyContent: 'center',
         borderWidth: 1, borderColor: color, backgroundColor: filled ? color : C.surface, opacity: disabled ? 0.5 : pressed ? 0.8 : 1,
       })}>
-      <Txt size={F.tiny} w={600} color={filled ? C.onAccent : color} numberOfLines={1}>{title}</Txt>
+      <Txt size={F.tiny} w={600} color={filled ? C.onAccent : color}>{title}</Txt>
     </Pressable>
   )
 }

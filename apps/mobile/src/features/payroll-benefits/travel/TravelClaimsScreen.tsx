@@ -27,8 +27,8 @@ const NONE: never[] = []
 function Tile({ label, value, colour }: { label: string; value: string; colour: string }) {
   return (
     <Card style={{ flex: 1, minWidth: 100, paddingVertical: 13, paddingHorizontal: 13 }} padded={false}>
-      <Txt size={F.micro} w={600} tone="muted" upper numberOfLines={2}>{label}</Txt>
-      <Txt size={19} w={700} color={colour} style={{ marginTop: 3 }} numberOfLines={1}>{value}</Txt>
+      <Txt size={F.micro} w={600} tone="muted" upper>{label}</Txt>
+      <Txt size={19} w={700} color={colour} style={{ marginTop: 3 }} fit>{value}</Txt>
     </Card>
   )
 }

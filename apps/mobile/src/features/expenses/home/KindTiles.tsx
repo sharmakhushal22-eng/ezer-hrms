@@ -65,16 +65,16 @@ function KindTile({ k, badge, live, onPress }: { k: typeof KINDS[number]; badge:
           {(live || !!badge) && (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: R.pill, backgroundColor: C.surface, borderWidth: 1, borderColor: kc.k + '59' }}>
               {live && <View style={{ width: 7, height: 7, borderRadius: 4, backgroundColor: C.positive }} />}
-              <Txt size={11} w={700} color={kc.k} numberOfLines={1}>{live ? 'On the way' : badge}</Txt>
+              <Txt size={11} w={700} color={kc.k}>{live ? 'On the way' : badge}</Txt>
             </View>
           )}
         </View>
         <View style={{ flex: 1, gap: 4 }}>
           <Txt size={16} w={700}>{k.title}</Txt>
-          <Txt size={12} tone="soft" numberOfLines={3}>{k.text}</Txt>
+          <Txt size={12} tone="soft">{k.text}</Txt>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 6 }}>
-          <Txt size={11.5} w={500} tone="muted" style={{ flex: 1 }} numberOfLines={1}>{k.foot}</Txt>
+          <Txt size={11.5} w={500} tone="muted" style={{ flex: 1 }}>{k.foot}</Txt>
           <TeIcon name="go" size="sm" color={kc.k} />
         </View>
       </LinearGradient>

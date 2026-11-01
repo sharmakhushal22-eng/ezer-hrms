@@ -6,12 +6,15 @@
 // up from the bottom. All are drawn in JS (no native Alert), so they look the
 // same on every Android version and can show the website's exact wording.
 import * as React from 'react'
-import { KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, TextInput, View } from 'react-native'
+import { Animated, Easing, KeyboardAvoidingView, Modal, PanResponder, Platform, Pressable, ScrollView, TextInput, useWindowDimensions, View } from 'react-native'
 import { useSafeAreaInsets } from 'react-native-safe-area-context'
 import { useTheme } from './ThemeProvider'
 import { elevation, F, FONT, R, S } from './theme'
-import { Button, Gap, Txt, webNoOutline } from './primitives'
+import { Button, Gap, MAX_FONT_SCALE, Txt, webNoOutline } from './primitives'
 import { IconCheck, IconChevron, IconClose, IconSearch } from './icons'
+import { useFieldAboveKeyboard, useKeyboardHeight } from './keyboard'
+
+const NATIVE = Platform.OS !== 'web'
 
 // ── Sheet ───────────────────────────────────────────────────────────────────
 export function Sheet({ visible, onClose, title, children, footer, full }: {
@@ -19,15 +22,50 @@ export function Sheet({ visible, onClose, title, children, footer, full }: {
 }) {
   const { C } = useTheme()
   const insets = useSafeAreaInsets()
+  const { height } = useWindowDimensions()
+  const scroller = React.useRef<ScrollView>(null)
+  useFieldAboveKeyboard(scroller)
+  const keyboard = useKeyboardHeight()
+  // The scrim fades while the panel rises, rather than the whole Modal sliding up
+  // with its grey backdrop attached; the panel stays mounted until it has gone.
+  const [mounted, setMounted] = React.useState(visible)
+  if (visible && !mounted) setMounted(true)
+  const [open] = React.useState(() => new Animated.Value(0))
+  const [drag] = React.useState(() => new Animated.Value(0))
+  React.useEffect(() => {
+    if (visible) drag.setValue(0)
+    const anim = Animated.timing(open, {
+      toValue: visible ? 1 : 0, duration: visible ? 240 : 180, useNativeDriver: NATIVE,
+      easing: visible ? Easing.out(Easing.cubic) : Easing.in(Easing.quad),
+    })
+    anim.start(({ finished }) => { if (finished && !visible) setMounted(false) })
+    return () => anim.stop()
+  }, [visible, open, drag])
+  // Pull the grip down to dismiss.
+  const grip = React.useMemo(() => PanResponder.create({
+    onStartShouldSetPanResponder: () => false,
+    onMoveShouldSetPanResponder: (_, g) => g.dy > 4,
+    onPanResponderMove: (_, g) => drag.setValue(Math.max(0, g.dy)),
+    onPanResponderRelease: (_, g) => {
+      if (g.dy > 90 || g.vy > 0.9) onClose()
+      else Animated.spring(drag, { toValue: 0, useNativeDriver: NATIVE, bounciness: 0 }).start()
+    },
+  }), [drag, onClose])
+  const rise = open.interpolate({ inputRange: [0, 1], outputRange: [height, 0] })
   return (
-    <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose} statusBarTranslucent>
-      <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1 }}>
-        <Pressable style={{ flex: 1, backgroundColor: C.scrim }} onPress={onClose} accessibilityLabel="Close" />
-        <View style={{
+    <Modal visible={mounted} transparent animationType="none" onRequestClose={onClose} statusBarTranslucent navigationBarTranslucent>
+      <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={{ flex: 1, justifyContent: 'flex-end' }}>
+        <Animated.View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, backgroundColor: C.scrim, opacity: open }}>
+          <Pressable style={{ flex: 1 }} onPress={onClose} accessibilityLabel="Close" />
+        </Animated.View>
+        <Animated.View style={{
           backgroundColor: C.surface, borderTopLeftRadius: R.xl, borderTopRightRadius: R.xl,
-          maxHeight: full ? '94%' : '86%', minHeight: full ? '70%' : undefined, paddingBottom: insets.bottom + S.sm, ...elevation(C, 3),
+          // With the keyboard up the panel gets the room left above it, and scrolls inside that.
+          maxHeight: keyboard ? height - keyboard - insets.top - S.sm : full ? '94%' : '86%',
+          minHeight: full && !keyboard ? '70%' : undefined, paddingBottom: keyboard ? S.sm : insets.bottom + S.sm, ...elevation(C, 3),
+          transform: [{ translateY: Animated.add(rise, drag) }],
         }}>
-          <View style={{ alignItems: 'center', paddingTop: 8 }}>
+          <View {...grip.panHandlers} style={{ alignItems: 'center', paddingTop: 8, paddingBottom: title ? 0 : 8 }}>
             <View style={{ width: 40, height: 4, borderRadius: 2, backgroundColor: C.lineStrong }} />
           </View>
           {!!title && (
@@ -38,11 +76,11 @@ export function Sheet({ visible, onClose, title, children, footer, full }: {
               </Pressable>
             </View>
           )}
-          <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: S.lg, paddingBottom: S.lg }}>
+          <ScrollView ref={scroller} keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingHorizontal: S.lg, paddingBottom: S.lg }}>
             {children}
           </ScrollView>
           {footer && <View style={{ paddingHorizontal: S.lg, paddingTop: S.sm, borderTopWidth: 1, borderTopColor: C.line }}>{footer}</View>}
-        </View>
+        </Animated.View>
       </KeyboardAvoidingView>
     </Modal>
   )
@@ -63,7 +101,7 @@ export function SelectSheet<V extends string | number>({ visible, onClose, title
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: C.lineStrong, borderRadius: R.sm + 1, paddingHorizontal: S.md, marginBottom: S.sm }}>
           <IconSearch size={16} color={C.faint} />
           <TextInput value={q} onChangeText={setQ} placeholder="Search" placeholderTextColor={C.faint}
-            style={[{ flex: 1, height: 44, fontFamily: FONT[400], fontSize: F.body, color: C.ink }, webNoOutline]} />
+            maxFontSizeMultiplier={MAX_FONT_SCALE} style={[{ flex: 1, height: 44, fontFamily: FONT[400], fontSize: F.body, color: C.ink }, webNoOutline]} />
         </View>
       )}
       {shown.map(o => {
@@ -218,14 +256,14 @@ export function OverlayProvider({ children }: { children: React.ReactNode }) {
     <OverlayCtx.Provider value={api}>
       {children}
       {toast && (
-        <View pointerEvents="none" style={{ position: 'absolute', left: S.lg, right: S.lg, bottom: insets.bottom + 84, alignItems: 'center' }}>
+        <View pointerEvents="none" style={{ position: 'absolute', left: S.md, right: S.md, bottom: insets.bottom + 80 }}>
           <View style={{ backgroundColor: C.dark, borderRadius: R.md, paddingVertical: 12, paddingHorizontal: S.lg, flexDirection: 'row', gap: 10, alignItems: 'center', borderLeftWidth: 4, borderLeftColor: tc, ...elevation(C, 3), maxWidth: 520 }}>
             <Txt size={F.small} w={500} color={C.onDark} style={{ flexShrink: 1 }}>{toast.msg}</Txt>
           </View>
         </View>
       )}
       <Modal visible={!!dialog} transparent animationType="fade" onRequestClose={() => close(dialog?.input ? null : false)}>
-        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={{ flex: 1, backgroundColor: C.scrim, justifyContent: 'center', padding: S.xl }}>
+        <KeyboardAvoidingView behavior={Platform.OS === 'web' ? undefined : 'padding'} style={{ flex: 1, backgroundColor: C.scrim, justifyContent: 'center', padding: S.xl }}>
           {dialog && (
             <View style={{ backgroundColor: C.surface, borderRadius: R.xl, padding: S.xl, ...elevation(C, 3) }}>
               <Txt size={F.title} w={700}>{dialog.title}</Txt>

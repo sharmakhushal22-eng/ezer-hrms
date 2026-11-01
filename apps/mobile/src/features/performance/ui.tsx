@@ -125,7 +125,7 @@ export function ABar({ name, self, final, solidOnly, value }: { name: string; se
   return (
     <View style={{ marginBottom: 10 }}>
       <View style={{ flexDirection: 'row', justifyContent: 'space-between', gap: S.sm, marginBottom: 4 }}>
-        <Txt size={F.tiny} w={600} style={{ flex: 1 }} numberOfLines={2}>{name}</Txt>
+        <Txt size={F.tiny} w={600} style={{ flex: 1 }}>{name}</Txt>
         <Txt size={F.micro} w={700} style={{ fontVariant: ['tabular-nums'] }}>{value}</Txt>
       </View>
       <View style={{ height: 16, backgroundColor: C.sunken, borderRadius: 5, overflow: 'hidden' }}>

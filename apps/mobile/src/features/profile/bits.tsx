@@ -2,12 +2,10 @@
 // Section (h4 + sub), the plain/brand/good/warn pills, an empty card, and the section sub-tab row (My Details / Letter Requests
 // / My Letters — EmployeePortal.tsx SubTabs).
 import * as React from 'react'
-import { Pressable, ScrollView, View, type StyleProp, type ViewStyle } from 'react-native'
-import { router } from 'expo-router'
+import { Pressable, View, type StyleProp, type ViewStyle } from 'react-native'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S, toneOf } from '@/ui/theme'
-import { Card, Segmented, Txt } from '@/ui/primitives'
-import { sectionOf } from '@/core/nav'
+import { Card, Txt } from '@/ui/primitives'
 
 export function Section({ title, sub, right, children, style }: { title: string; sub?: string; right?: React.ReactNode; children: React.ReactNode; style?: StyleProp<ViewStyle> }) {
   return (
@@ -62,23 +60,6 @@ export function CardHead({ title, sub, right }: { title?: string; sub?: string; 
       </View>
       {right}
     </View>
-  )
-}
-
-/** The Profile section's sub-tabs, as on the website: My Details, Letter
- *  Requests, My Letters, Documents to sign ('to-sign' → /esign, owned by the
- *  e-sign module). Driven by the nav entry, so a new sub-tab shows up here. */
-export function ProfileSubTabs({ current }: { current: 'profile' | 'documents' | 'letters' }) {
-  const s = sectionOf('profile')
-  const items = (s?.items || []).map(i => ({ key: i.k, label: i.label }))
-  return (
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={{ flexGrow: 0, flexShrink: 0 }} contentContainerStyle={{ paddingHorizontal: S.lg, paddingVertical: S.sm }}>
-      <Segmented items={items} value={current} onChange={k => {
-        if (k === current) return
-        const to = s?.items.find(i => i.k === k)?.route
-        if (to) router.replace(to as any)
-      }} />
-    </ScrollView>
   )
 }
 

@@ -25,17 +25,19 @@ export function LiveBar({ leg, tripName, placeName, onOpen }: {
   return (
     <Pressable onPress={() => onOpen(leg)} accessibilityRole="button"
       style={({ pressed }) => ({
-        flexDirection: 'row', alignItems: 'center', gap: S.md, backgroundColor: C.positiveTint, borderWidth: 1, borderColor: C.positive,
+        gap: 6, backgroundColor: C.positiveTint, borderWidth: 1, borderColor: C.positive,
         borderRadius: R.lg, paddingVertical: 10, paddingHorizontal: 14, marginBottom: 14, opacity: pressed ? 0.85 : 1,
       })}>
-      <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: C.positive, borderWidth: 3, borderColor: C.positiveEdge }} />
-      <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={F.small}>
-          <Txt size={F.small} w={700}>{state}</Txt>
-          {` ${tripName} · journey ${leg.n}: ${placeName(leg.from)} → ${placeName(leg.to)}`}
-        </Txt>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md }}>
+        <View style={{ width: 10, height: 10, borderRadius: 5, backgroundColor: C.positive, borderWidth: 3, borderColor: C.positiveEdge }} />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Txt size={F.small}>
+            <Txt size={F.small} w={700}>{state}</Txt>
+            {` ${tripName} · journey ${leg.n}: ${placeName(leg.from)} → ${placeName(leg.to)}`}
+          </Txt>
+        </View>
       </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 22 }}>
         <Txt size={F.tiny} w={600} tone="positive">{leg.gps === 'checkin' ? 'Open' : 'Not recording here'}</Txt>
         <TeIcon name="go" size="sm" color={C.positive} />
       </View>

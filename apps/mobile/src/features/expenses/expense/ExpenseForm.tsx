@@ -73,7 +73,7 @@ function BillDrop({ fileName, file, busy, onPicked }: { fileName: string; file: 
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.md, padding: S.md, borderRadius: R.md, borderWidth: 1.5, borderStyle: 'dashed', borderColor: C.brandEdge, backgroundColor: C.sunken }}>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={F.small} w={700} numberOfLines={2}>{fileName || 'Attach the bill'}</Txt>
+        <Txt size={F.small} w={700}>{fileName || 'Attach the bill'}</Txt>
         <Txt size={F.tiny} tone="muted">
           {busy === 'upload' ? 'Uploading…' : file ? `Stored. Fingerprint ${file.sha256.slice(0, 10)}` : 'A photo or a PDF, up to 10 MB.'}
         </Txt>
@@ -235,7 +235,7 @@ export function ExpenseForm({ snap, line, tripId, resuming, onClose, onSaved }: 
   return (
     <TeSheet
       title={line ? 'Change this expense' : 'Add an expense'}
-      crumb={<Txt size={F.tiny} tone="muted" numberOfLines={1}>{tripName ? `${tripName} › Add a bill` : 'Other expense › Add a bill'}</Txt>}
+      crumb={<Txt size={F.tiny} tone="muted">{tripName ? `${tripName} › Add a bill` : 'Other expense › Add a bill'}</Txt>}
       lead={tripName
         ? `Saved against ${tripName} and claimed with that trip, not with your monthly expenses.`
         : 'No travel. It is saved under Other expenses until you submit your claim.'}

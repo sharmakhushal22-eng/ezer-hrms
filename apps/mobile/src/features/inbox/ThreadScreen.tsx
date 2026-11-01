@@ -200,11 +200,11 @@ function Header({ c, folder, ink }: { c: ConversationVM | null; folder?: FolderV
       </Pressable>
       {c && <ConvAvatar c={c} ink={ink} />}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={19} w={600} numberOfLines={1} style={{ fontFamily: SERIF }}>{c?.title || ''}</Txt>
+        <Txt size={19} w={600} style={{ fontFamily: SERIF }}>{c?.title || ''}</Txt>
         {c && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 7, marginTop: 2, flexWrap: 'wrap' }}>
             {folder && <KindChip label={folder.label} color={ink} />}
-            <Txt size={F.tiny} tone="muted" numberOfLines={1}>{kindLabel}</Txt>
+            <Txt size={F.tiny} tone="muted">{kindLabel}</Txt>
             {c.muted && <View style={{ paddingHorizontal: 7, paddingVertical: 1, borderRadius: 6, backgroundColor: C.sunken }}><Txt size={11} w={600} tone="muted">Muted</Txt></View>}
             {c.closed && <View style={{ paddingHorizontal: 7, paddingVertical: 1, borderRadius: 6, backgroundColor: C.warningTint }}><Txt size={11} w={600} tone="warning">Closed</Txt></View>}
           </View>

@@ -12,7 +12,7 @@ import { supabase } from '@/core/supabase'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, FONT, R, S } from '@/ui/theme'
 import { Button, Card, Txt, webNoOutline } from '@/ui/primitives'
-import { Screen } from '@/ui/Screen'
+import { FrameHead, Screen, ScreenFrame } from '@/ui/Screen'
 import { Sheet, SelectSheet } from '@/ui/overlays'
 import { IconChevronDown, IconClose } from '@/ui/icons'
 import { Ic } from './icons'
@@ -74,7 +74,7 @@ function Tag({ label, tone, pin }: { label: string; tone: 'code' | 'dept' | 'loc
   return (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, height: 24, paddingHorizontal: 9, borderRadius: R.pill, backgroundColor: bg, borderWidth: 1, borderColor: edge, maxWidth: '100%' }}>
       {pin && <Ic k="pin" size={11} color={fg} />}
-      <Txt size={11.5} w={600} color={fg} numberOfLines={1}>{label}</Txt>
+      <Txt size={11.5} w={600} color={fg}>{label}</Txt>
     </View>
   )
 }
@@ -85,8 +85,8 @@ function PersonCard({ e, onOpen }: { e: DirectoryRow; onOpen: (e: DirectoryRow) 
       <View style={{ flexDirection: 'row', gap: S.md, alignItems: 'center' }}>
         <HueAvatar name={e.full_name} />
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Txt size={F.body} w={700} numberOfLines={1}>{e.full_name}</Txt>
-          <Txt size={F.tiny} tone="muted" numberOfLines={1}>{e.designation || '-'}</Txt>
+          <Txt size={F.body} w={700}>{e.full_name}</Txt>
+          <Txt size={F.tiny} tone="muted">{e.designation || '-'}</Txt>
         </View>
       </View>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: S.md }}>
@@ -142,14 +142,19 @@ function FilterButton({ label, onPress, on }: { label: string; onPress: () => vo
   return (
     <Pressable onPress={onPress} accessibilityRole="button"
       style={({ pressed }) => ({ flex: 1, minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderRadius: R.sm + 1, borderWidth: 1, borderColor: on ? C.brand : C.lineStrong, backgroundColor: pressed ? C.brandTint : C.surface })}>
-      <Txt size={F.small} w={on ? 600 : 400} color={on ? C.brandDeep : C.ink} numberOfLines={1} style={{ flex: 1 }}>{label}</Txt>
+      <Txt size={F.small} w={on ? 600 : 400} color={on ? C.brandDeep : C.ink} style={{ flex: 1 }}>{label}</Txt>
       <IconChevronDown size={14} color={C.faint} />
     </Pressable>
   )
 }
 
+// The two rows of the list that are not people.
+const TABS_ROW = { id: '__tabs' } as DirectoryRow
+const FORM_ROW = { id: '__form' } as DirectoryRow
+
 export default function DirectoryScreen() {
   const { C } = useTheme()
+  const frame = React.useContext(ScreenFrame)
   const q = useQuery({ queryKey: ['hris', 'directory'], queryFn: loadDirectory, staleTime: 5 * 60_000 })
   const rows = React.useMemo(() => q.data || [], [q.data])
   const [query, setQuery] = React.useState('')
@@ -198,7 +203,7 @@ export default function DirectoryScreen() {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: C.lineStrong, borderRadius: R.sm + 1, paddingHorizontal: S.md, backgroundColor: C.surface }}>
           <Ic k="search" size={16} color={C.faint} />
           <TextInput value={query} onChangeText={setQuery} autoCorrect={false} autoCapitalize="none" accessibilityLabel="Search the directory"
-            placeholder="Search name, code, designation, department or email" placeholderTextColor={C.faint}
+            placeholder="Name, code or department" placeholderTextColor={C.faint}
             style={[{ flex: 1, height: 46, fontFamily: FONT[400], fontSize: F.small, color: C.ink }, webNoOutline]} />
         </View>
         <View style={{ flexDirection: 'row', gap: S.sm, marginTop: S.sm }}>
@@ -233,12 +238,17 @@ export default function DirectoryScreen() {
   )
 
   return (
-    <Screen title="Team Directory" subtitle="HR Services" scroll={false} padded={false}>
+    <Screen title="Team Directory" subtitle="HR Services" scroll={false} padded={false} ownFrame>
+      {/* The section's tabs stay pinned while the heading and the long roster scroll, so
+          they travel in the list: FlatList's sticky index 1 is its first row. */}
       <FlatList
-        data={err ? [] : loading ? [] : filtered}
+        data={[TABS_ROW, FORM_ROW, ...(err || loading ? [] : filtered)]}
         keyExtractor={e => e.id}
-        renderItem={({ item }) => <PersonCard e={item} onOpen={setOpenP} />}
-        ListHeaderComponent={header}
+        renderItem={({ item }) => item === TABS_ROW ? <View style={{ marginHorizontal: -S.lg, marginBottom: S.lg, backgroundColor: C.canvas }}>{frame?.tabs}</View>
+          : item === FORM_ROW ? header : <PersonCard e={item} onOpen={setOpenP} />}
+        ListHeaderComponent={<FrameHead />}
+        stickyHeaderIndices={[1]}
+        extraData={header}
         keyboardShouldPersistTaps="handled"
         contentContainerStyle={{ padding: S.lg, paddingBottom: S.xxl }}
         initialNumToRender={12}

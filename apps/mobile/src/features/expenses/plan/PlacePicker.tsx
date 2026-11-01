@@ -55,8 +55,8 @@ function PlaceRow({ icon, title, sub, chip, onPress }: { icon: string; title: st
         <TeIcon name={icon} size="sm" color={C.inkSoft} />
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={F.small} w={700} numberOfLines={1}>{title}</Txt>
-        {!!sub && <Txt size={F.micro} tone="muted" numberOfLines={2}>{sub}</Txt>}
+        <Txt size={F.small} w={700}>{title}</Txt>
+        {!!sub && <Txt size={F.micro} tone="muted">{sub}</Txt>}
       </View>
       {chip}
     </Pressable>
@@ -321,7 +321,7 @@ export function PlacePicker({ snap, target, onCancel, onChosen, onPlaceAdded }: 
           ) : (
             <View>
               <Input label="Name of the place" value={addr.label ?? ''} placeholder="Company, shop or person. Optional" onChangeText={set('label')} />
-              <Input label="Building and street" value={addr.line ?? ''} placeholder="Flat or office number, building, street" onChangeText={set('line')} />
+              <Input label="Building and street" value={addr.line ?? ''} placeholder="Flat or office, building, street" onChangeText={set('line')} />
               <Input label="Area or locality" value={addr.area ?? ''} placeholder={fromMap ? 'Optional' : 'Sector, colony or landmark'} onChangeText={set('area')} />
               {intl && <Input label="Country" value={addr.country ?? ''} placeholder="Country" onChangeText={set('country')} />}
               <Input label="City" value={addr.city ?? ''} onChangeText={set('city')} />

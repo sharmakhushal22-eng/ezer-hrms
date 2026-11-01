@@ -83,7 +83,7 @@ function DayCell({ dateStr, d, monthData, todayStr, selected, width, onPick }: {
     <>
       <Txt size={12} w={isToday ? 800 : 600} color={selected ? C.onAccent : ink} style={{ lineHeight: 13 }}>{d}</Txt>
       {!isFuture && !!code && (
-        <Txt size={8} w={800} color={selected ? C.onAccent : dot} style={{ lineHeight: 9, marginTop: 1, letterSpacing: 0.16 }} numberOfLines={1}>{code}</Txt>
+        <Txt size={8} w={800} color={selected ? C.onAccent : dot} style={{ lineHeight: 9, marginTop: 1, letterSpacing: 0.16 }} fit>{code}</Txt>
       )}
       {pendingFix && <View style={{ position: 'absolute', top: 3, left: 4, width: 5, height: 5, borderRadius: 3, backgroundColor: C.warning }} />}
       {!pendingFix && fixed && (

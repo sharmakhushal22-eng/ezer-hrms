@@ -67,7 +67,7 @@ function PointLine({ i, label, title, placeholder, sub, subIcon, disabled, onPre
       <Mk kind={i === 0 || ret ? 'a' : 'b'} label={i === 0 || ret ? 'A' : 'B'} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={F.micro} tone="muted">{label}</Txt>
-        {title ? <Txt size={F.small} w={700} numberOfLines={1}>{title}</Txt> : <Txt size={F.small} w={600} tone="faint">{placeholder}</Txt>}
+        {title ? <Txt size={F.small} w={700}>{title}</Txt> : <Txt size={F.small} w={600} tone="faint">{placeholder}</Txt>}
         {!!sub && (
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
             {subIcon && <TeIcon name="target" px={12} color={C.muted} />}

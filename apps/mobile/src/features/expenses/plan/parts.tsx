@@ -116,7 +116,7 @@ export function VChip({ icon, title, sub, on, onPress, mono, add }: {
       })}>
       <TeIcon name={icon} size="sm" color={on ? C.brand : C.muted} />
       <View style={{ flexShrink: 1 }}>
-        <Txt size={F.small} w={700} color={on ? C.brandDeep : C.ink} style={mono ? { fontFamily: MONO } : undefined} numberOfLines={1}>{title}</Txt>
+        <Txt size={F.small} w={700} color={on ? C.brandDeep : C.ink} style={mono ? { fontFamily: MONO } : undefined}>{title}</Txt>
         {!!sub && <Txt size={F.micro} tone="muted">{sub}</Txt>}
       </View>
     </Pressable>
@@ -163,8 +163,8 @@ export function LocBtn({ left, small, title, ad, placeholder, onPress, need }: {
       {left}
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={F.micro} tone="muted">{small}</Txt>
-        {title ? <Txt size={F.small} w={700} numberOfLines={1}>{title}</Txt> : <Txt size={F.small} w={600} tone="faint">{placeholder}</Txt>}
-        {!!ad && <Txt size={F.micro} tone="muted" numberOfLines={2}>{ad}</Txt>}
+        {title ? <Txt size={F.small} w={700}>{title}</Txt> : <Txt size={F.small} w={600} tone="faint">{placeholder}</Txt>}
+        {!!ad && <Txt size={F.micro} tone="muted">{ad}</Txt>}
       </View>
       <TeIcon name="rightc" size="sm" color={C.muted} />
     </Pressable>

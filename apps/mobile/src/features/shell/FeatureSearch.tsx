@@ -10,7 +10,7 @@ import { useMenu } from '@/core/menu'
 import { SECTION_ICON, visibleSections } from '@/core/nav'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, FONT, R, S } from '@/ui/theme'
-import { Txt, webNoOutline } from '@/ui/primitives'
+import { MAX_FONT_SCALE, Txt, webNoOutline } from '@/ui/primitives'
 import { IconClose, IconSearch } from '@/ui/icons'
 
 const ESS_KEYWORDS: Record<string, string> = {
@@ -41,7 +41,7 @@ function score(e: Entry, q: string) {
   return 15
 }
 
-export function FeatureSearch() {
+export function FeatureSearch({ onOpen }: { onOpen?: () => void }) {
   const { C } = useTheme()
   const { menu } = useMenu()
   const [q, setQ] = React.useState('')
@@ -51,15 +51,16 @@ export function FeatureSearch() {
       keywords: `${s.label.toLowerCase()} ${ESS_KEYWORDS[i.k] || ''}`, route: i.route,
     }))), [menu])
   const qq = q.trim().toLowerCase()
+  const open = (route: string) => { setQ(''); onOpen?.(); router.navigate(route as never) }
   const hits = qq ? entries.map(e => ({ e, s: score(e, qq) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s || a.e.label.localeCompare(b.e.label)).slice(0, 8) : []
 
   return (
     <View style={{ marginBottom: S.md }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface, borderRadius: R.md, paddingHorizontal: S.md }}>
         <IconSearch size={16} color={C.faint} />
-        <TextInput value={q} onChangeText={setQ} placeholder="Search a feature (Leave, Payslip, Approvals…)" placeholderTextColor={C.faint}
+        <TextInput value={q} onChangeText={setQ} placeholder="Search a feature (Leave, Payslip…)" placeholderTextColor={C.faint} maxFontSizeMultiplier={MAX_FONT_SCALE}
           style={[{ flex: 1, height: 44, fontFamily: FONT[400], fontSize: F.small + 1, color: C.ink }, webNoOutline]} returnKeyType="search"
-          onSubmitEditing={() => { if (hits[0]) { setQ(''); router.push(hits[0].e.route as any) } }} />
+          onSubmitEditing={() => { if (hits[0]) open(hits[0].e.route) }} />
         {!!q && <Pressable onPress={() => setQ('')} hitSlop={10} accessibilityLabel="Clear"><IconClose size={16} color={C.faint} /></Pressable>}
       </View>
       {!!qq && (
@@ -67,7 +68,7 @@ export function FeatureSearch() {
           {hits.length ? hits.map(({ e }) => {
             const I = SECTION_ICON[e.icon]
             return (
-              <Pressable key={e.id} onPress={() => { setQ(''); router.push(e.route as any) }}
+              <Pressable key={e.id} onPress={() => open(e.route)}
                 style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: S.md, padding: S.md, backgroundColor: pressed ? C.brandTint : 'transparent', borderBottomWidth: 1, borderBottomColor: C.line })}>
                 <View style={{ width: 30, height: 30, borderRadius: 8, backgroundColor: C.chip, alignItems: 'center', justifyContent: 'center' }}>{I && <I size={16} color={C.chipInk} />}</View>
                 <View style={{ flex: 1 }}>

@@ -95,7 +95,7 @@ export function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, 
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Checkbox checked={checked} onChange={onToggle} />
         <Pressable onPress={onToggle} style={{ flex: 1, minWidth: 0 }}>
-          <Txt size={F.small} w={600} numberOfLines={1}>{log.purpose}</Txt>
+          <Txt size={F.small} w={600}>{log.purpose}</Txt>
           <Txt size={F.micro} tone="muted" style={{ marginTop: 2 }}>
             {typeName} · {dmy(log.log_date)}{log.city ? ` · ${log.city}` : ''}{log.distance_claimed ? ` · ${log.distance_claimed} km` : ''}
             {gps ? <Txt size={F.micro} color={C.brandDeep}> · 📍 recorded</Txt> : null}
@@ -112,7 +112,7 @@ export function LogRow({ log, typeName, checked, onToggle, onDelete, needsBill, 
           {bills.map(b => (
             <View key={b.id} style={{ flexDirection: 'row', alignItems: 'center', gap: 5, backgroundColor: C.positiveTint, borderWidth: 1, borderColor: C.positiveEdge, borderRadius: 99, paddingLeft: 9 }}>
               <Txt size={F.micro} color={C.positive} style={b.url ? { textDecorationLine: 'underline' } : undefined}
-                onPress={b.url ? () => void WebBrowser.openBrowserAsync(b.url!) : undefined} numberOfLines={1}>{b.file_name || 'bill'}</Txt>
+                onPress={b.url ? () => void WebBrowser.openBrowserAsync(b.url!) : undefined}>{b.file_name || 'bill'}</Txt>
               <Txt size={F.micro} tone="muted">{kb(b.file_size)}</Txt>
               <XButton label="Remove this bill" onPress={() => onRemoveBill(b.id)} disabled={busy} size={14} />
             </View>

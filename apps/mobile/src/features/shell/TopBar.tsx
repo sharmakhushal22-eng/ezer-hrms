@@ -54,14 +54,15 @@ export function TopBar() {
   const { emp } = useEmployee()
   const unread = useUnreadCount()
   return (
-    <View style={{ paddingTop: insets.top + 6, paddingBottom: 8, paddingHorizontal: S.lg, flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.canvas, borderBottomWidth: 1, borderBottomColor: C.hair }}>
+    <View style={{ paddingTop: insets.top + 6, paddingBottom: 8, paddingHorizontal: S.lg, flexDirection: 'row', alignItems: 'center', gap: S.sm, backgroundColor: C.surface, borderBottomWidth: 1, borderBottomColor: C.hair }}>
       <Logo height={20} />
       <View style={{ flex: 1 }} />
       <ThemeButton />
-      <IconButton label="Notifications" badge={unread} onPress={openBell}>
-        <IconBell size={20} color={C.muted} />
+      <IconButton label="Notifications" badge={unread} badgeInset={-6} onPress={openBell}
+        style={{ width: 34, height: 34, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: C.surface }}>
+        <IconBell size={18} color={C.muted} />
       </IconButton>
-      <Pressable onPress={() => router.push('/profile')} accessibilityLabel="My profile">
+      <Pressable onPress={() => router.navigate('/profile')} accessibilityLabel="My profile" hitSlop={6}>
         <Avatar name={emp?.full_name} uri={emp?.profile_photo} size={32} />
       </Pressable>
     </View>

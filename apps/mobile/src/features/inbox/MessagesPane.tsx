@@ -30,7 +30,7 @@ function FolderChip({ label, unread, ink, dot, on, onPress }: { label: string; u
       {dot
         ? <LinearGradient colors={dot} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ width: 8, height: 8, borderRadius: 3 }} />
         : <View style={{ width: 8, height: 8, borderRadius: 3, backgroundColor: ink }} />}
-      <Txt size={F.tiny + 0.5} w={600} color={on ? C.ink : C.inkSoft} numberOfLines={1}>{label}</Txt>
+      <Txt size={F.tiny + 0.5} w={600} color={on ? C.ink : C.inkSoft}>{label}</Txt>
       {unread > 0 && (
         <View style={{ minWidth: 20, height: 20, paddingHorizontal: 6, borderRadius: 999, backgroundColor: ink, alignItems: 'center', justifyContent: 'center' }}>
           <Txt size={11} w={700} color={onInk(isDark)}>{unread}</Txt>
@@ -67,7 +67,7 @@ function CatchUpRow({ c, ink, onOpen, system }: { c: ConversationVM; ink: string
         ? <View style={{ width: 38, height: 38, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: alpha(ink, 0.14) }}><FolderGlyph code={c.folder} size={17} color={ink} /></View>
         : <ConvAvatar c={c} ink={ink} />}
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={13.5} w={600} numberOfLines={1}>{c.title}</Txt>
+        <Txt size={13.5} w={600}>{c.title}</Txt>
         <Txt size={F.tiny} tone="muted" numberOfLines={1} style={{ marginTop: 1 }}>{c.preview}</Txt>
       </View>
       {system
@@ -188,7 +188,7 @@ export function MessagesPane({ list }: { list: InboxList }) {
               <Pressable onPress={() => openCompose(q)} accessibilityRole="button"
                 style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 10, paddingHorizontal: 14, minHeight: 44, borderRadius: 10, backgroundColor: pressed ? C.brandTint : C.sunken, marginBottom: 4 })}>
                 <GSearch size={14} color={C.brand} />
-                <Txt size={F.tiny} w={600} tone="brand" numberOfLines={1} style={{ flex: 1 }}>Not here? Search all colleagues for “{q}”</Txt>
+                <Txt size={F.tiny} w={600} tone="brand" style={{ flex: 1 }}>Not here? Search all colleagues for “{q}”</Txt>
               </Pressable>
             )}
             {visible.map(c => <ConversationRow key={c.id} c={c} folder={folders[c.folder]} onOpen={open} />)}

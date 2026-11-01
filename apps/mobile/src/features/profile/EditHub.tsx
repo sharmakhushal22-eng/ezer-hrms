@@ -28,7 +28,7 @@ function HubRow({ label, value, action, sub, first, onPress }: {
         <Txt size={F.micro} w={700} tone="muted" upper>{label}</Txt>
         {value !== null && (
           empty ? <Txt size={F.small} tone="faint" style={{ fontStyle: 'italic' }}>Not added</Txt>
-            : <Txt size={F.small} w={600} numberOfLines={2}>{value}</Txt>
+            : <Txt size={F.small} w={600}>{value}</Txt>
         )}
         {!!sub && <Txt size={F.tiny} tone="muted" style={{ marginTop: 2 }}>{sub}</Txt>}
       </View>

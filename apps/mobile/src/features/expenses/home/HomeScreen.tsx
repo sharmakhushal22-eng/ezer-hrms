@@ -44,7 +44,7 @@ function ModuleHeader({ snap }: { snap: Snapshot | undefined }) {
       </LinearGradient>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={F.body} w={800}>EZER</Txt>
-        <Txt size={F.micro} tone="muted" numberOfLines={1}>Travel and Expenses</Txt>
+        <Txt size={F.micro} tone="muted">Travel and Expenses</Txt>
       </View>
       <Pressable onPress={exitModule} accessibilityRole="button" hitSlop={6}
         style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 36, paddingHorizontal: 10, borderRadius: R.sm, borderWidth: 1, borderColor: C.line, backgroundColor: pressed ? C.sunken : C.surface })}>
@@ -64,8 +64,8 @@ function Kpi({ value, label }: { value: string; label: string }) {
   const { C } = useTheme()
   return (
     <View style={{ flex: 1, minWidth: 0, backgroundColor: HERO.glass, borderWidth: 1, borderColor: HERO.glassEdge, borderRadius: R.lg, paddingVertical: 8, paddingHorizontal: 10 }}>
-      <Txt size={17} w={600} color={C.onDark} numberOfLines={1} style={{ fontVariant: ['tabular-nums'] }}>{value}</Txt>
-      <Txt size={F.tiny} color={C.onDarkMuted} numberOfLines={2}>{label}</Txt>
+      <Txt size={17} w={600} color={C.onDark} fit style={{ fontVariant: ['tabular-nums'] }}>{value}</Txt>
+      <Txt size={F.tiny} color={C.onDarkMuted}>{label}</Txt>
     </View>
   )
 }

@@ -87,7 +87,7 @@ function KindTile({ kind, onPress }: { kind: TripScope; onPress: () => void }) {
       <View style={{ width: 36, height: 36, borderRadius: 11, alignItems: 'center', justifyContent: 'center', backgroundColor: k.k }}>
         <TeIcon name={kind} size="lg" color={C.surface} px={20} />
       </View>
-      <Txt size={F.small} w={700} numberOfLines={2}>{`${SCOPE_WORD[kind]} trip`}</Txt>
+      <Txt size={F.small} w={700}>{`${SCOPE_WORD[kind]} trip`}</Txt>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4, marginTop: 'auto' }}>
         <Txt size={F.tiny} w={600} color={k.k}>New</Txt>
         <TeIcon name="go" size="sm" color={k.k} />

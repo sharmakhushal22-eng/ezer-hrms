@@ -18,7 +18,7 @@ import { invalidate, queryClient } from '@/core/query'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F } from '@/ui/theme'
 import { Txt } from '@/ui/primitives'
-import { Screen } from '@/ui/Screen'
+import { FrameHead, Screen } from '@/ui/Screen'
 import {
   Cake, CoChip, Door, Medal, Send, ShieldOff, SocAvatar, SocCard, SocEmpty, Trophy, Wave, RemovedBlock, toggle, useKind, when,
   type SocialKind, type SocialPayload, type SocialPost, type SocialTab,
@@ -372,9 +372,10 @@ export default function SocialScreen() {
   }
 
   return (
-    <Screen title="Social" subtitle="Birthdays, work anniversaries, new joiners and the Wall of Fame" scroll={false} padded={false}>
+    <Screen title="Social" subtitle="Birthdays, work anniversaries, new joiners and the Wall of Fame" scroll={false} padded={false} ownFrame>
       <ScrollView ref={scroll} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: 16, paddingBottom: 40 }}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.brand} colors={[C.brand]} />}>
+        <FrameHead />
         {body}
       </ScrollView>
     </Screen>

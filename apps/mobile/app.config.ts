@@ -8,14 +8,14 @@ const config: ExpoConfig = {
   name: 'EZER HRMS',
   slug: 'ezer-hrms',
   // Bump for every APK you hand to testers; versionCode below must also go up.
-  version: '1.0.0',
+  version: '1.1.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'ezerhrms',
   userInterfaceStyle: 'automatic',
   android: {
     package: 'com.ezerhrms.app',
-    versionCode: 1,
+    versionCode: 2,
     adaptiveIcon: {
       backgroundColor: '#EFF6FF',
       foregroundImage: './assets/images/android-icon-foreground.png',

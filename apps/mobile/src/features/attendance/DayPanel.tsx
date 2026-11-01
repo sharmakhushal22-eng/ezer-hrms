@@ -53,7 +53,7 @@ export function DayPanelResting({ summary }: { summary: MonthSummary }) {
           {rows.map(([k, v, c]) => (
             <View key={k} style={{ width: '48.5%', flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 9, backgroundColor: C.sunken }}>
               <View style={{ width: 9, height: 9, borderRadius: 3, backgroundColor: c, opacity: v ? 1 : 0.35 }} />
-              <Txt size={12} tone="soft" style={{ flex: 1 }} numberOfLines={1}>{k}</Txt>
+              <Txt size={12} tone="soft" style={{ flex: 1 }}>{k}</Txt>
               <Txt size={13} w={700} color={v === 0 ? C.faint : C.ink}>{v}</Txt>
             </View>
           ))}
@@ -81,7 +81,7 @@ function Punches({ date }: { date: string }) {
           <View style={{ paddingHorizontal: 8, paddingVertical: 2, borderRadius: R.pill, backgroundColor: p.punch_type === 'IN' ? C.positiveTint : C.criticalTint }}>
             <Txt size={10} w={600} color={p.punch_type === 'IN' ? C.positive : C.critical}>{p.punch_type}</Txt>
           </View>
-          <Txt size={12} tone="muted" style={{ flexShrink: 1 }} numberOfLines={1}>{p.source || '-'}</Txt>
+          <Txt size={12} tone="muted" style={{ flexShrink: 1 }}>{p.source || '-'}</Txt>
           {!!p.geofence_status && <Txt size={10} tone="faint" style={{ marginLeft: 'auto' }}>{p.geofence_status}</Txt>}
         </View>
       ))}

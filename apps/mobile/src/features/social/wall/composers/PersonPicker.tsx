@@ -41,8 +41,8 @@ function ResultRow({ person, added, onPick }: { person: Person; added: boolean; 
       style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 10, minHeight: 48, paddingVertical: 8, paddingHorizontal: 10, borderRadius: RAD.control, backgroundColor: pressed ? C.brandTint : 'transparent' })}>
       <Avatar name={person.full_name} size={30} />
       <View style={{ flex: 1, minWidth: 0 }}>
-        <Txt size={F.small} w={600} numberOfLines={1}>{person.full_name}</Txt>
-        {!!meta && <Txt size={F.micro} tone="muted" numberOfLines={1}>{meta}</Txt>}
+        <Txt size={F.small} w={600}>{person.full_name}</Txt>
+        {!!meta && <Txt size={F.micro} tone="muted">{meta}</Txt>}
       </View>
       {added && <Txt size={F.micro} w={600} tone="brand">Added</Txt>}
     </Pressable>

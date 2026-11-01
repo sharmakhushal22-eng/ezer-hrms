@@ -5,7 +5,7 @@
 // locks). Every figure comes from ../tax.ts (the website's maths, extracted); every
 // read and write from ./data.ts (the website's Supabase calls, verbatim).
 import * as React from 'react'
-import { Pressable, RefreshControl, ScrollView, View } from 'react-native'
+import { Pressable, ScrollView, View } from 'react-native'
 import { useQuery } from '@tanstack/react-query'
 import { useEmployeeId } from '@/core/session'
 import { useEmployee } from '@/core/employee'
@@ -28,14 +28,25 @@ import { Step2 } from './Step2'
 import { Step3 } from './Step3'
 import { Step4 } from './Step4'
 
+/** Four steps do not fit a phone: the row scrolls, and the current step stays in view. */
 function Stepper({ step, onGo }: { step: number; onGo: (n: number) => void }) {
   const { C } = useTheme()
+  const row = React.useRef<ScrollView>(null)
+  const boxW = React.useRef(0)
+  const spots = React.useRef<Record<number, { x: number; w: number }>>({})
+  React.useEffect(() => {
+    const at = spots.current[step]
+    if (at) row.current?.scrollTo({ x: Math.max(0, at.x - (boxW.current - at.w) / 2), animated: true })
+  }, [step])
   return (
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 4, marginBottom: S.lg }}>
+    <ScrollView ref={row} horizontal showsHorizontalScrollIndicator={false} style={{ marginHorizontal: -S.lg, marginBottom: S.lg, flexGrow: 0 }}
+      contentContainerStyle={{ alignItems: 'center', gap: 4, paddingHorizontal: S.lg }}
+      onLayout={e => { boxW.current = e.nativeEvent.layout.width }}>
       {STEPS.map((lbl, i) => {
         const n = i + 1, active = step === n, done = step > n
         return (
-          <View key={lbl} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+          <View key={lbl} style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}
+            onLayout={e => { spots.current[n] = { x: e.nativeEvent.layout.x, w: e.nativeEvent.layout.width } }}>
             <Pressable onPress={() => n <= step && onGo(n)} accessibilityRole="button" accessibilityState={{ selected: active, disabled: n > step }}
               style={{ flexDirection: 'row', alignItems: 'center', gap: 7, paddingVertical: 8, paddingHorizontal: 12, borderRadius: 99, borderWidth: 1,
                 borderColor: active ? C.brand : C.line, backgroundColor: active ? C.brand : done ? C.brandTint : C.surface }}>
@@ -48,7 +59,7 @@ function Stepper({ step, onGo }: { step: number; onGo: (n: number) => void }) {
           </View>
         )
       })}
-    </View>
+    </ScrollView>
   )
 }
 
@@ -158,11 +169,10 @@ export default function FlexiScreen() {
     if (c) { try { await downloadPdf(c) } catch { /* download best-effort */ } }
   }
 
-  // Own scroller (not Screen's) so a step change can start at the top, as the website's page does.
+  // A step change starts at the top, as the website's page does.
   const scroller = React.useRef<ScrollView>(null)
   React.useEffect(() => { scroller.current?.scrollTo({ y: 0, animated: false }) }, [step])
-  const [refreshing, setRefreshing] = React.useState(false)
-  const refresh = async () => { setRefreshing(true); try { await Promise.all([q.refetch(), sq.refetch()]) } finally { setRefreshing(false) } }
+  const refresh = () => Promise.all([q.refetch(), sq.refetch()])
   const isErr = draftMsg.startsWith('⚠')
 
   let footer: React.ReactNode = null
@@ -171,9 +181,7 @@ export default function FlexiScreen() {
   if (step === 3) footer = <View style={{ flexDirection: 'row', gap: S.sm }}><Button variant="outline" title="Back" onPress={() => setStep(2)} style={{ flex: 1 }} /><Button title="Calculate TDS →" onPress={() => setStep(4)} style={{ flex: 2 }} /></View>
 
   return (
-    <Screen title="Flexi Benefits" subtitle="Payroll" footer={q.data ? footer : null} scroll={false} padded={false}>
-      <ScrollView ref={scroller} keyboardShouldPersistTaps="handled" contentContainerStyle={{ padding: S.lg, paddingBottom: S.xl }}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} tintColor={C.brand} colors={[C.brand]} />}>
+    <Screen title="Flexi Benefits" subtitle="Payroll" footer={q.data ? footer : null} scrollRef={scroller} onRefresh={refresh}>
       {q.isLoading ? <Loading /> : q.error ? <ErrorState error={q.error} onRetry={() => q.refetch()} /> : (
         <View>
           <View style={{ flexDirection: 'row', alignItems: 'flex-start', gap: 10, flexWrap: 'wrap', marginBottom: S.md }}>
@@ -213,7 +221,6 @@ export default function FlexiScreen() {
           )}
         </View>
       )}
-      </ScrollView>
     </Screen>
   )
 }

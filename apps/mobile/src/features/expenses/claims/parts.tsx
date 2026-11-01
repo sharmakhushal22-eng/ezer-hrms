@@ -59,7 +59,7 @@ export function Tile({ label, value, note }: { label: string; value: string; not
   const { C } = useTheme()
   return (
     <View style={{ flexGrow: 1, flexBasis: '45%', minWidth: 140, backgroundColor: C.surface, borderRadius: R.lg, borderWidth: 1, borderColor: C.line, padding: S.md }}>
-      <Txt size={F.micro} w={700} tone="muted" upper numberOfLines={2}>{label}</Txt>
+      <Txt size={F.micro} w={700} tone="muted" upper>{label}</Txt>
       <Txt size={F.title + 2} w={700} style={{ marginTop: 4, fontVariant: ['tabular-nums'] }}>{value}</Txt>
       {!!note && <Txt size={F.tiny} tone="muted" style={{ marginTop: 2 }}>{note}</Txt>}
     </View>

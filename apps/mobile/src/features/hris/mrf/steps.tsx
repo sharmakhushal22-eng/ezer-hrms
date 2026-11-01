@@ -210,7 +210,7 @@ export function StepCandidate({ form, set, refs, addSkill }: StepProps) {
       <FieldLabel label="Mandatory Skills" />
       <SkillsPicker value={form.skills_required} onChange={v => set('skills_required', v)} allSkills={refs.skills} onAddSkill={addSkill} />
       <FieldLabel label="Good-to-have Skills" />
-      <SkillsPicker value={form.good_to_have_skills} onChange={v => set('good_to_have_skills', v)} allSkills={refs.skills} onAddSkill={addSkill} placeholder="Search good-to-have skills, or add custom" />
+      <SkillsPicker value={form.good_to_have_skills} onChange={v => set('good_to_have_skills', v)} allSkills={refs.skills} onAddSkill={addSkill} placeholder="Search skills, or add custom" />
       <TextField label="Job Description" multiline minHeight={120} value={form.job_description} onChange={v => set('job_description', v)} placeholder="Role summary, responsibilities, must-haves…" />
       <FieldLabel label="Questions to ask the candidate" />
       <Txt size={F.tiny} tone="faint" style={{ marginTop: -4, marginBottom: 6 }}>optional · every interviewer sees these on the feedback form</Txt>

@@ -35,7 +35,7 @@ function HeroTile({ icon, title, text, foot, tone, onPress }: {
           <Txt size={F.tiny} tone="muted">{text}</Txt>
         </View>
         <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: 4 }}>
-          <Txt size={11} w={700} color={k} numberOfLines={1} style={{ flexShrink: 1 }}>{foot}</Txt>
+          <Txt size={11} w={700} color={k} style={{ flexShrink: 1 }}>{foot}</Txt>
           <TeIcon name="go" size="sm" color={k} />
         </View>
       </LinearGradient>
@@ -70,7 +70,7 @@ export function RecordingNow({ leg, nameOf, onOpen }: { leg: TeLeg; nameOf: (id:
       <View style={{ width: 12, height: 12, borderRadius: 6, backgroundColor: C.positive, borderWidth: 2, borderColor: C.positiveEdge }} />
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={11} w={700} upper color={C.positive}>Recording now</Txt>
-        <Txt size={F.small} w={700} numberOfLines={1}>{`Journey ${leg.n}: ${nameOf(leg.from)} → ${nameOf(leg.to)}`}</Txt>
+        <Txt size={F.small} w={700}>{`Journey ${leg.n}: ${nameOf(leg.from)} → ${nameOf(leg.to)}`}</Txt>
       </View>
       <Button size="sm" title="Open it" icon={<TeIcon name="play" size="sm" color={C.onAccent} />} onPress={() => onOpen(leg)} />
     </View>

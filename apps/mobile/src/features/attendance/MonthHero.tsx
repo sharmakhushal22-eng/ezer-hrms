@@ -42,7 +42,7 @@ function Ring({ pct }: { pct: number | null }) {
       </Svg>
       <View style={{ position: 'absolute', top: 0, left: 0, right: 0, bottom: 0, alignItems: 'center', justifyContent: 'center' }}>
         <Txt size={17} w={700} style={{ lineHeight: 19 }}>{pct == null ? '-' : `${pct}%`}</Txt>
-        <Txt size={9} w={600} tone="muted" style={{ letterSpacing: 0, marginTop: 1 }}>ATTENDANCE</Txt>
+        <Txt size={9} w={600} tone="muted" fit center style={{ width: 50, letterSpacing: 0, marginTop: 1 }}>ATTENDANCE</Txt>
       </View>
     </View>
   )
@@ -58,14 +58,14 @@ export function MonthHero({ month, year, summary, onPrev, onNext, onToday, isThi
     <Hero style={{ marginBottom: 12 }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 16 }}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 9, marginBottom: 3, flexWrap: 'wrap' }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 3 }}>
             <NavButton onPress={onPrev} label="Previous month">
               <View style={{ transform: [{ rotate: '180deg' }] }}><IconChevron size={15} color={C.ink} strokeWidth={2} /></View>
             </NavButton>
-            <Txt size={18} w={700}>{MONTH_NAMES[month - 1]} <Txt size={18} w={500} tone="faint">{year}</Txt></Txt>
+            <Txt size={18} w={700} fit center style={{ flex: 1 }}>{MONTH_NAMES[month - 1]} <Txt size={18} w={500} tone="faint">{year}</Txt></Txt>
             <NavButton onPress={onNext} label="Next month"><IconChevron size={15} color={C.ink} strokeWidth={2} /></NavButton>
-            {!isThisMonth && <NavButton onPress={onToday} label="Today" wide><Txt size={12} w={600}>Today</Txt></NavButton>}
           </View>
+          {!isThisMonth && <View style={{ alignSelf: 'flex-start', marginBottom: 4 }}><NavButton onPress={onToday} label="Today" wide><Txt size={12} w={600}>Today</Txt></NavButton></View>}
           <Txt size={12.5} tone="muted">
             {working > 0
               ? `${working} working day${working === 1 ? '' : 's'} · ${summary.present} present, ${summary.absent} absent`
@@ -88,8 +88,8 @@ function StatTile({ label, value, bg, fg, bar, width }: { label: string; value: 
     <View style={{ width, backgroundColor: empty ? C.sunken : bg, borderRadius: R.md, paddingVertical: 10, paddingHorizontal: 13,
                    borderWidth: 1, borderColor: empty ? C.line : bg, overflow: 'hidden' }}>
       <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 3, backgroundColor: empty ? C.line : bar }} />
-      <Txt size={21} w={700} color={empty ? C.faint : fg} style={{ lineHeight: 23, marginLeft: 4 }} numberOfLines={1}>{value}</Txt>
-      <Txt size={10} w={600} color={empty ? C.faint : fg} numberOfLines={1}
+      <Txt size={21} w={700} color={empty ? C.faint : fg} style={{ lineHeight: 23, marginLeft: 4 }} fit>{value}</Txt>
+      <Txt size={10} w={600} color={empty ? C.faint : fg} fit
         style={{ textTransform: 'uppercase', letterSpacing: 0.5, marginLeft: 4, marginTop: 3, opacity: empty ? 1 : 0.8 }}>{label}</Txt>
     </View>
   )

@@ -42,7 +42,7 @@ export function FeedCard({ row }: { row: FeedRow }) {
       {award && (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingVertical: 7, paddingHorizontal: 16, backgroundColor: C.brandTint, borderBottomWidth: 1, borderBottomColor: C.brandEdge }}>
           <Icon name="trophy" size={14} stroke={2} color={C.brand} />
-          <Txt size={F.micro} w={700} tone="brand" numberOfLines={1} style={{ flex: 1 }}>{row.award_name ?? 'Award'}</Txt>
+          <Txt size={F.micro} w={700} tone="brand" style={{ flex: 1 }}>{row.award_name ?? 'Award'}</Txt>
         </View>
       )}
       <View style={{ padding: 12, flexDirection: 'row', gap: 12 }}>

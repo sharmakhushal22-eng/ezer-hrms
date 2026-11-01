@@ -19,7 +19,6 @@ import { Screen } from '@/ui/Screen'
 import { sectionOf } from '@/core/nav'
 import { createLetterRequest, LETTER_TYPES, useLetterRequests } from './api'
 import { fmt } from './format'
-import { ProfileSubTabs } from './bits'
 import { StatusPill } from './StatusPill'
 
 export default function LetterRequestsScreen() {
@@ -50,7 +49,7 @@ export default function LetterRequestsScreen() {
   }
 
   return (
-    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} sub={<ProfileSubTabs current="documents" />} onRefresh={() => q.refetch()}>
+    <Screen title={s?.label || 'Profile'} subtitle={s?.desc} onRefresh={() => q.refetch()}>
       <Card>
         <Txt size={F.micro} w={700} tone="brand" upper style={{ marginBottom: S.md }}>Request a Letter (HR generates on approval)</Txt>
         <PickerField label="Letter type" value={type} onPress={() => setPick(true)} />

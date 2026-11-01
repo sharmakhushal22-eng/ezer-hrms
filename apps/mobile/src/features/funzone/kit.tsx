@@ -324,7 +324,7 @@ export function VsBar({ left, right, turn, mid = 'vs' }: {
   const side = (s: { who: string; pts: number }, on: boolean, flip: boolean) => (
     <View style={{ flex: 1, flexDirection: flip ? 'row-reverse' : 'row', alignItems: 'center', gap: 8, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 11, backgroundColor: on ? fz.stage2 : 'transparent', borderWidth: 1.5, borderColor: on ? ac.a : 'transparent' }}>
       <Txt size={26} w={800} color={fz.onStage} style={{ fontFamily: DISPLAY, lineHeight: 30 }}>{s.pts}</Txt>
-      <Txt size={12} w={600} color={fz.onStage2} numberOfLines={1} style={{ flexShrink: 1, textAlign: flip ? 'right' : 'left' }}>{s.who}</Txt>
+      <Txt size={12} w={600} color={fz.onStage2} style={{ flexShrink: 1, textAlign: flip ? 'right' : 'left' }}>{s.who}</Txt>
     </View>
   )
   return (

@@ -38,7 +38,7 @@ function PendingRow({ it, prefs }: { it: Pending; prefs: Prefs }) {
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={13.5} w={600}>{it.title}</Txt>
-        {!!it.description && <Txt size={12} tone="muted" numberOfLines={1} style={{ marginTop: 1 }}>{it.description}</Txt>}
+        {!!it.description && <Txt size={12} tone="muted" style={{ marginTop: 1 }}>{it.description}</Txt>}
         {/* The website hides this button at ≤520px, leaving phone rows with no action.
             The app keeps it, under the text, so every row can be acted on. */}
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 8 }}>
@@ -92,7 +92,7 @@ export function QuickActions() {
               <View style={{ width: 42, height: 42, borderRadius: 13, backgroundColor: bg, alignItems: 'center', justifyContent: 'center' }}>
                 <a.I size={20} color={fg} />
               </View>
-              <Txt size={12} w={600} center numberOfLines={1}>{a.label}</Txt>
+              <Txt size={12} w={600} center>{a.label}</Txt>
             </Pressable>
           )
         })}
@@ -136,7 +136,7 @@ export function Journey({ data, prefs }: { data: TodayPayload; prefs: Prefs }) {
           <View style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${fill}%`, borderRadius: 99, backgroundColor: C.brand }} />
           <View onLayout={ev => setYouW(ev.nativeEvent.layout.width)}
             style={{ position: 'absolute', top: -30, left: youLeft, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 99, backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandEdge, opacity: trackW && youW ? 1 : 0 }}>
-            <Txt size={11} w={700} tone="brand" numberOfLines={1}>{you}</Txt>
+            <Txt size={11} w={700} tone="brand">{you}</Txt>
           </View>
           {STOPS.map((s, i) => {
             const done = yrs >= s, isGold = s === 5

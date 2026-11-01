@@ -88,7 +88,7 @@ function ParamCard({ i, p, v, remark, onRate, onRemark, flagged }: { i: number; 
           )
         })}
       </View>
-      <TextInput value={remark} onChangeText={onRemark} placeholder="Remarks for this parameter (mandatory)" placeholderTextColor={C.faint}
+      <TextInput value={remark} onChangeText={onRemark} placeholder="Remarks (mandatory)" placeholderTextColor={C.faint}
         style={[{ marginTop: 9, minHeight: 44, borderWidth: 1, borderColor: flagged ? C.critical : C.line, borderRadius: 8, paddingHorizontal: 10, fontFamily: FONT[400], fontSize: 12.5, color: C.ink, backgroundColor: C.surface }, webNoOutline]} />
     </View>
   )
@@ -142,7 +142,7 @@ export function FeedbackForm({ candidate, round, questions, submitting, onSubmit
         </View>
         <View style={{ flex: 1, minWidth: 0 }}>
           <Txt size={14} w={800}>{candidate.name}</Txt>
-          <Txt size={F.tiny} tone="muted" numberOfLines={1}>{[round, candidate.sub].filter(Boolean).join(' · ')}</Txt>
+          <Txt size={F.tiny} tone="muted">{[round, candidate.sub].filter(Boolean).join(' · ')}</Txt>
         </View>
       </Box>
 
@@ -163,7 +163,7 @@ export function FeedbackForm({ candidate, round, questions, submitting, onSubmit
           const v = params[p.k]
           return (
             <View key={p.k} style={{ flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 5, borderBottomWidth: 1, borderBottomColor: C.line }}>
-              <Txt size={F.tiny} tone="muted" numberOfLines={1} style={{ flex: 1, paddingRight: 8 }}>{p.n}</Txt>
+              <Txt size={F.tiny} tone="muted" style={{ flex: 1, paddingRight: 8 }}>{p.n}</Txt>
               <Txt size={F.tiny} w={800} color={v ? fg(C, toneKey(v)) : C.faint}>{v || '-'}</Txt>
             </View>
           )

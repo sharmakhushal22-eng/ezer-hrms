@@ -102,7 +102,7 @@ export function FileField({ label, file, onChange, attach = 'Attach a copy' }: {
       <Txt size={F.micro} w={700} tone="muted" upper style={{ marginBottom: 6 }}>{label}<Txt size={F.micro} tone="faint"> · optional</Txt></Txt>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
         <Button title={file ? 'Choose another' : attach} variant="outline" size="sm" onPress={() => setChoose(c => !c)} />
-        <Txt size={F.tiny} tone="muted" style={{ flex: 1, minWidth: 120 }} numberOfLines={1}>{file ? file.name : 'PDF, JPG or PNG, up to 5 MB'}</Txt>
+        <Txt size={F.tiny} tone="muted" style={{ flex: 1, minWidth: 120 }}>{file ? file.name : 'PDF, JPG or PNG, up to 5 MB'}</Txt>
         {file && <Pressable onPress={() => onChange(null, null)} hitSlop={8}><Txt size={F.small} w={600} tone="brand">Remove</Txt></Pressable>}
       </View>
       {choose && (

@@ -11,7 +11,7 @@ import { useEmployeeId } from '@/core/session'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Card, Txt } from '@/ui/primitives'
-import { Screen } from '@/ui/Screen'
+import { FrameHead, Screen } from '@/ui/Screen'
 import { errMsg, NoteBox, SectionTitle } from '@/features/hris/ui'
 import { shareCsv } from './csv'
 
@@ -91,12 +91,12 @@ export default function ReportsScreen() {
     : null
 
   return (
-    <Screen title="Reports" subtitle="Attrition, regime comparison, declaration status, TDS register, span of control" scroll={false} padded={false}>
+    <Screen title="Reports" subtitle="Attrition, regime comparison, declaration status, TDS register, span of control" scroll={false} padded={false} ownFrame>
       <FlatList
         data={open ? open.rows.slice(0, 500) : []}
         keyExtractor={(_, i) => `${open?.key}:${i}`}
         renderItem={({ item }) => <RowCard columns={open!.columns} row={item} />}
-        ListHeaderComponent={header}
+        ListHeaderComponent={<><FrameHead />{header}</>}
         ListFooterComponent={footer}
         contentContainerStyle={{ padding: S.lg, paddingBottom: S.xxl }}
         initialNumToRender={10}

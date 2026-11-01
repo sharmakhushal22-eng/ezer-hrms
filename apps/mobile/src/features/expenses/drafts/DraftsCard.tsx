@@ -39,7 +39,7 @@ function DraftRow({ d, now, picking, picked, busy, onToggle, onDiscard, onResume
       <Ico name={d.kind === 'trip' ? 'route' : d.kind === 'expense' ? 'receipt' : 'claims'} size={34} />
       <View style={{ flex: 1, minWidth: 0 }}>
         {d.title
-          ? <Txt size={F.small} w={600} numberOfLines={2}>{d.title}</Txt>
+          ? <Txt size={F.small} w={600}>{d.title}</Txt>
           : <Txt size={F.small} tone="muted" style={{ fontStyle: 'italic' }}>Not named yet</Txt>}
         <Txt size={F.tiny} tone="muted">{`${draftKindLabel(d)} · ${savedAgo(new Date(d.updated_at).getTime(), Math.max(now, new Date(d.updated_at).getTime()))}`}</Txt>
       </View>

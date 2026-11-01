@@ -40,7 +40,7 @@ function AmountPick({ title, lim, val, onPick, disabled }: { title: string; lim:
     <>
       <Pressable onPress={disabled ? undefined : () => setOpen(true)} accessibilityRole="button" accessibilityLabel={`${title}: ${R(val)}`}
         style={({ pressed }) => ({ minHeight: 40, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingHorizontal: 6, borderRadius: 10, borderWidth: 1, borderColor: C.line, backgroundColor: disabled ? C.sunken : pressed ? C.brandTint : C.surface })}>
-        <Txt size={12} w={600} numberOfLines={1} color={disabled ? C.muted : C.ink}>{R(val)}</Txt>
+        <Txt size={12} w={600} fit color={disabled ? C.muted : C.ink}>{R(val)}</Txt>
         {!disabled && <IconChevronDown size={12} color={C.faint} />}
       </Pressable>
       <SelectSheet visible={open} onClose={() => setOpen(false)} title={title}

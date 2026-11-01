@@ -63,8 +63,9 @@ export const BLANK: LeaveForm = { leave_type_id: '', from_date: '', to_date: '',
 export const PEEK = 3
 
 // ── Arithmetic (unchanged from the website) ──────────────────────────────────
+// Rounded: balances accrue in fractions, and 0.1 + 0.2 arithmetic left 1.6999999999999993.
 export const avail = (b: Balance) =>
-  (Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)
+  Math.round(((Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)) * 100) / 100
 export type Bar = 'ok' | 'warn' | 'bad'
 export const barClass = (pct: number): Bar => pct > 60 ? 'ok' : pct > 30 ? 'warn' : 'bad'
 export const plural = (n: number) => (n === 1 ? '' : 's')

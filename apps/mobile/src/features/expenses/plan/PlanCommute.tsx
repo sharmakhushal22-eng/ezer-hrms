@@ -45,7 +45,7 @@ function JourneyCard({ snap, draft, i, onPress }: { snap: Snapshot; draft: Plann
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <Txt size={F.micro} tone="muted">{`Journey ${i + 1}`}</Txt>
-        <Txt size={F.small} w={700} numberOfLines={2}>{`${a?.s ?? '—'} → ${b?.s ?? '—'}`}</Txt>
+        <Txt size={F.small} w={700}>{`${a?.s ?? '—'} → ${b?.s ?? '—'}`}</Txt>
         <Txt size={F.micro} color={md ? C.muted : C.faint}>
           {md ? md.name : 'Choose how you travel'}{md && s.bookedBy === 'desk' ? ' · Travel Desk books' : ''}
         </Txt>

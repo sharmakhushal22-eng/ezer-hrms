@@ -102,7 +102,7 @@ function RejectedRow({ r, onReopened }: { r: ClaimSummaryRow; onReopened: (messa
       {reopening ? (
         <View style={{ marginTop: S.sm }}>
           <Note style={{ marginBottom: S.sm }}>The claim goes back into its approval chain from the beginning. The employee is told it was reopened, and your reason is kept on it.</Note>
-          <Input label="Why it should not have been refused" value={why} onChangeText={setWhy} placeholder="Rejected by mistake; the client is on the visitor log" error={error || undefined} />
+          <Input label="Why it should not have been refused" value={why} onChangeText={setWhy} placeholder="Rejected by mistake" error={error || undefined} />
           <View style={{ flexDirection: 'row', gap: S.sm }}>
             <Button variant="outline" title="Never mind" onPress={() => { setReopening(false); setWhy('') }} style={{ flex: 1 }} />
             <Button title={busy ? 'Reopening…' : 'Reopen it'} disabled={!why.trim() || busy} onPress={() => void reopen()} style={{ flex: 1 }} />
