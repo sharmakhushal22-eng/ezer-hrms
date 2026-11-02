@@ -81,7 +81,7 @@ const STAGES: [number, string][] = [
   [88, 'Finalising validation…'],
 ]
 
-export default function AttendanceUpload({ companyId, fy }: { companyId: string; fy: string }) {
+export default function AttendanceUpload({ companyId, fy, month }: { companyId: string; fy: string; month?: number }) {
   const [allRuns, setAllRuns] = useState<PayrollRun[]>([])
   const [upMonth, setUpMonth] = useState('')            // month number as string — group-wide
   const [rows, setRows] = useState<ParsedRow[]>([])
@@ -113,6 +113,9 @@ export default function AttendanceUpload({ companyId, fy }: { companyId: string;
       }
     }).catch(() => {})
   }, [fy])
+
+  // The header's Month (Payroll → Month) leads; a month not created here yet leaves the pick alone.
+  useEffect(() => { if (month && allRuns.some(r => r.month === month)) setUpMonth(String(month)) }, [month, allRuns])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => () => { if (timerRef.current) clearInterval(timerRef.current) }, [])
 
   // One entry per distinct month across every company — the upload is group-wide.

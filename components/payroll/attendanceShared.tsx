@@ -6,7 +6,7 @@ import { useState, useEffect } from 'react'
 import * as XLSX from 'xlsx'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { scopedCompanies } from '@/lib/rms/resolve'
+import { scopedCompanies, canPickGroup } from '@/lib/rms/resolve'
 import { loadRuns, loadCompanies, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -188,20 +188,22 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
   const [dlDept, setDlDept] = useState('')
   const [dlEmpCodes, setDlEmpCodes] = useState<string[]>([])
   const [companies, setCompanies] = useState<Opt[]>([])
+  // "Group Companies" for whoever may see every company (lib/rms/resolve canPickGroup).
+  const [groupOk, setGroupOk] = useState(false)
   const [allRuns, setAllRuns] = useState<PayrollRun[]>([])
   const [locOpts, setLocOpts] = useState<Opt[]>([])
   const [deptOpts, setDeptOpts] = useState<Opt[]>([])
   const [empOpts, setEmpOpts] = useState<Opt[]>([])
 
   useEffect(() => {
-    loadCompanies().then(cs => setCompanies(scopedCompanies(grant, cs as any[]).map((c: any) => ({ value: c.id, label: c.company_name })))).catch(() => {})
+    loadCompanies().then(cs => { setCompanies(scopedCompanies(grant, cs as any[]).map((c: any) => ({ value: c.id, label: c.company_name }))); setGroupOk(canPickGroup(grant, cs as any[])) }).catch(() => {})
     loadRuns('', fy).then(setAllRuns).catch(() => {})
   }, [fy, grant]) // eslint-disable-line react-hooks/exhaustive-deps
   // Non-cross-company users are forced onto their own company; GROUP (all companies) is
   // never selected for them.
   useEffect(() => {
-    setDlCompany(!grant.crossCompany && grant.companyId ? grant.companyId : (companyId || GROUP))
-  }, [companyId, grant]) // eslint-disable-line react-hooks/exhaustive-deps
+    setDlCompany(!groupOk && grant.companyId ? grant.companyId : (companyId || GROUP))
+  }, [companyId, grant, groupOk]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!dlCompany) { setLocOpts([]); setDeptOpts([]); setEmpOpts([]); setDlRunId(''); return }
@@ -303,7 +305,7 @@ export function DownloadCard({ companyId, fy, heading, note, filePrefix, sheetNa
         <span style={{ fontSize: 11, color: C.muted }}>{note}</span>
       </div>
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
-        <div><label style={lbl}>Company</label><SearchSelect value={dlCompany} options={[...(grant.crossCompany ? [{ value: GROUP, label: 'Group Companies (all)' }] : []), ...companies]} placeholder="Select company" onChange={setDlCompany} /></div>
+        <div><label style={lbl}>Company</label><SearchSelect value={dlCompany} options={[...(groupOk ? [{ value: GROUP, label: 'Group Companies (all)' }] : []), ...companies]} placeholder="Select company" onChange={setDlCompany} /></div>
         <div><label style={lbl}>Month</label><SearchSelect value={dlRunId} options={dlRunOptions} placeholder={dlRunOptions.length ? 'Select month' : 'No month created'} onChange={setDlRunId} /></div>
         <div><label style={lbl}>Location</label><SearchSelect value={dlLoc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setDlLoc} /></div>
         <div><label style={lbl}>Department</label><SearchSelect value={dlDept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDlDept} /></div>

@@ -236,7 +236,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
           <div>
             <label style={lbl}>Company</label>
             <select style={{ ...inp, minWidth: 170 }} value={filter.company} onChange={e => onChange({ company: e.target.value })}>
-              <option value="">All companies</option>
+              <option value="">Group Companies (all)</option>
               {companies.map(c => <option key={c} value={c}>{c}</option>)}
             </select>
           </div>
@@ -293,7 +293,7 @@ function FilterBar({ rows, filter, onChange, onClear, matched, isGroup }: {
 }
 
 // ── Screen ─────────────────────────────────────────────────────────────────
-export default function RunCycle({ companyId, headerFy }: { companyId: string; headerFy: string }) {
+export default function RunCycle({ companyId, headerFy, month }: { companyId: string; headerFy: string; month?: number }) {
   const fy = headerFy
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [monthVal, setMonthVal] = useState('')
@@ -307,6 +307,9 @@ export default function RunCycle({ companyId, headerFy }: { companyId: string; h
   const [result, setResult] = useState<{ processed: number; skipped: number; net: number } | null>(null)
 
   const isGroup = !companyId
+
+  // The header's Month (Payroll → Month) leads; a month not created here yet leaves the pick alone.
+  useEffect(() => { if (month && runs.some(r => r.month === month)) setMonthVal(String(month)) }, [month, runs])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // Months that exist for this FY. One entry per month even in group mode, where a
   // single month legitimately spans one run per company.

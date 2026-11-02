@@ -86,7 +86,7 @@ function ConfirmDelete({ entry, company, busy, onCancel, onConfirm }: {
   )
 }
 
-export default function ManualVoucher({ companyId, fy }: { companyId: string; fy: string }) {
+export default function ManualVoucher({ companyId, fy, month }: { companyId: string; fy: string; month?: number }) {
   const [tab, setTab] = useState<Tab>('individual')
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [monthVal, setMonthVal] = useState('')          // month number — one entry per month, not per company
@@ -118,6 +118,9 @@ export default function ManualVoucher({ companyId, fy }: { companyId: string; fy
   const [bulkResults, setBulkResults] = useState<{ code: string; head: string; ok: boolean; detail: string }[] | null>(null)
 
   useEffect(() => { loadVoucherHeads().then(setHeads).catch(() => {}) }, [])
+
+  // The header's Month (Payroll → Month) leads; a month not created here yet leaves the pick alone.
+  useEffect(() => { if (month && runs.some(r => r.month === month)) setMonthVal(String(month)) }, [month, runs])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     loadRuns(companyId, fy).then(list => {
       setRuns(list)

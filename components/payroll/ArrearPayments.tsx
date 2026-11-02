@@ -59,7 +59,7 @@ function Stat({ label, value, color }: { label: string; value: any; color: strin
   )
 }
 
-export default function ArrearPayments({ companyId, fy }: { companyId: string; fy: string }) {
+export default function ArrearPayments({ companyId, fy, month }: { companyId: string; fy: string; month?: number }) {
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [monthVal, setMonthVal] = useState('')
   const [tab, setTab] = useState<'arrear' | 'payments'>('arrear')
@@ -76,6 +76,9 @@ export default function ArrearPayments({ companyId, fy }: { companyId: string; f
       setMonthVal(p => (list.some(r => String(r.month) === p) ? p : String(list[0]?.month ?? '')))
     }).catch(e => setErr(e.message))
   }, [companyId, fy])
+
+  // The header's Month (Payroll → Month) leads; a month not created here yet leaves the pick alone.
+  useEffect(() => { if (month && runs.some(r => r.month === month)) setMonthVal(String(month)) }, [month, runs])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // In Group mode a month spans several runs — one per company.
   const monthRuns = runs.filter(r => String(r.month) === monthVal)
