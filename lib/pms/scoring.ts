@@ -109,6 +109,18 @@ export interface Band {
   scoreTo?: number
   /** pms_rating_scale.rating_code — 'O' / 'EE' / 'ME' / 'NI' / 'U' / 'NR'. */
   code?: string
+  /**
+   * May a rater scoring in this band raise a PIP, and may they propose
+   * recognition? Both are per-band configuration, not thresholds in code:
+   * allows_pip_request has been in pms_rating_scale since 066, and 209 adds
+   * its mirror at the other end.
+   *
+   * Default false for the reason every other gate in this module defaults
+   * shut — a band nobody has configured should not start offering to put
+   * somebody on a performance plan.
+   */
+  allowsPip?: boolean
+  allowsRecognition?: boolean
 }
 
 /**
@@ -145,6 +157,8 @@ export interface ScaleRow {
   score_to?: number | string | null
   sort_order?: number | string | null
   is_active?: boolean | null
+  allows_pip_request?: boolean | null
+  allows_recognition?: boolean | null
 }
 
 /**
@@ -166,6 +180,10 @@ export function bandsFromScale(rows: ScaleRow[] | null | undefined): Band[] {
       code: r.rating_code ?? undefined,
       improvementMandatory: r.improvement_feedback_mandatory === true,
       minCommentChars: Number(r.min_comment_chars ?? 0) || 0,
+      // === true, not truthy: a column absent from the SELECT arrives
+      // undefined, and the honest reading of "not asked for" is false.
+      allowsPip: r.allows_pip_request === true,
+      allowsRecognition: r.allows_recognition === true,
       scoreFrom: n(r.score_from),
       scoreTo: n(r.score_to),
     }))

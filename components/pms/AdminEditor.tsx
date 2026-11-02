@@ -483,6 +483,40 @@ function ScalePanel({ scale, companyId, reload }: {
             <Field label="Minimum comment length"><input type="number" value={n(draft.min_comment_chars)} onChange={e => set('min_comment_chars', Number(e.target.value))} /></Field>
             <Field label="Sort order"><input type="number" value={n(draft.sort_order)} onChange={e => set('sort_order', Number(e.target.value))} /></Field>
           </div>
+          {/* THE THREE BAND BEHAVIOURS, none of which had a control.
+              All three are columns that have existed for a while and were
+              edited nowhere — and two of them are now ENFORCED, which makes
+              their absence a trap rather than a gap: the rating form demands
+              a comment of min_comment_chars and refuses to send without
+              improvement wording at a mandatory band, and the PIP checkbox
+              appears or does not according to a flag an admin could not see.
+              A rule you cannot find is a rule that reads as a bug. */}
+          <div className="grid g3" style={{ marginTop: 4 }}>
+            <Field label="Improvement feedback mandatory"
+                   hint="At this band the rater's remark must say what would change, and the result cannot publish without improvement feedback.">
+              <select value={draft.improvement_feedback_mandatory ? 'yes' : 'no'}
+                      onChange={e => set('improvement_feedback_mandatory', e.target.value === 'yes')}>
+                <option value="no">Not required</option>
+                <option value="yes">Required</option>
+              </select>
+            </Field>
+            <Field label="May raise a PIP"
+                   hint="Scoring in this band offers the rater an optional checkbox to request a performance improvement plan. HR still decides.">
+              <select value={draft.allows_pip_request ? 'yes' : 'no'}
+                      onChange={e => set('allows_pip_request', e.target.value === 'yes')}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </Field>
+            <Field label="May propose recognition"
+                   hint="Scoring in this band offers the rater a box to recommend a bonus, promotion or other recognition. HR still decides.">
+              <select value={draft.allows_recognition ? 'yes' : 'no'}
+                      onChange={e => set('allows_recognition', e.target.value === 'yes')}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </Field>
+          </div>
           <SaveRow busy={busy} error={error} saved={saved}
                    label={draft.id ? 'Save band' : 'Add band'}
                    disabled={!s(draft.rating_code).trim() || n(draft.score_to) < n(draft.score_from) || (!draft.id && !companyId)}

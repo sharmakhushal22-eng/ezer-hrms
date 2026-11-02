@@ -17,6 +17,7 @@
 // matters to them is the next job rather than the current one.
 
 import type { Role } from './hierarchy.ts'
+import { bandForScore, DEFAULT_BANDS, type Band } from './scoring.ts'
 
 export const TRAINING_CATEGORIES = [
   'TECHNICAL', 'BEHAVIOURAL', 'LEADERSHIP', 'DOMAIN', 'COMPLIANCE', 'OTHER',
@@ -130,4 +131,135 @@ export function trainingSummary(rows: TrainingRecommendation[]): {
     total: rows.length,
     pending: by('PENDING'), accepted: by('ACCEPTED'), declined: by('DECLINED'),
   }
+}
+
+// ── what a score invites: a PIP at one end, recognition at the other ─────
+
+export const RECOGNITION_KINDS = [
+  'BONUS', 'PROMOTION', 'INCREMENT', 'AWARD', 'OTHER',
+] as const
+export type RecognitionKind = typeof RECOGNITION_KINDS[number]
+
+export const RECOGNITION_LABEL: Record<RecognitionKind, string> = {
+  BONUS:     'Salary bonus',
+  PROMOTION: 'Promotion recommendation',
+  INCREMENT: 'Out-of-cycle increment',
+  AWARD:     'Award or special mention',
+  OTHER:     'Other recognition',
+}
+
+/**
+ * WHAT THIS SCORE INVITES THE RATER TO PROPOSE.
+ *
+ * Requested: a PIP checkbox when they rate somebody very low, a recognition
+ * box when they rate somebody high, both optional, both reaching HR.
+ *
+ * DECIDED BY THE BAND, NOT A NUMBER IN CODE. pms_rating_scale has carried
+ * allows_pip_request since 066 — seeded true at 2 and 1 on this company's
+ * scale — and 209 adds allows_recognition as its mirror, seeded true for
+ * the top two. The request said "you say rating > 2"; a hardcoded 2 would
+ * mean something different on a three-point or ten-point scale, which is a
+ * setting away, and the same trap the colour ramp avoided by normalising.
+ *
+ * THE BAND COMES FROM THE WEIGHTED SCORE through pms_rating_scale's own
+ * windows, so one prompt appears per appraisal rather than one per KRA.
+ * That was the chosen reading: "the rater's own overall weighted score".
+ *
+ * BOTH CAN BE FALSE and neither can sensibly be true at once on a scale
+ * whose flags are set the obvious way — but nothing here enforces that,
+ * because an admin who wants both on one band has said something coherent
+ * (a band that could go either way), and refusing it would be this code
+ * overruling configuration it does not own.
+ */
+export interface ScoreInvites {
+  band: Band | null
+  pip: boolean
+  recognition: boolean
+}
+
+
+export function scoreInvites(
+  score: number | null, bands = DEFAULT_BANDS,
+): ScoreInvites {
+  const band = bandForScore(score, bands)
+  if (!band) return { band: null, pip: false, recognition: false }
+  return {
+    band,
+    pip: band.allowsPip === true,
+    recognition: band.allowsRecognition === true,
+  }
+}
+
+export interface PipIntent {
+  wanted: boolean
+  reason: string
+  proposedStart: string
+  proposedEnd: string
+}
+
+export interface RecognitionIntent {
+  wanted: boolean
+  kind: RecognitionKind
+  note: string
+}
+
+/**
+ * 90 days from today, as an ISO date — the default PIP window. Long enough
+ * to show a change, short enough that nobody is left on one indefinitely.
+ *
+ * BUILT FROM LOCAL PARTS, NEVER toISOString(). The first version parsed
+ * `today + 'T00:00:00'` — local midnight — and then formatted with
+ * toISOString(), which converts to UTC. Anywhere east of Greenwich that
+ * lands on the previous day: on this machine (+05:30) asking for
+ * 2026-11-03 returned 2026-11-02, so every PIP would have started a day
+ * before the manager chose. Caught by the test, not by reading it.
+ *
+ * Date arithmetic itself is safe — setDate rolls months and years — it is
+ * only the formatting that must stay local.
+ */
+export function defaultPipWindow(today: string): { start: string; end: string } {
+  const iso = (x: Date) =>
+    `${x.getFullYear()}-${String(x.getMonth() + 1).padStart(2, '0')}`
+    + `-${String(x.getDate()).padStart(2, '0')}`
+  const d = new Date(today + 'T00:00:00')
+  const end = new Date(d)
+  end.setDate(end.getDate() + 90)
+  return { start: iso(d), end: iso(end) }
+}
+
+export const MIN_PIP_REASON = 40
+
+/**
+ * A PIP request that HR can act on.
+ *
+ * pms_pip requires request_reason, proposed_start and proposed_end NOT NULL,
+ * so a bare checkbox cannot create one — and should not. A plan that starts
+ * with "rated low" is one nobody can run, review or defend, which is why the
+ * reason has a floor at all.
+ */
+export function checkPip(p: PipIntent): string | null {
+  if (!p.wanted) return null
+  const reason = (p.reason ?? '').trim()
+  if (reason.length < MIN_PIP_REASON) {
+    return `Say why the plan is needed — at least ${MIN_PIP_REASON} characters, `
+         + `and there ${reason.length === 1 ? 'is' : 'are'} ${reason.length}. `
+         + `HR decides on this, and "rated low" is not something they can act on.`
+  }
+  if (!p.proposedStart || !p.proposedEnd) return 'Give the plan a start and an end date.'
+  if (p.proposedEnd <= p.proposedStart) return 'The plan has to end after it starts.'
+  return null
+}
+
+/** Recognition needs a line saying what for; the kind alone is not a case. */
+export const MIN_RECOGNITION_NOTE = 20
+
+export function checkRecognition(r: RecognitionIntent): string | null {
+  if (!r.wanted) return null
+  const note = (r.note ?? '').trim()
+  if (note.length < MIN_RECOGNITION_NOTE) {
+    return `Say what the recognition is for — at least ${MIN_RECOGNITION_NOTE} `
+         + `characters, and there ${note.length === 1 ? 'is' : 'are'} ${note.length}. `
+         + `HR acts on this, and a bonus with no case attached is one they cannot approve.`
+  }
+  return null
 }

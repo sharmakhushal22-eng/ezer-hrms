@@ -37,7 +37,10 @@ import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
          rungFor, heldBy, rungs, nextRung, STAGE_SHORT,
          type Stage } from '@/lib/pms/chain'
 import { checkTrainingBlock, TRAINING_CATEGORIES, TRAINING_CATEGORY_LABEL,
-         TRAINING_EXAMPLE, type TrainingCategory } from '@/lib/pms/training'
+         TRAINING_EXAMPLE, scoreInvites, checkPip, checkRecognition,
+         RECOGNITION_KINDS, RECOGNITION_LABEL,
+         type TrainingCategory, type ScoreInvites, type PipIntent,
+         type RecognitionIntent, type RecognitionKind } from '@/lib/pms/training'
 import { humanDate } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
@@ -1041,6 +1044,135 @@ function TrainingBlock({ rows, onChange }: {
   )
 }
 
+/**
+ * WHAT THE SCORE INVITES: a PIP at one end of the scale, recognition at the
+ * other. Both optional, both reaching HR, neither awarded here.
+ *
+ * Requested: when a rater scores somebody very low an optional checkbox
+ * asking whether to issue a PIP; when they score somebody high, a box for
+ * a bonus, promotion or other recognition.
+ *
+ * WHICH END IS WHICH IS CONFIGURATION, not a number here.
+ * pms_rating_scale.allows_pip_request has decided the low end since 066 and
+ * 209 adds allows_recognition for the high one. A hardcoded "below 2" would
+ * mean something different on a three- or ten-point scale, which is a
+ * setting away.
+ *
+ * ONE PROMPT PER APPRAISAL, from the rater's own weighted score — not one
+ * per KRA. A single bad KRA inside a good year is not a performance plan.
+ */
+function ScoreInvitesBlock({ invites, pip, onPip, rec, onRec, today }: {
+  invites: ScoreInvites
+  pip: PipIntent
+  onPip: (p: Partial<PipIntent>) => void
+  rec: RecognitionIntent
+  onRec: (r: Partial<RecognitionIntent>) => void
+  today: string
+}) {
+  if (!invites.band || (!invites.pip && !invites.recognition)) return null
+  const pipFault = checkPip(pip)
+  const recFault = checkRecognition(rec)
+
+  return (
+    <>
+      {invites.pip && (
+        <div className={`step1on1${pip.wanted ? ' on' : ''}`}
+             style={pip.wanted ? { background: 'var(--ez-warning-tint)',
+                                   borderColor: 'var(--ez-warning)' } : undefined}>
+          <label className="checkline">
+            <input type="checkbox" checked={pip.wanted}
+                   onChange={e => onPip({ wanted: e.target.checked })} />
+            <div>
+              <b>Request a performance improvement plan for them</b>
+              <div className="k" style={{ marginTop: 3 }}>
+                Optional. Your score of <b>{invites.band.value}</b>{' '}
+                ({invites.band.label.toLowerCase()}) is a band where a plan
+                can be raised. HR reviews the request and decides whether one
+                starts — ticking this does not begin a PIP.
+              </div>
+            </div>
+          </label>
+
+          {pip.wanted && (
+            <div style={{ marginTop: 10 }}>
+              <div className="fld" style={{ marginBottom: 8 }}>
+                <label htmlFor="pip-why">Why a plan is needed</label>
+                <textarea id="pip-why" value={pip.reason}
+                          onChange={e => onPip({ reason: e.target.value })}
+                          placeholder="What is going wrong, specifically, and what would have to change. HR reads this and so, eventually, does the employee." />
+              </div>
+              <div className="grid g2" style={{ gap: 8 }}>
+                <div className="fld" style={{ margin: 0 }}>
+                  <label htmlFor="pip-from">Proposed start</label>
+                  <input id="pip-from" type="date" value={pip.proposedStart}
+                         min={today}
+                         onChange={e => onPip({ proposedStart: e.target.value })} />
+                </div>
+                <div className="fld" style={{ margin: 0 }}>
+                  <label htmlFor="pip-to">Proposed end</label>
+                  <input id="pip-to" type="date" value={pip.proposedEnd}
+                         min={pip.proposedStart || today}
+                         onChange={e => onPip({ proposedEnd: e.target.value })} />
+                </div>
+              </div>
+              {pipFault && (
+                <div className="banner b-amber" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <span aria-hidden="true">!</span><div>{pipFault}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+
+      {invites.recognition && (
+        <div className={`step1on1${rec.wanted ? ' on' : ''}`} style={{ marginTop: 14 }}>
+          <label className="checkline">
+            <input type="checkbox" checked={rec.wanted}
+                   onChange={e => onRec({ wanted: e.target.checked })} />
+            <div>
+              <b>Recommend recognition for them</b>
+              <div className="k" style={{ marginTop: 3 }}>
+                Optional. Your score of <b>{invites.band.value}</b>{' '}
+                ({invites.band.label.toLowerCase()}) is a band where
+                recognition can be proposed. HR decides and awards it —
+                nothing here grants a bonus.
+              </div>
+            </div>
+          </label>
+
+          {rec.wanted && (
+            <div style={{ marginTop: 10 }}>
+              <div className="grid g2" style={{ gap: 8 }}>
+                <div className="fld" style={{ margin: 0 }}>
+                  <label htmlFor="rec-kind">What you are proposing</label>
+                  <select id="rec-kind" value={rec.kind}
+                          onChange={e => onRec({ kind: e.target.value as RecognitionKind })}>
+                    {RECOGNITION_KINDS.map(k => (
+                      <option key={k} value={k}>{RECOGNITION_LABEL[k]}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+              <div className="fld" style={{ marginTop: 8, marginBottom: 0 }}>
+                <label htmlFor="rec-why">What it is for</label>
+                <textarea id="rec-why" value={rec.note}
+                          onChange={e => onRec({ note: e.target.value })}
+                          placeholder="The case for it, in your words. HR approves this, and a bonus with no case attached is one they cannot sign off." />
+              </div>
+              {recFault && (
+                <div className="banner b-amber" style={{ marginTop: 10, marginBottom: 0 }}>
+                  <span aria-hidden="true">!</span><div>{recFault}</div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+      )}
+    </>
+  )
+}
+
 export interface KraLine {
   /**
    * The goal's own id. pms_reviews is UNIQUE on
@@ -1084,6 +1216,7 @@ export function KraDetail({ member, lines, loading, onClose,
                             finalises, finalRating, onFinalRating,
                             overallComment, onOverallComment,
                             training, onTraining,
+                            pip, onPip, recognition, onRecognition, today,
                             onApprove, saving }: {
   member: TeamMember
   lines: KraLine[] | null
@@ -1133,6 +1266,13 @@ export function KraDetail({ member, lines, loading, onClose,
    */
   training?: TrainingDraft[]
   onTraining?: (next: TrainingDraft[]) => void
+  /** The PIP request and the recognition proposal this score invites. Which
+   *  one is offered — if either — comes from the band, not from here. */
+  pip?: PipIntent
+  onPip?: (patch: Partial<PipIntent>) => void
+  recognition?: RecognitionIntent
+  onRecognition?: (patch: Partial<RecognitionIntent>) => void
+  today?: string
   saving?: boolean
 }) {
   const total = (lines ?? []).reduce((s, l) => s + (Number(l.weightage) || 0), 0)
@@ -1604,6 +1744,15 @@ export function KraDetail({ member, lines, loading, onClose,
             </div>
           )}
 
+          {onPip && onRecognition && pip && recognition && (
+            <div style={{ marginTop: 14 }}>
+              <ScoreInvitesBlock invites={scoreInvites(cmp.myScore, bands)}
+                                 pip={pip} onPip={onPip}
+                                 rec={recognition} onRec={onRecognition}
+                                 today={today ?? new Date().toISOString().slice(0, 10)} />
+            </div>
+          )}
+
           {onConfirm && (
             // A STEP, NOT A STRAY CHECKBOX. It is one of the four things
             // the approval gate checks, and it used to float unframed
@@ -1661,8 +1810,13 @@ export function KraDetail({ member, lines, loading, onClose,
             // The block is optional; a HALF-FILLED row is not. Details with
             // no training named reach HR as something they cannot act on.
             const trainingFaults = checkTrainingBlock(training ?? [])
+            // Both are optional; a TICKED one that is incomplete is not.
+            // pms_pip requires a reason and dates NOT NULL, and a bonus with
+            // no case attached is one HR cannot sign off.
+            const pipFault = pip ? checkPip(pip) : null
+            const recFault = recognition ? checkRecognition(recognition) : null
             const ready = allRated && ticked && frOk && reasoned && remark.ok
-                       && trainingFaults.length === 0
+                       && trainingFaults.length === 0 && !pipFault && !recFault
             return (
               <>
                 {!ready && (
@@ -1682,6 +1836,8 @@ export function KraDetail({ member, lines, loading, onClose,
                         )}
                         {!remark.ok && <li>{remark.fault}</li>}
                         {trainingFaults.map(f => <li key={f}>{f}</li>)}
+                        {pipFault && <li>{pipFault}</li>}
+                        {recFault && <li>{recFault}</li>}
                         {!ticked && <li>Confirm the one-to-one above.</li>}
                         {!frOk && <li>Give the final rating ({lo}&ndash;{hi}).
                           Yours is the last approval, so this is the number

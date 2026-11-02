@@ -97,6 +97,9 @@ const SCALE_COLS = [
   'policy_id', 'rating_value', 'rating_code', 'rating_label',
   'score_from', 'score_to', 'min_comment_chars',
   'improvement_feedback_mandatory', 'allows_pip_request',
+  // 209, the mirror of allows_pip_request. Inert until named here, same as
+  // every other column this route gates.
+  'allows_recognition',
   'colour_hex', 'sort_order', 'is_active',
 ] as const
 

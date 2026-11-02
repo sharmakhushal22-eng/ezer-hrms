@@ -55,7 +55,8 @@ import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFin
 import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
-import { filled } from '@/lib/pms/training'
+import { filled, defaultPipWindow, RECOGNITION_LABEL,
+         type PipIntent, type RecognitionIntent } from '@/lib/pms/training'
 import { reached, WORKFLOW } from '@/lib/pms/status'
 import { bandsFromScale, compareRatings,
          type Band, type Line, type ScaleRow, type RaterRole } from '@/lib/pms/scoring'
@@ -227,7 +228,7 @@ function usePeriod(employeeId: string) {
     // and the screens use the built-in fallback.
     if (companyId) {
       const sc = await supabase.from('pms_rating_scale')
-        .select('rating_value,rating_code,rating_label,score_from,score_to,min_comment_chars,improvement_feedback_mandatory,sort_order,is_active')
+        .select('rating_value,rating_code,rating_label,score_from,score_to,min_comment_chars,improvement_feedback_mandatory,allows_pip_request,allows_recognition,sort_order,is_active')
         .eq('company_id', companyId)
       if (sc.error) logFail('could not read the rating scale', sc.error)
       setBands(sc.error ? [] : bandsFromScale(sc.data as ScaleRow[]))
@@ -1476,6 +1477,13 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   /** The rater's training suggestions for whoever is open in the panel.
    *  Cleared with the rest of the draft when the panel closes. */
   const [training, setTraining] = useState<TrainingDraft[]>([{ ...EMPTY_TRAINING }])
+  const emptyPip = (): PipIntent => {
+    const w = defaultPipWindow(localToday())
+    return { wanted: false, reason: '', proposedStart: w.start, proposedEnd: w.end }
+  }
+  const [pip, setPip] = useState<PipIntent>(emptyPip())
+  const [recog, setRecog] = useState<RecognitionIntent>(
+    { wanted: false, kind: 'BONUS', note: '' })
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const today = localToday()
@@ -1867,13 +1875,19 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     // can be stale by the time the click lands, and this is the function that
     // actually writes the row. Same check, from the same helper, so the two
     // cannot drift into disagreeing about what counts as unexplained.
-    const unexplained = compareRatings(lines.filter(l => l.goalId).map(l => ({
+    // ONE COMPARISON, used for both the unexplained-difference gate and the
+    // weighted score a PIP request records as what prompted it. Computing
+    // the score a second way here is how the panel and the saved row would
+    // come to disagree about the number that triggered a performance plan.
+    const cmpNow = compareRatings(lines.filter(l => l.goalId).map(l => ({
       goalId: l.goalId!, title: `${l.seqNo}. ${l.title || 'untitled'}`,
       weightage: Number(l.weightage) || 0,
       self: l.selfRating ?? null,
       mine: kraRate[l.goalId!]?.rating ?? null,
       comment: kraRate[l.goalId!]?.comment ?? null,
-    }))).missingReasons
+    })))
+    const myScore = cmpNow.myScore
+    const unexplained = cmpNow.missingReasons
     if (unexplained.length) {
       setMsg('Say why where your rating differs from theirs — '
         + `${unexplained.length} still unexplained: `
@@ -1909,10 +1923,21 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       setMsg('The ratings were saved, but your training suggestion was not. Try sending it again.')
       return
     }
+    if (!(await savePip(id, myRung, myScore))) {
+      setSaving(false)
+      setMsg('The ratings were saved, but the PIP request was not. Try sending it again.')
+      return
+    }
+    if (!(await saveRecognition(id, myRung))) {
+      setSaving(false)
+      setMsg('The ratings were saved, but the recognition proposal was not. Try sending it again.')
+      return
+    }
     setSaving(false)
     await approveInChain(id, finalRating)
     setKraFor(null); setKraLines(null); setKraRate({}); setKraFinal(''); setOverall('')
-    setTraining([{ ...EMPTY_TRAINING }])
+    setTraining([{ ...EMPTY_TRAINING }]); setPip(emptyPip())
+    setRecog({ wanted: false, kind: 'BONUS', note: '' })
   }
 
   const approveInChain = async (id: string, rating?: number) => {
@@ -2057,6 +2082,57 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     return true
   }
 
+  /**
+   * THE PIP THIS RATER ASKED FOR, as a real request in HR's queue.
+   *
+   * A bare checkbox could not create one and should not: pms_pip requires
+   * request_reason, proposed_start and proposed_end NOT NULL, because a plan
+   * that begins "rated low" is one nobody can run, review or defend.
+   *
+   * status REQUESTED and hr_status PENDING_HR — the row lands in the PIP
+   * queue the schema has always had (066, steps 1 to 4) and HR decides
+   * whether it starts. Nothing here begins a plan.
+   *
+   * trigger_rating records the score that prompted it, which is what makes
+   * the request auditable later: a plan raised off a 1.4 reads differently
+   * from one raised off a 3.4.
+   */
+  const savePip = async (id: string, role: string, score: number | null): Promise<boolean> => {
+    if (!pip.wanted || !companyId) return true
+    const { error } = await supabase.from('pms_pip').insert({
+      company_id: companyId, period_id: period!.id, employee_id: id,
+      requested_by: employeeId, requested_by_role: role,
+      trigger_rating: score,
+      request_reason: pip.reason.trim(),
+      proposed_start: pip.proposedStart, proposed_end: pip.proposedEnd,
+      hr_status: 'PENDING_HR', status: 'REQUESTED',
+    })
+    if (error) { logFail('PIP request refused', error); return false }
+    return true
+  }
+
+  /**
+   * THE RECOGNITION THIS RATER PROPOSED.
+   *
+   * Stored as a training-style recommendation rather than in
+   * pms_additional_benefits for the reason 208 gives: that table records
+   * what was AWARDED, and this is a proposal HR has not agreed to. It shares
+   * the PENDING / ACCEPTED / DECLINED lifecycle so HR actions both kinds in
+   * one place, and HR writes the benefit row if they approve it.
+   */
+  const saveRecognition = async (id: string, role: string): Promise<boolean> => {
+    if (!recog.wanted || !companyId) return true
+    const { error } = await supabase.from('pms_training_recommendation').upsert({
+      company_id: companyId, period_id: period!.id, employee_id: id,
+      recommended_by: employeeId, recommended_by_role: role,
+      training_name: RECOGNITION_LABEL[recog.kind],
+      category: 'OTHER',
+      details: `RECOGNITION — ${recog.note.trim()}`,
+    }, { onConflict: 'period_id,employee_id,recommended_by,training_name' })
+    if (error) { logFail('recognition recommendation refused', error); return false }
+    return true
+  }
+
   const saveOverall = async (id: string, role: string): Promise<boolean> => {
     if (!overall.trim() || !companyId) return true
     const fb = await supabase.from('pms_feedback').upsert({
@@ -2115,6 +2191,11 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                                   onOverallComment={setOverall}
                                                   training={training}
                                                   onTraining={setTraining}
+                                                  pip={pip}
+                                                  onPip={p => setPip(x => ({ ...x, ...p }))}
+                                                  recognition={recog}
+                                                  onRecognition={r => setRecog(x => ({ ...x, ...r }))}
+                                                  today={today}
                                                   onApprove={fr => rateAndApprove(kraFor, fr)}
                                                   saving={saving}
                                                   onClose={() => { setKraFor(null); setKraLines(null)

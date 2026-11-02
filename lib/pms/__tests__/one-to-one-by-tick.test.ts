@@ -371,17 +371,22 @@ test('a label that wraps a checkbox is not styled as a field caption', () => {
   assert.match(rule, /display: flex/)
 })
 
-test('every PMS checkbox uses it — there are only two, and both must', () => {
+test('every PMS checkbox uses it', () => {
   // A checkbox added later without the class gets the uppercase vertical
   // treatment again, and nothing else in the suite would notice.
+  //
+  // COUNTS EVERY ONE, rather than asserting there is exactly one. The old
+  // form pinned the number at 1 per file, which made adding the PIP and
+  // recognition boxes look like a regression when both were correctly
+  // wrapped. The rule was never "one checkbox" — it is "no bare checkbox".
   for (const [name, src] of [['EmployeeTabs', EMP], ['ManagerTabs', MGR]] as const) {
-    const boxes = (src.match(/type="checkbox"/g) ?? []).length
-    assert.equal(boxes, 1, `${name}: expected one checkbox, found ${boxes}`)
-    const at = src.indexOf('type="checkbox"')
-    // Walk back to the enclosing label and check it carries the class.
-    const before = src.slice(Math.max(0, at - 400), at)
-    assert.match(before, /<label className="checkline"/,
-      `${name}: the checkbox is not inside a label.checkline`)
+    const boxes = [...src.matchAll(/type="checkbox"/g)].map(m => m.index!)
+    assert.ok(boxes.length > 0, `${name}: no checkbox found at all`)
+    for (const at of boxes) {
+      const before = src.slice(Math.max(0, at - 400), at)
+      assert.match(before, /<label className="checkline"/,
+        `${name}: the checkbox at offset ${at} is not inside a label.checkline`)
+    }
   }
 })
 
