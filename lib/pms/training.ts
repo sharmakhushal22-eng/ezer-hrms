@@ -175,18 +175,99 @@ export interface ScoreInvites {
   band: Band | null
   pip: boolean
   recognition: boolean
+  /** Where this band sits on its own scale, 0 at the bottom and 1 at the
+   *  top. Null when there is no band, or when the scale has one rung. */
+  position: number | null
+  /** Did the answer come from an admin's flags, or from the position? */
+  from: 'configured' | 'normalised' | 'none'
 }
 
+/**
+ * THE BOTTOM AND TOP QUARTER OF WHATEVER SCALE IS IN USE.
+ *
+ * Chosen rather than invented: on the seeded five-point scale these two
+ * numbers reproduce the configured flags EXACTLY —
+ *
+ *   value 1 → position 0.00  ≤ 0.25   PIP          (allows_pip_request true)
+ *   value 2 → position 0.25  ≤ 0.25   PIP          (true)
+ *   value 3 → position 0.50           neither      (both false)
+ *   value 4 → position 0.75  ≥ 0.75   recognition  (209 seeds true)
+ *   value 5 → position 1.00  ≥ 0.75   recognition  (true)
+ *
+ * so the fallback and the configuration agree on the scale this product
+ * actually ships with, and a test pins that. On a ten-point scale it gives
+ * the bottom three and top three; on a three-point scale, one each.
+ */
+export const PIP_POSITION = 0.25
+export const RECOGNITION_POSITION = 0.75
 
+/**
+ * WHAT THIS SCORE INVITES THE RATER TO PROPOSE.
+ *
+ * Requested: a PIP checkbox when they rate somebody very low, a recognition
+ * box when they rate somebody high, both optional, both reaching HR.
+ *
+ * ── CONFIGURATION FIRST, POSITION AS THE FALLBACK ────────────────────────
+ *
+ * pms_rating_scale.allows_pip_request has decided the low end since 066 and
+ * 209 adds allows_recognition for the high one. Where an admin has set
+ * either, that is the answer — it is their scale and their policy.
+ *
+ * But a flag that defaults false means a scale NOBODY HAS CONFIGURED offers
+ * neither prompt, silently. That is the case for every scale added after
+ * 209 runs, and for any company that builds its own: the feature would
+ * simply never appear and nothing would say why. So when a scale carries no
+ * flag of that kind at all, the band's NORMALISED POSITION decides instead
+ * — bottom quarter invites a plan, top quarter invites recognition.
+ *
+ * Each half is judged independently. A scale with PIP bands marked and
+ * recognition untouched gets the configured answer for one and the
+ * normalised answer for the other, rather than a mix nobody chose.
+ *
+ * ── WHY POSITION AND NOT A NUMBER ────────────────────────────────────────
+ *
+ * The request said "you say rating > 2". On a five-point scale that is the
+ * top three; on a ten-point scale it is almost everybody; on a scale that
+ * starts at 0 it is different again. Normalising against the bands actually
+ * in play is the same correction the colour ramp needed, for the same
+ * reason: pms_rating_scale is policy configuration and a three- or
+ * ten-point scale is one admin setting away.
+ *
+ * ── ONE PROMPT PER APPRAISAL ─────────────────────────────────────────────
+ *
+ * The band comes from the rater's WEIGHTED score through the scale's own
+ * windows, so this answers once per appraisal rather than once per KRA. A
+ * single bad KRA inside a good year is not a performance plan.
+ */
 export function scoreInvites(
   score: number | null, bands = DEFAULT_BANDS,
 ): ScoreInvites {
   const band = bandForScore(score, bands)
-  if (!band) return { band: null, pip: false, recognition: false }
+  if (!band) return { band: null, pip: false, recognition: false, position: null, from: 'none' }
+
+  // Where this band sits on its own scale. A one-rung scale has no top and
+  // no bottom, so there is nothing to be in the quarter of.
+  const vals = bands.map(b => b.value)
+  const lo = Math.min(...vals), hi = Math.max(...vals)
+  const position = hi === lo ? null : (band.value - lo) / (hi - lo)
+
+  // HAS THE QUERY EVEN ASKED? undefined means the column was not selected;
+  // an explicit false is an admin saying no, and must not be overridden.
+  // Collapsing the two would switch recognition back on for a scale where
+  // somebody had deliberately turned it off everywhere.
+  const pipConfigured = bands.some(b => b.allowsPip !== undefined)
+  const recConfigured = bands.some(b => b.allowsRecognition !== undefined)
+
+  const pip = pipConfigured
+    ? band.allowsPip === true
+    : position !== null && position <= PIP_POSITION
+  const recognition = recConfigured
+    ? band.allowsRecognition === true
+    : position !== null && position >= RECOGNITION_POSITION
+
   return {
-    band,
-    pip: band.allowsPip === true,
-    recognition: band.allowsRecognition === true,
+    band, pip, recognition, position,
+    from: (pipConfigured || recConfigured) ? 'configured' : 'normalised',
   }
 }
 

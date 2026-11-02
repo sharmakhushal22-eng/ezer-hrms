@@ -121,6 +121,8 @@ export interface Band {
    */
   allowsPip?: boolean
   allowsRecognition?: boolean
+  // undefined means "the query did not ask", which is distinct from an
+  // admin's false. See bandsFromScale and scoreInvites.
 }
 
 /**
@@ -180,10 +182,20 @@ export function bandsFromScale(rows: ScaleRow[] | null | undefined): Band[] {
       code: r.rating_code ?? undefined,
       improvementMandatory: r.improvement_feedback_mandatory === true,
       minCommentChars: Number(r.min_comment_chars ?? 0) || 0,
-      // === true, not truthy: a column absent from the SELECT arrives
-      // undefined, and the honest reading of "not asked for" is false.
-      allowsPip: r.allows_pip_request === true,
-      allowsRecognition: r.allows_recognition === true,
+      // UNDEFINED IS NOT FALSE, and the difference decides whether the
+      // normalised fallback runs. The columns are NOT NULL in the database,
+      // so a row that carries the field has a real answer from an admin —
+      // including a deliberate false. A row that does NOT carry it was
+      // fetched by a query that did not ask, and that is the only case
+      // scoreInvites may override with the band's position.
+      //
+      // Collapsing both to false would mean an admin who switches
+      // recognition off for every band has it switched back on by the
+      // fallback, which is the opposite of respecting their configuration.
+      allowsPip: r.allows_pip_request === undefined || r.allows_pip_request === null
+        ? undefined : r.allows_pip_request === true,
+      allowsRecognition: r.allows_recognition === undefined || r.allows_recognition === null
+        ? undefined : r.allows_recognition === true,
       scoreFrom: n(r.score_from),
       scoreTo: n(r.score_to),
     }))

@@ -29,7 +29,7 @@ import { join } from 'node:path'
 import { scoreInvites, checkPip, checkRecognition, defaultPipWindow,
          RECOGNITION_KINDS, RECOGNITION_LABEL,
          MIN_PIP_REASON, MIN_RECOGNITION_NOTE } from '../training.ts'
-import type { Band } from '../scoring.ts'
+import { bandsFromScale, type Band } from '../scoring.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const SQL = read('supabase/migrations/209_pms_allows_recognition.sql')
@@ -219,11 +219,24 @@ test('both flags are selected, or they are inert', () => {
     'the rating scale query does not fetch the two flags')
 })
 
-test('both flags are readable as false when not asked for', () => {
-  const sc = read('lib/pms/scoring.ts')
-  assert.match(sc, /allowsPip: r\.allows_pip_request === true/,
-    'a missing column would be truthy rather than false')
-  assert.match(sc, /allowsRecognition: r\.allows_recognition === true/)
+test('a column that was never selected is not read as a yes', () => {
+  // The original worry, and still the important one: a query that does not
+  // ask for allows_recognition must not end up offering recognition at
+  // every band. It is now undefined rather than false — which the fallback
+  // can tell apart from an admin's no — but it is still never true.
+  const [band] = bandsFromScale([{ rating_value: 3, label: 'Meets' } as never])
+  assert.notEqual(band.allowsPip, true, 'an unasked column reads as a yes')
+  assert.notEqual(band.allowsRecognition, true)
+  assert.equal(band.allowsPip, undefined, 'absent and false have been collapsed')
+
+  // A row that carries the field keeps the admin's answer, false included.
+  const rows = [{ rating_value: 1, allows_pip_request: false, allows_recognition: false },
+                { rating_value: 5, allows_pip_request: false, allows_recognition: true }]
+  // Found by value, not by index: bandsFromScale orders the bands itself.
+  const got = bandsFromScale(rows as never)
+  const at = (v: number) => got.find(b => b.value === v)!
+  assert.equal(at(1).allowsPip, false, 'an explicit false was lost')
+  assert.equal(at(5).allowsRecognition, true, 'an explicit true was lost')
 })
 
 test('an admin can change the flags', () => {
@@ -281,3 +294,143 @@ test('the score recorded on the PIP is the one the panel showed', () => {
   assert.match(ra, /const myScore = cmpNow\.myScore/,
     'the PIP score is computed separately from the comparison')
 })
+
+// ── normalised to whatever scale is in use ───────────────────────────────
+//
+// The flags default false, so a scale NOBODY HAS CONFIGURED would offer
+// neither prompt, silently — every scale created after 209 runs, and every
+// company that builds its own. The band's normalised position is the
+// fallback: bottom quarter invites a plan, top quarter invites recognition.
+
+/** A scale of n points with no flags set at all. */
+const bare = (vals: number[]): Band[] => vals.map((v, i) => ({
+  value: v, label: `b${v}`, improvementMandatory: false, minCommentChars: 0,
+  scoreFrom: v - 0.5, scoreTo: v + 0.49,
+}))
+
+test('the fallback reproduces the seeded five-point configuration exactly', () => {
+  // THE ARGUMENT FOR THESE THRESHOLDS. If the normalised answer disagreed
+  // with the flags the product ships with, one of the two would be wrong.
+  const unconfigured = bare([1, 2, 3, 4, 5])
+  for (const b of SCALE) {
+    const viaFlags = scoreInvites(b.value, SCALE)
+    const viaPosition = scoreInvites(b.value, unconfigured)
+    assert.equal(viaPosition.pip, viaFlags.pip,
+      `band ${b.value}: normalised PIP disagrees with the seeded flag`)
+    assert.equal(viaPosition.recognition, viaFlags.recognition,
+      `band ${b.value}: normalised recognition disagrees with the seeded flag`)
+  }
+})
+
+test('an unconfigured ten-point scale gets its own bottom and top', () => {
+  const ten = bare([1, 2, 3, 4, 5, 6, 7, 8, 9, 10])
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => scoreInvites(v, ten).pip),
+    [true, true, true, false, false, false, false, false, false, false])
+  assert.deepEqual([1, 2, 3, 4, 5, 6, 7, 8, 9, 10].map(v => scoreInvites(v, ten).recognition),
+    [false, false, false, false, false, false, false, true, true, true])
+})
+
+test('an unconfigured three-point scale gets one each', () => {
+  const three = bare([1, 2, 3])
+  assert.deepEqual([1, 2, 3].map(v => scoreInvites(v, three).pip), [true, false, false])
+  assert.deepEqual([1, 2, 3].map(v => scoreInvites(v, three).recognition), [false, false, true])
+})
+
+test('a scale that does not start at 1 normalises from its own floor', () => {
+  // 0-4 is as valid as 1-5 and would otherwise read as "everything is low".
+  const zero = bare([0, 1, 2, 3, 4])
+  assert.equal(scoreInvites(0, zero).pip, true)
+  assert.equal(scoreInvites(1, zero).pip, true)
+  assert.equal(scoreInvites(2, zero).pip, false)
+  assert.equal(scoreInvites(4, zero).recognition, true)
+  assert.equal(scoreInvites(2, zero).recognition, false)
+})
+
+test('a one-rung scale invites nothing', () => {
+  // There is no top or bottom quarter of a single band, and dividing by
+  // zero would make every answer true.
+  const one = bare([3])
+  const i = scoreInvites(3, one)
+  assert.equal(i.position, null)
+  assert.equal(i.pip, false)
+  assert.equal(i.recognition, false)
+})
+
+test('position runs 0 to 1 and never outside it', () => {
+  for (const vals of [[1, 2, 3, 4, 5], [1, 2, 3], [0, 1, 2, 3, 4], [1, 10]]) {
+    const sc = bare(vals)
+    for (const v of vals) {
+      const p = scoreInvites(v, sc).position!
+      assert.ok(p >= 0 && p <= 1, `${vals.join('/')} band ${v} → position ${p}`)
+    }
+    assert.equal(scoreInvites(Math.min(...vals), sc).position, 0)
+    assert.equal(scoreInvites(Math.max(...vals), sc).position, 1)
+  }
+})
+
+// ── configuration still wins, and each half independently ────────────────
+
+test('an admin flag beats the position', () => {
+  // Their scale, their policy. A band at the very top marked as a PIP band
+  // is a strange choice, and it is still theirs to make.
+  const odd = bare([1, 2, 3, 4, 5]).map(b =>
+    b.value === 5 ? { ...b, allowsPip: true } : b)
+  assert.equal(scoreInvites(5, odd).pip, true, 'the explicit flag was ignored')
+  // And with PIP now configured, band 1 no longer gets the normalised answer.
+  assert.equal(scoreInvites(1, odd).pip, false,
+    'the normalised fallback is still running on a configured half')
+})
+
+test('the two halves are judged independently', () => {
+  // A scale with PIP bands marked and recognition untouched must not get a
+  // mix nobody chose: the configured half follows the flags, the other
+  // falls back.
+  const half = bare([1, 2, 3, 4, 5]).map(b =>
+    b.value <= 2 ? { ...b, allowsPip: true } : b)
+  assert.equal(scoreInvites(1, half).pip, true, 'configured half ignored')
+  assert.equal(scoreInvites(5, half).recognition, true,
+    'the unconfigured half did not fall back to the position')
+  assert.equal(scoreInvites(3, half).recognition, false)
+})
+
+test('it says where its answer came from', () => {
+  // So a screen, or somebody debugging one, can tell "nobody configured
+  // this" from "an admin said no".
+  assert.equal(scoreInvites(1, SCALE).from, 'configured')
+  assert.equal(scoreInvites(1, bare([1, 2, 3, 4, 5])).from, 'normalised')
+  assert.equal(scoreInvites(null, SCALE).from, 'none')
+})
+
+test('turning every flag off is a configuration, not an absence', () => {
+  // THE SUBTLE CASE, and the one the first version of this got wrong. An
+  // admin who switches recognition off for every band has said "no
+  // recognition on this scale". Reading that as unconfigured switches it
+  // back on — the opposite of respecting their choice.
+  //
+  // It works because undefined and false are kept apart: the columns are
+  // NOT NULL in the database, so a band that CARRIES the field has a real
+  // answer, and only a band that does not (the query never asked) falls
+  // back to the position.
+  const allOff = bare([1, 2, 3, 4, 5]).map(b => ({ ...b, allowsRecognition: false }))
+  assert.equal(scoreInvites(5, allOff).recognition, false,
+    'an explicit false was overridden by the normalised fallback')
+  assert.equal(scoreInvites(5, allOff).from, 'configured')
+  // And the other half of that scale, which nobody touched, still falls back.
+  assert.equal(scoreInvites(1, allOff).pip, true,
+    'the untouched half stopped falling back')
+})
+
+test('undefined and false are kept apart at the source', () => {
+  // The whole rule above rests on bandsFromScale NOT collapsing the two.
+  const sc = read('lib/pms/scoring.ts').replace(/\s+/g, ' ')
+  for (const col of ['allows_pip_request', 'allows_recognition']) {
+    assert.ok(sc.includes(`r.${col} === undefined || r.${col} === null ? undefined`),
+      `${col} collapses an absent column to false, which the fallback cannot see past`)
+  }
+  // And the reader of that distinction asks !== undefined, not === true.
+  const tr = read('lib/pms/training.ts').replace(/\s+/g, ' ')
+  assert.ok(tr.includes('bands.some(b => b.allowsPip !== undefined)')
+         && tr.includes('bands.some(b => b.allowsRecognition !== undefined)'),
+    'scoreInvites treats an explicit false as unconfigured')
+})
+
