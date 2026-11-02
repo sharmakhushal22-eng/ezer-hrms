@@ -31,7 +31,9 @@ function strip(sql: string): string {
 
 function sqlFiles(): { file: string; sql: string }[] {
   const out: { file: string; sql: string }[] = []
-  for (const dir of ['supabase/migrations', 'supabase/verify']) {
+  // supabase/tools too: the reset script is a DO block an operator pastes
+  // into the SQL editor, which is exactly the shape 193 and 194 got wrong.
+  for (const dir of ['supabase/migrations', 'supabase/verify', 'supabase/tools']) {
     let names: string[] = []
     try { names = readdirSync(dir) } catch { continue }
     for (const n of names.filter(f => f.endsWith('.sql'))) {
