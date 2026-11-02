@@ -435,3 +435,77 @@ export function toneVars(t: RatingTone | null): Record<string, string> {
     '--kra-mix': `${t.mix}%`,
   }
 }
+
+// ── rules 10 and 11, on the rater's side of the form ────────────────────
+
+export interface RemarkCheck {
+  ok: boolean
+  /** The band the rater's own weighted score falls in. Null before they
+   *  have rated enough to have a score at all. */
+  band: Band | null
+  /** Characters the band demands, and characters written. */
+  need: number
+  have: number
+  /** Does this band also demand that the remark say what would change? */
+  improvementNeeded: boolean
+  /** One sentence for the blocker list, or null when nothing is owed. */
+  fault: string | null
+}
+
+/**
+ * WHAT THIS RATER OWES IN WORDS, given the score they have just given.
+ *
+ * Requested: "mandatory remarks by r1, r2, hod should be in effect". They
+ * were not. pms_rating_scale has carried min_comment_chars and
+ * improvement_feedback_mandatory per band since 066 — on this company's
+ * scale 200/100/50/200/200 characters and improvement mandatory at 2 and 1 —
+ * and the only screen that ever checked them was HR's publish workspace,
+ * through checkFeedback. The rating form checked nothing.
+ *
+ * MEASURED, not assumed: Isha Nair SRS9057 went through the whole chain with
+ * 8 of 12 ratings carrying any comment at all.
+ *
+ * THE BAND COMES FROM THE SCORE, NOT THE ROUNDED RATING. bandForScore reads
+ * pms_rating_scale's own windows (4.51-5.00, 3.51-4.50, …), which is how the
+ * scale is designed to be read and what makes 3.50 and 3.51 different bands.
+ * Rounding disagrees with those windows at every boundary.
+ *
+ * ONE SOURCE FOR THE THRESHOLDS. The numbers are read off the Band object
+ * that checkFeedback also uses — not copied. A second definition of "200
+ * characters at Outstanding" would eventually disagree with the publish
+ * screen about the same remark.
+ *
+ * THE LOW BANDS DEMAND MORE WORDS, NOT FEWER. A 5 can stand on a sentence; a
+ * 1 is the rating somebody may later have to defend, and "needs to improve"
+ * defends nothing.
+ */
+export function checkRaterRemark(
+  score: number | null,
+  remark: string | null | undefined,
+  bands = DEFAULT_BANDS,
+): RemarkCheck {
+  const band = bandForScore(score, bands)
+  const have = (remark ?? '').trim().length
+  if (!band) {
+    // No score yet means no band, and therefore no demand. The gate that
+    // insists every KRA is rated is what covers this case.
+    return { ok: true, band: null, need: 0, have, improvementNeeded: false, fault: null }
+  }
+  const need = band.minCommentChars
+  const improvementNeeded = band.improvementMandatory
+  if (have === 0) {
+    return { ok: false, band, need, have, improvementNeeded, fault:
+      improvementNeeded
+        ? `Write your overall remark — at ${band.value} (${band.label.toLowerCase()}) `
+          + `it has to say what would change, in at least ${need} characters.`
+        : `Write your overall remark — at least ${need} characters at `
+          + `${band.value} (${band.label.toLowerCase()}).` }
+  }
+  if (have < need) {
+    return { ok: false, band, need, have, improvementNeeded, fault:
+      `Your overall remark needs ${need - have} more character`
+      + `${need - have === 1 ? '' : 's'} — ${need} at ${band.value} `
+      + `(${band.label.toLowerCase()}), and there ${have === 1 ? 'is' : 'are'} ${have}.` }
+  }
+  return { ok: true, band, need, have, improvementNeeded, fault: null }
+}

@@ -25,7 +25,7 @@ import './pms.css'
 import { teamQueue, finaliseQueue, teamStats, distribution, initials,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
 import { FLAG_LABEL, type FlagRules } from '@/lib/pms/employment'
-import { checkFeedback, score, gap, byCategory, bandFor,
+import { checkFeedback, score, gap, byCategory, bandFor, checkRaterRemark,
          compareRatings, ratingTone, toneVars, DEFAULT_BANDS,
          type Band, type Line, type CompareSummary,
          type RaterRole } from '@/lib/pms/scoring'
@@ -1462,10 +1462,32 @@ export function KraDetail({ member, lines, loading, onClose,
               <textarea id="rm-overall" value={overallComment ?? ''}
                         onChange={e => onOverallComment(e.target.value)}
                         placeholder="The appraisal as a whole, in your words. Evidence, not adjectives — they read this." />
-              <div className="k" style={{ marginTop: 4 }}>
-                Held back until the result is published. The per-KRA reasons
-                above are separate; this is the one line about the year.
-              </div>
+              {/* THE COUNT IS LIVE, because a length rule that only speaks on
+                  submission makes somebody write blind and then be told they
+                  are short. The scale sets it per band — 200 characters at
+                  Outstanding on this company's scale, 50 at Meets — so the
+                  demand changes as the rater changes their own scores. */}
+              {(() => {
+                const r = checkRaterRemark(cmp.myScore, overallComment, bands)
+                if (!r.band) return (
+                  <div className="k" style={{ marginTop: 4 }}>
+                    Rate the KRAs and this will say how much the resulting band asks for.
+                  </div>
+                )
+                return (
+                  <div className="k" style={{ marginTop: 4, lineHeight: 1.6 }}>
+                    <b style={{ color: r.ok ? 'var(--ez-positive)' : 'var(--ez-warning)' }}>
+                      {r.have} / {r.need} characters
+                    </b>{' '}
+                    — your score of {cmp.myScore?.toFixed(2)} lands in{' '}
+                    <b>{r.band.label}</b>, which asks for {r.need}.
+                    {r.improvementNeeded && <> At this band it must also say{' '}
+                      <b>what would change it</b>.</>}
+                    {' '}Held back until the result is published; the per-KRA
+                    reasons above are separate.
+                  </div>
+                )
+              })()}
             </div>
           )}
 
@@ -1516,7 +1538,14 @@ export function KraDetail({ member, lines, loading, onClose,
             // no justification, so this blocks nobody who scored them as they
             // scored themselves.
             const reasoned = cmp.missingReasons.length === 0
-            const ready = allRated && ticked && frOk && reasoned
+            // RULES 10 AND 11, ON THIS SIDE OF THE FORM. The scale has
+            // carried min_comment_chars and improvement_feedback_mandatory
+            // per band since 066 and only HR's publish screen ever checked
+            // them — so a rater could settle a 1 with no words at all.
+            // Measured: Isha Nair SRS9057 went through the whole chain with
+            // 8 of 12 ratings carrying any comment.
+            const remark = checkRaterRemark(cmp.myScore, overallComment, bands)
+            const ready = allRated && ticked && frOk && reasoned && remark.ok
             return (
               <>
                 {!ready && (
@@ -1534,6 +1563,7 @@ export function KraDetail({ member, lines, loading, onClose,
                             {' '}{cmp.missingReasons.length} still unexplained
                             {' '}({cmp.missingReasons.map(m => m.title).join(', ')}).</li>
                         )}
+                        {!remark.ok && <li>{remark.fault}</li>}
                         {!ticked && <li>Confirm the one-to-one above.</li>}
                         {!frOk && <li>Give the final rating ({lo}&ndash;{hi}).
                           Yours is the last approval, so this is the number
@@ -1557,6 +1587,9 @@ export function KraDetail({ member, lines, loading, onClose,
                       {!allRated && <span className="b">{total - rated.length} still unrated</span>}
                       {!reasoned && <span className="b">
                         {cmp.missingReasons.length} need{cmp.missingReasons.length === 1 ? 's' : ''} a reason
+                      </span>}
+                      {!remark.ok && <span className="b">
+                        Overall remark {remark.have}/{remark.need}
                       </span>}
                       {!ticked && <span className="b">Confirm the one-to-one</span>}
                       {!frOk && <span className="b">Final rating missing</span>}

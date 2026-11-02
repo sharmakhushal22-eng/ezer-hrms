@@ -227,13 +227,17 @@ test('the action is pinned, not buried', () => {
 test('the bar says why it is refusing, beside the button it refuses on', () => {
   // "Not ready to send on" with the explanation 1900px up is a refusal
   // without a reason.
-  const b = PANEL.slice(PANEL.indexOf('className="blockers"'),
-                        PANEL.indexOf('className="blockers"') + 900)
+  // SLICED TO THE END OF THE ELEMENT, not a character count. A fixed window
+  // broke the moment a fifth blocker (the overall remark) was added above
+  // the one being matched — the rule was intact and the test was not.
+  const start = PANEL.indexOf('className="blockers"')
+  const b = PANEL.slice(start, PANEL.indexOf('</div>', PANEL.indexOf('Final rating missing', start)))
   assert.match(b, /still unrated/)
   assert.match(b, /need\{cmp\.missingReasons\.length === 1 \? 's' : ''\} a reason/,
     'the reason blocker does not agree in number — "1 need a reason"')
   assert.match(b, /Confirm the one-to-one/)
   assert.match(b, /Final rating missing/)
+  assert.match(b, /Overall remark/, 'the remark shortfall is not shown beside the button')
 })
 
 test('the blockers are shown only when there are some', () => {
