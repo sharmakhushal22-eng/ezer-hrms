@@ -113,6 +113,82 @@ interface Coverage {
 const SCREEN_KEY: Partial<Record<Tab, string>> = {}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
 
+
+/**
+ * THE THREE STREAMS A RATER CAN OPEN, fetched together.
+ *
+ * Module-level rather than inside the component because two callers need
+ * exactly the same reads: the full page load, and the focused refresh that
+ * follows an HR decision. The second one exists because the tab block is
+ * gated on `!loading` — a full reload UNMOUNTS the publish workspace, which
+ * would close the card HR had open and bounce them back to the list after
+ * deciding one of three proposals.
+ *
+ * TOLERANT OF 210 NOT HAVING RUN. `kind` is what tells a training suggestion
+ * from a recognition proposal, and selecting a column PostgREST does not
+ * know about fails the ENTIRE request with a 400 — which would empty the
+ * publish workspace, not just this block. So the narrow select is tried
+ * first and a failure retries without it. A row read without `kind` falls
+ * back to TRAINING, which is right for every row that can exist before 210.
+ */
+const REC_SELECT = 'id, employee_id, period_id, kind, training_name, category, '
+                 + 'details, recommended_by, recommended_by_role, recommended_at, '
+                 + 'hr_status, hr_note'
+
+async function fetchChainAsks(
+  periodIds: string[],
+  ids: string[],
+  people: Map<string, { emp_code?: string; full_name?: string }>,
+): Promise<{ asks: Record<string, ChainAsks>; queue: PipRow[] }> {
+  if (!periodIds.length || !ids.length) return { asks: {}, queue: [] }
+
+  const [recsTry, pipsR] = await Promise.all([
+    supabase.from('pms_training_recommendation').select(REC_SELECT)
+      .in('period_id', periodIds).in('employee_id', ids),
+    supabase.from('pms_pip')
+      .select('id, employee_id, period_id, requested_by, requested_by_role, '
+            + 'requested_at, trigger_rating, request_reason, proposed_start, '
+            + 'proposed_end, hr_status, status, employee_ack, final_outcome')
+      .in('period_id', periodIds).in('employee_id', ids),
+  ])
+  const recsR = recsTry.error
+    ? await supabase.from('pms_training_recommendation')
+        .select(REC_SELECT.replace('kind, ', ''))
+        .in('period_id', periodIds).in('employee_id', ids)
+    : recsTry
+  // A missing table reads as "nothing asked for" rather than as a screen
+  // that quietly lost a section.
+  const recRows = (recsR.data ?? []) as unknown as RecRowDb[]
+  const pipRows = (pipsR.data ?? []) as unknown as PipRowDb[]
+
+  // The raters' names. Seeded from the people already fetched for the
+  // period, then topped up with anybody who only appears as a proposer — a
+  // manager outside this period's roster still has to be nameable.
+  const names: Record<string, string> = {}
+  for (const [id, p] of people) if (p.full_name) names[id] = p.full_name
+  const proposers = [...new Set([
+    ...recRows.map(r => r.recommended_by), ...pipRows.map(r => r.requested_by),
+  ].filter((x): x is string => !!x && !names[x]))]
+  if (proposers.length) {
+    const ps = await supabase.from('employees').select('id, full_name').in('id', proposers)
+    for (const e of ps.data ?? []) {
+      const r = e as { id: string; full_name?: string }
+      if (r.full_name) names[r.id] = r.full_name
+    }
+  }
+
+  return {
+    asks: chainAsksByEmployee(recRows, pipRows, names),
+    queue: pipRows.map(r => ({
+      code: people.get(String(r.employee_id))?.emp_code ?? '',
+      name: people.get(String(r.employee_id))?.full_name ?? 'Unknown',
+      raisedBy: (r.requested_by && names[r.requested_by])
+                || (r.requested_by_role ?? '').replace(/_/g, ' ') || 'a manager',
+      pip: pipFromRow(r),
+    })),
+  }
+}
+
 export default function PmsPage() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
@@ -289,7 +365,13 @@ export default function PmsPage() {
       // fetched. It was showing DEFAULT_RULES and the first entry of the
       // CHAINS/FINALISERS arrays instead of these columns.
       let polQ = supabase.from('pms_policies')
-        .select('id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
+        // company_id IS NOT DECORATION. toConfig reads p.company_id, and a
+        // column that is not named here arrives undefined — so every policy
+        // got companyName null, pubCompanies came out empty, the publish
+        // workspace had no company to narrow to, and it filtered out every
+        // row and said "Nothing is waiting" while two finalised ratings sat
+        // in it. MEASURED: 5 settled rows for this company, 0 shown.
+        .select('id, company_id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
               + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
               + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
               + ' final_review_one_to_one, approval_chain, rating_scale_type,'
@@ -508,71 +590,16 @@ export default function PmsPage() {
             .in('employee_id', ids),
         ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }] as const
 
-        /**
-         * WHAT THE CHAIN ASKED FOR, for the whole period in two more reads.
-         *
-         * TOLERANT OF 210 NOT HAVING RUN. `kind` is what tells a training
-         * suggestion from a recognition proposal, and selecting a column
-         * PostgREST does not know about fails the entire request with a 400 —
-         * which would empty the publish workspace, not just this block. So the
-         * narrow select is tried first and a failure retries without it.
-         *
-         * A row read without `kind` falls back to TRAINING (kindOf), which is
-         * right for every row that can exist before 210: the recognition
-         * writer sets the kind, and it is the same change that added the
-         * column.
-         */
-        const byIdCode = new Map((emps.data ?? []).map(e => {
-          const r = e as { id: string; emp_code?: string; full_name?: string }
-          return [r.id, r] as const
-        }))
-        const recSel = 'id, employee_id, period_id, kind, training_name, category, '
-                     + 'details, recommended_by, recommended_by_role, recommended_at, '
-                     + 'hr_status, hr_note'
-        const [recsTry, pipsR] = ids.length ? await Promise.all([
-          supabase.from('pms_training_recommendation').select(recSel)
-            .in('period_id', periodIds).in('employee_id', ids),
-          supabase.from('pms_pip')
-            .select('id, employee_id, period_id, requested_by, requested_by_role, '
-                  + 'requested_at, trigger_rating, request_reason, proposed_start, '
-                  + 'proposed_end, hr_status, status, employee_ack, final_outcome')
-            .in('period_id', periodIds).in('employee_id', ids),
-        ]) : [{ data: [], error: null }, { data: [], error: null }] as const
-        const recsR = recsTry.error && ids.length
-          ? await supabase.from('pms_training_recommendation')
-              .select(recSel.replace('kind, ', ''))
-              .in('period_id', periodIds).in('employee_id', ids)
-          : recsTry
-        // Named, so a missing table reads as "nothing asked for" rather than
-        // as a screen that quietly lost a section.
-        const recRows = (recsR.data ?? []) as RecRowDb[]
-        const pipRows = (pipsR.data ?? []) as PipRowDb[]
-        // The raters' own names, from the employees already fetched for this
-        // period plus anybody who only appears as a proposer.
-        const askNames: Record<string, string> = {}
-        for (const e of emps.data ?? []) {
-          const r = e as { id: string; full_name?: string }
-          if (r.full_name) askNames[r.id] = r.full_name
-        }
-        const proposers = [...new Set([
-          ...recRows.map(r => r.recommended_by), ...pipRows.map(r => r.requested_by),
-        ].filter((x): x is string => !!x && !askNames[x]))]
-        if (proposers.length) {
-          const ps = await supabase.from('employees')
-            .select('id, full_name').in('id', proposers)
-          for (const e of ps.data ?? []) {
-            const r = e as { id: string; full_name?: string }
-            if (r.full_name) askNames[r.id] = r.full_name
-          }
-        }
-        setAsks(chainAsksByEmployee(recRows, pipRows, askNames))
-        setPipQueue(pipRows.map(r => ({
-          code: byIdCode.get(String(r.employee_id))?.emp_code ?? '',
-          name: byIdCode.get(String(r.employee_id))?.full_name ?? 'Unknown',
-          raisedBy: (r.requested_by && askNames[r.requested_by])
-                    || (r.requested_by_role ?? '').replace(/_/g, ' ') || 'a manager',
-          pip: pipFromRow(r),
-        })))
+        // WHAT THE CHAIN ASKED FOR. Shared with the focused refresh a
+        // decision triggers — see fetchChainAsks.
+        const chain = await fetchChainAsks(periodIds, ids,
+          new Map((emps.data ?? []).map(e => {
+            const r = e as { id: string; emp_code?: string; full_name?: string }
+            return [r.id, { emp_code: r.emp_code, full_name: r.full_name }] as const
+          })))
+        setAsks(chain.asks)
+        setPipQueue(chain.queue)
+
         // KEYED ON (period, employee). Keying on the employee alone was safe
         // while this read one period; across several it silently shows one
         // period's feedback against another's rating.
@@ -872,11 +899,27 @@ export default function PmsPage() {
       setCommitNote(`That decision was refused: ${error.message}`)
       return
     }
-    // Reloaded rather than patched in place: the same row feeds the badge in
-    // the table, the counts and the warnings, and three hand-updated copies
-    // is how one of them ends up stale.
-    load()
-  }, [grant.employeeId, load])
+    /**
+     * REFETCHED, NOT PATCHED IN PLACE, and NOT a full reload.
+     *
+     * Not patched, because the same row feeds the badge in the table, the
+     * per-kind counts and the publish warnings — three hand-updated copies
+     * is how one of them goes stale.
+     *
+     * Not load(), because the tab block is gated on `!loading`: a full
+     * reload unmounts the publish workspace, and HR deciding the first of
+     * three proposals would find the card closed and themselves back at the
+     * list. This re-reads exactly what changed.
+     */
+    const rows = pubRows ?? []
+    const periodIds = [...new Set(rows.map(r => r.periodId)
+      .filter((x): x is string => !!x))]
+    const people = new Map(rows.map(r =>
+      [r.employeeId, { emp_code: r.code, full_name: r.name }]))
+    const chain = await fetchChainAsks(periodIds, [...people.keys()], people)
+    setAsks(chain.asks)
+    setPipQueue(chain.queue)
+  }, [grant.employeeId, pubRows])
 
   const saveFeedback = useCallback(async (employeeId: string, patch: {
     appreciation: string; improvement: string

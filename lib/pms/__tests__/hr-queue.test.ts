@@ -266,8 +266,10 @@ test('the PIP tab is fed real rows, not a constant', () => {
   assert.ok(!/<PipTab queue=\{PIP_QUEUE\}/.test(PAGE),
     'the PIP tab still renders a hardcoded queue')
   assert.match(PAGE, /<PipTab queue=\{pipQueue\} \/>/)
-  assert.match(PAGE, /setPipQueue\(pipRows\.map\(/,
-    'the queue is never filled from pms_pip')
+  assert.match(PAGE, /queue: pipRows\.map\(/,
+    'the queue is never built from the pms_pip rows')
+  assert.match(PAGE, /setPipQueue\(chain\.queue\)/,
+    'the fetched queue never reaches the tab')
   assert.match(PAGE, /from\('pms_pip'\)/, 'pms_pip is never read')
 })
 
@@ -335,16 +337,38 @@ test('the read survives 210 not having run', () => {
   // this block. So the narrow select is retried without kind.
   assert.match(PAGE, /recsTry\.error/,
     'a 400 on the kind column is not handled')
-  assert.match(PAGE, /recSel\.replace\('kind, ', ''\)/,
+  assert.match(PAGE, /REC_SELECT\.replace\('kind, ', ''\)/,
     'the retry does not drop the column that caused the failure')
 })
 
-test('a reload follows the decision rather than a hand-patched copy', () => {
-  // The same row feeds the badge in the table, the counts and the warnings.
-  // Three hand-updated copies is how one of them goes stale.
+test('a decision refetches, without closing the card HR is working in', () => {
+  // TWO FAILURES AVOIDED, and they pull in opposite directions.
+  //
+  // Patching the state by hand goes stale: the same row feeds the badge in
+  // the table, the per-kind counts and the publish warnings.
+  //
+  // Calling load() closes the card. The tab block is gated on `!loading`, so
+  // a full reload UNMOUNTS the publish workspace — found by accepting a
+  // proposal in the browser and landing back on the list with the card shut,
+  // which would happen to HR after each of three decisions.
   const fn = PAGE.slice(PAGE.indexOf('const decideAsk = useCallback'),
                         PAGE.indexOf('const saveFeedback = useCallback'))
-  assert.match(fn, /\n\s*load\(\)/, 'nothing refreshes after a decision')
+  assert.ok(fn.length > 100, 'decideAsk is gone')
+  assert.match(fn, /await fetchChainAsks\(/, 'nothing refreshes after a decision')
+  assert.ok(!/\n\s*load\(\)/.test(fn),
+    'a decision triggers a full reload, which unmounts the open card')
+  assert.match(fn, /setAsks\(chain\.asks\)/)
+  assert.match(fn, /setPipQueue\(chain\.queue\)/,
+    'the PIP queue drifts from the proposals it was fetched with')
+})
+
+test('both callers read the asks through one function', () => {
+  // The full load and the post-decision refresh must not drift into two
+  // slightly different readings of the same three tables.
+  assert.equal([...PAGE.matchAll(/await fetchChainAsks\(/g)].length, 2,
+    'there is a second, separate way of loading the same data')
+  assert.match(PAGE, /^async function fetchChainAsks\(/m,
+    'the shared fetch is not a single module-level function')
 })
 
 test('the decision is offered only to whoever owns this step', () => {
@@ -353,4 +377,63 @@ test('the decision is offered only to whoever owns this step', () => {
   // rather than inventing a second answer that could disagree with it.
   assert.match(PAGE, /onDecideAsk=\{canRunPostFinal \? decideAsk : undefined\}/,
     'anybody who can open the tab can accept a recognition proposal')
+})
+
+// ── the column that was inert ────────────────────────────────────────────
+
+test('every column toConfig reads is named in the policy SELECT', () => {
+  // THE BUG THIS CAUGHT, and the reason it is written as a sweep rather than
+  // as one assertion about company_id: toConfig read p.company_id, the
+  // SELECT did not ask for it, so it arrived undefined. Every policy got
+  // companyName null, pubCompanies came out empty, and the publish
+  // workspace — whose entire job is "which results are ready" — filtered out
+  // every row and reported "Nothing is waiting" with two finalised ratings
+  // in it. Nothing failed; a column is simply inert until it is named.
+  //
+  // Measured on the live database when found: 5 settled rows for that
+  // company, 0 shown. The summary tab, fed by the SAME rows but not
+  // narrowed, showed all five — which is what made it findable.
+  // THE SELECT LIST ITSELF, to the matching paren — not the surrounding
+  // block. The first version of this sliced the whole query and matched
+  // `polQ.eq('company_id', co)`, the WHERE clause, so it passed with the
+  // column missing from the SELECT: the word was present, the fix was not.
+  const i = PAGE.indexOf("let polQ = supabase.from('pms_policies')")
+  assert.ok(i > 0, 'the policy query moved')
+  const open = PAGE.indexOf('.select(', i) + '.select('.length
+  let depth = 1, k = open
+  while (k < PAGE.length && depth > 0) {
+    if (PAGE[k] === '(') depth++
+    else if (PAGE[k] === ')') depth--
+    k++
+  }
+  const sel = PAGE.slice(open, k - 1)
+  assert.ok(sel.includes('policy_name') && !sel.includes('polQ.eq'),
+    'the select list was not isolated, so this test proves nothing')
+
+  const j = PAGE.indexOf('const toConfig = (p: Record<string, unknown>)')
+  assert.ok(j > 0, 'toConfig moved')
+  const body = PAGE.slice(j, PAGE.indexOf('setConfigs(', j))
+
+  const wanted = [...new Set([...body.matchAll(/\bp\.([a-z][a-z0-9_]*)/g)]
+    .map(m => m[1]))]
+  assert.ok(wanted.length > 10, 'the reads were not found, so this proves nothing')
+  const missing = wanted.filter(c => !new RegExp(`[ ']${c}[,']`).test(sel))
+  assert.deepEqual(missing, [],
+    `read from the policy row but never selected: ${missing.join(', ')}`)
+})
+
+test('the chain\'s asks are read before HR writes, not after', () => {
+  // Ordering is the point: the block sat under the recognition editor, so
+  // the proposals HR is meant to weigh appeared below the boxes they write
+  // the result in. An input that arrives after the decision is decoration.
+  const card = TABS.slice(TABS.indexOf('{!canAct ? ('),
+                          TABS.indexOf('Save without publishing'))
+  const block = card.indexOf('<ChainAsksBlock')
+  const appreciation = card.indexOf('Appreciation remark')
+  const recognition = card.indexOf('<Section>Recognition</Section>')
+  assert.ok(block > 0 && appreciation > 0 && recognition > 0, 'the card moved')
+  assert.ok(block < appreciation,
+    'HR writes the appreciation before seeing what the chain proposed')
+  assert.ok(block < recognition,
+    'HR writes the recognition before seeing what the chain proposed')
 })

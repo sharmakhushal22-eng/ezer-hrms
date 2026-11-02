@@ -1222,6 +1222,12 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
             </Note>
           ) : (
             <>
+              {/* READ BEFORE WRITING. This sat below the recognition editor,
+                  which put what the chain proposed AFTER the box HR writes
+                  the result in — the input arriving after the decision it is
+                  supposed to inform. */}
+              <ChainAsksBlock asks={asks?.[member.employeeId]} onDecide={onDecideAsk} />
+
               <div className="fld">
                 <label htmlFor="pf-appr">Appreciation remark</label>
                 <textarea id="pf-appr" rows={3} value={d.appreciation}
@@ -1272,8 +1278,6 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                   </button>
                 )}
               </div>
-
-              <ChainAsksBlock asks={asks?.[member.employeeId]} onDecide={onDecideAsk} />
 
               {warnings.length > 0 && (
                 <div className="banner b-blue" style={{ marginTop: 12 }}>
