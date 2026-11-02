@@ -42,6 +42,7 @@ import {
 } from '@/components/pms/EmployeeTabs'
 import {
   MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab, CHAIN_RATERS,
+  EMPTY_TRAINING, type TrainingDraft,
   TeamAnalyticsTab, FinaliseTab, FeedbackTab, PublishedResultsTab, KraDetail,
   BENEFIT_LABEL,
   type MgrTab, type HodTab, type RateRow, type BenefitType,
@@ -54,6 +55,7 @@ import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFin
 import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
+import { filled } from '@/lib/pms/training'
 import { reached, WORKFLOW } from '@/lib/pms/status'
 import { bandsFromScale, compareRatings,
          type Band, type Line, type ScaleRow, type RaterRole } from '@/lib/pms/scoring'
@@ -1471,6 +1473,9 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [rateRows, setRateRows] = useState<RateRow[]>([])
   const [overall, setOverall] = useState('')
+  /** The rater's training suggestions for whoever is open in the panel.
+   *  Cleared with the rest of the draft when the panel closes. */
+  const [training, setTraining] = useState<TrainingDraft[]>([{ ...EMPTY_TRAINING }])
   const [saving, setSaving] = useState(false)
   const [msg, setMsg] = useState<string | null>(null)
   const today = localToday()
@@ -1899,9 +1904,15 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       setMsg('The ratings were saved, but your overall comment was not. Try sending it again.')
       return
     }
+    if (!(await saveTraining(id, myRung))) {
+      setSaving(false)
+      setMsg('The ratings were saved, but your training suggestion was not. Try sending it again.')
+      return
+    }
     setSaving(false)
     await approveInChain(id, finalRating)
     setKraFor(null); setKraLines(null); setKraRate({}); setKraFinal(''); setOverall('')
+    setTraining([{ ...EMPTY_TRAINING }])
   }
 
   const approveInChain = async (id: string, rating?: number) => {
@@ -2022,6 +2033,30 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    * visible_to_employee stays false: §3.5 shows nothing before the result is
    * published, and that flag is what holds it back.
    */
+  /**
+   * THE TRAINING THIS RATER SUGGESTED, saved with the same act as the rating.
+   *
+   * Only rows carrying something — the block is optional and an untouched
+   * one must write nothing. upsert on the table's own unique key so a rater
+   * who approves, is sent back and approves again does not create a second
+   * copy of the same suggestion.
+   */
+  const saveTraining = async (id: string, role: string): Promise<boolean> => {
+    const rows = filled(training)
+    if (!rows.length || !companyId) return true
+    const { error } = await supabase.from('pms_training_recommendation').upsert(
+      rows.map(r => ({
+        company_id: companyId, period_id: period!.id, employee_id: id,
+        recommended_by: employeeId, recommended_by_role: role,
+        training_name: r.trainingName.trim(),
+        category: r.category,
+        details: r.details.trim() || null,
+      })),
+      { onConflict: 'period_id,employee_id,recommended_by,training_name' })
+    if (error) { logFail('training recommendation refused', error); return false }
+    return true
+  }
+
   const saveOverall = async (id: string, role: string): Promise<boolean> => {
     if (!overall.trim() || !companyId) return true
     const fb = await supabase.from('pms_feedback').upsert({
@@ -2078,6 +2113,8 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                                   onFinalRating={setKraFinal}
                                                   overallComment={overall}
                                                   onOverallComment={setOverall}
+                                                  training={training}
+                                                  onTraining={setTraining}
                                                   onApprove={fr => rateAndApprove(kraFor, fr)}
                                                   saving={saving}
                                                   onClose={() => { setKraFor(null); setKraLines(null)

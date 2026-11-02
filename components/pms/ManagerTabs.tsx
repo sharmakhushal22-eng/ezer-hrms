@@ -36,6 +36,8 @@ import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
 import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
          rungFor, heldBy, rungs, nextRung, STAGE_SHORT,
          type Stage } from '@/lib/pms/chain'
+import { checkTrainingBlock, TRAINING_CATEGORIES, TRAINING_CATEGORY_LABEL,
+         TRAINING_EXAMPLE, type TrainingCategory } from '@/lib/pms/training'
 import { humanDate } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
@@ -946,6 +948,99 @@ function RatingChips({ bands, value, onPick, label }: {
   )
 }
 
+/** One row of the training block, as the caller holds it. */
+export interface TrainingDraft {
+  trainingName: string
+  category: TrainingCategory
+  details: string
+}
+
+export const EMPTY_TRAINING: TrainingDraft = {
+  trainingName: '', category: 'TECHNICAL', details: '',
+}
+
+/**
+ * TRAINING THIS RATER WOULD SUGGEST. Optional, and offered whatever they
+ * scored.
+ *
+ * Requested as a block on the rating form where R1, R2 and the HOD can
+ * suggest a course and explain why, reaching HR at the end.
+ *
+ * NOT GATED BY THE SCORE, deliberately and unlike the PIP prompt beside it.
+ * The training that matters to a strong performer is usually for the job
+ * after this one, and a form that only offers it to people rated badly
+ * turns a development conversation into a punishment.
+ *
+ * EXAMPLES, NOT A CATALOGUE. There is no training table in this database,
+ * so the name is free text — and a free-text field with no examples fills
+ * up with "training needed". The placeholder changes with the category.
+ */
+function TrainingBlock({ rows, onChange }: {
+  rows: TrainingDraft[]
+  onChange: (next: TrainingDraft[]) => void
+}) {
+  const set = (i: number, patch: Partial<TrainingDraft>) =>
+    onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
+  const faults = checkTrainingBlock(rows)
+
+  return (
+    <div className="step1on1" style={{ background: 'var(--ez-surface)' }}>
+      <div className="lbl" style={{ marginBottom: 2 }}>Training you would suggest (optional)</div>
+      <div className="k" style={{ marginBottom: 10, lineHeight: 1.6 }}>
+        Anything that would make the next year easier for them — a tool, a
+        behaviour, a qualification. HR sees these with the result and decides;
+        suggesting one does not commit a budget.
+      </div>
+
+      {rows.map((r, i) => (
+        <div key={i} className="grid g3" style={{ gap: 8, marginBottom: 8, alignItems: 'start' }}>
+          <div className="fld" style={{ margin: 0 }}>
+            <label htmlFor={`tr-name-${i}`}>Training</label>
+            <input id={`tr-name-${i}`} value={r.trainingName}
+                   placeholder={TRAINING_EXAMPLE[r.category]}
+                   onChange={e => set(i, { trainingName: e.target.value })} />
+          </div>
+          <div className="fld" style={{ margin: 0 }}>
+            <label htmlFor={`tr-cat-${i}`}>Kind</label>
+            <select id={`tr-cat-${i}`} value={r.category}
+                    onChange={e => set(i, { category: e.target.value as TrainingCategory })}>
+              {TRAINING_CATEGORIES.map(c => (
+                <option key={c} value={c}>{TRAINING_CATEGORY_LABEL[c]}</option>
+              ))}
+            </select>
+          </div>
+          <div className="fld" style={{ margin: 0 }}>
+            <label htmlFor={`tr-why-${i}`}>Why it would help</label>
+            <input id={`tr-why-${i}`} value={r.details}
+                   placeholder="What it would change, in a line"
+                   onChange={e => set(i, { details: e.target.value })} />
+          </div>
+        </div>
+      ))}
+
+      <div className="btnrow" style={{ marginTop: 4 }}>
+        <button className="btn ghost sm" type="button"
+                onClick={() => onChange([...rows, { ...EMPTY_TRAINING }])}>
+          + Suggest another
+        </button>
+        {rows.length > 1 && (
+          <button className="btn ghost sm" type="button"
+                  onClick={() => onChange(rows.slice(0, -1))}>
+            Remove the last
+          </button>
+        )}
+      </div>
+
+      {faults.length > 0 && (
+        <div className="banner b-amber" style={{ marginTop: 10, marginBottom: 0 }}>
+          <span aria-hidden="true">!</span>
+          <div>{faults.join(' ')}</div>
+        </div>
+      )}
+    </div>
+  )
+}
+
 export interface KraLine {
   /**
    * The goal's own id. pms_reviews is UNIQUE on
@@ -988,6 +1083,7 @@ export function KraDetail({ member, lines, loading, onClose,
                             confirmed, onConfirm, alreadyConfirmed,
                             finalises, finalRating, onFinalRating,
                             overallComment, onOverallComment,
+                            training, onTraining,
                             onApprove, saving }: {
   member: TeamMember
   lines: KraLine[] | null
@@ -1026,6 +1122,17 @@ export function KraDetail({ member, lines, loading, onClose,
    */
   overallComment?: string
   onOverallComment?: (s: string) => void
+  /**
+   * TRAINING THIS RATER SUGGESTS, optional and offered at every band.
+   *
+   * Unlike the PIP prompt this is not gated by the score: a strong
+   * performer may need training as much as a weak one, and more often the
+   * training that matters to them is for the next job rather than this one.
+   * Held by the caller so it survives a reload of the lines, same as the
+   * ratings and the final figure.
+   */
+  training?: TrainingDraft[]
+  onTraining?: (next: TrainingDraft[]) => void
   saving?: boolean
 }) {
   const total = (lines ?? []).reduce((s, l) => s + (Number(l.weightage) || 0), 0)
@@ -1491,6 +1598,12 @@ export function KraDetail({ member, lines, loading, onClose,
             </div>
           )}
 
+          {onTraining && (
+            <div style={{ marginTop: 14 }}>
+              <TrainingBlock rows={training ?? []} onChange={onTraining} />
+            </div>
+          )}
+
           {onConfirm && (
             // A STEP, NOT A STRAY CHECKBOX. It is one of the four things
             // the approval gate checks, and it used to float unframed
@@ -1545,7 +1658,11 @@ export function KraDetail({ member, lines, loading, onClose,
             // Measured: Isha Nair SRS9057 went through the whole chain with
             // 8 of 12 ratings carrying any comment.
             const remark = checkRaterRemark(cmp.myScore, overallComment, bands)
+            // The block is optional; a HALF-FILLED row is not. Details with
+            // no training named reach HR as something they cannot act on.
+            const trainingFaults = checkTrainingBlock(training ?? [])
             const ready = allRated && ticked && frOk && reasoned && remark.ok
+                       && trainingFaults.length === 0
             return (
               <>
                 {!ready && (
@@ -1564,6 +1681,7 @@ export function KraDetail({ member, lines, loading, onClose,
                             {' '}({cmp.missingReasons.map(m => m.title).join(', ')}).</li>
                         )}
                         {!remark.ok && <li>{remark.fault}</li>}
+                        {trainingFaults.map(f => <li key={f}>{f}</li>)}
                         {!ticked && <li>Confirm the one-to-one above.</li>}
                         {!frOk && <li>Give the final rating ({lo}&ndash;{hi}).
                           Yours is the last approval, so this is the number
