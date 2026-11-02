@@ -2073,11 +2073,14 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       rows.map(r => ({
         company_id: companyId, period_id: period!.id, employee_id: id,
         recommended_by: employeeId, recommended_by_role: role,
+        // Named, not defaulted: the two kinds share a table, and a reader
+        // should not have to know which default means what.
+        kind: 'TRAINING' as const,
         training_name: r.trainingName.trim(),
         category: r.category,
         details: r.details.trim() || null,
       })),
-      { onConflict: 'period_id,employee_id,recommended_by,training_name' })
+      { onConflict: 'period_id,employee_id,recommended_by,kind,training_name' })
     if (error) { logFail('training recommendation refused', error); return false }
     return true
   }
@@ -2125,10 +2128,16 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     const { error } = await supabase.from('pms_training_recommendation').upsert({
       company_id: companyId, period_id: period!.id, employee_id: id,
       recommended_by: employeeId, recommended_by_role: role,
+      // 210: the KIND is a column. It used to be a "RECOGNITION — " prefix
+      // on details, which is free text a rater also writes in — a manager
+      // who opened a training note with that word had it filed as a bonus
+      // proposal, and category could not rescue it because recognition is
+      // stored as OTHER, one of the six training buckets.
+      kind: 'RECOGNITION',
       training_name: RECOGNITION_LABEL[recog.kind],
       category: 'OTHER',
-      details: `RECOGNITION — ${recog.note.trim()}`,
-    }, { onConflict: 'period_id,employee_id,recommended_by,training_name' })
+      details: recog.note.trim(),
+    }, { onConflict: 'period_id,employee_id,recommended_by,kind,training_name' })
     if (error) { logFail('recognition recommendation refused', error); return false }
     return true
   }

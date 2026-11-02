@@ -958,3 +958,67 @@
   box-shadow: inset 0 0 0 1px var(--kra-tone);
   color: var(--ez-ink);
 }
+
+/* ── what the chain asked for, on HR's publish card ──────────────────────
+ *
+ * Grouped, not tabulated. A table would line up "Advanced Excel" with
+ * "Salary bonus" under one Name column, and the two are different decisions
+ * with different consequences — one changes what the employee reads, the
+ * other does not. The grouping is the explanation.
+ *
+ * Every colour is a token: a hex here would be white at midnight too, and
+ * this block sits on --ez-surface in both themes. */
+.askgroup { margin: 10px 0 14px; }
+
+.asklbl {
+  font-size: 11px;
+  font-weight: 600;
+  letter-spacing: .04em;
+  text-transform: uppercase;
+  color: var(--ez-muted);
+  margin-bottom: 6px;
+  line-height: 1.6;
+}
+/* The explanation inside the label is sentence case and not uppercase: it is
+ * a sentence, and uppercasing it would make it unreadable at 11px. */
+.asklbl .k { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+.askrow {
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+  background: var(--ez-surface);
+  padding: 10px 12px;
+  margin-bottom: 8px;
+}
+
+/* A decided proposal stays visible — HR should see what they chose — but
+ * recedes, so the undecided ones are what the eye lands on. */
+.askrow.decided {
+  background: var(--ez-sunken);
+  border-color: var(--ez-line);
+}
+
+.askhead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.askdet {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ez-ink-soft);
+  /* A rater's own words, kept as written: their line breaks carry meaning
+   * and joining them into a paragraph loses it. */
+  white-space: pre-wrap;
+  /* A pasted course outline with no spaces must not widen the card. */
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  /* The pill under the name rather than beside it: at phone width the two
+   * side by side squeeze the name to a couple of characters. */
+  .askhead { flex-direction: column; }
+}

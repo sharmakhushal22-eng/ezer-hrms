@@ -62,6 +62,9 @@ import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { csvText, parseCsv } from '@/lib/pms/csv'
 import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
+import { type ChainAsks, type ChainAsk, publishWarnings, asksBadge, pipLine } from '@/lib/pms/hrQueue'
+import { HR_STATUS_LABEL, TRAINING_CATEGORY_LABEL, type HrStatus,
+         type TrainingCategory } from '@/lib/pms/training'
 
 /** §6.1's configuration, as the policy row holds it. Named in the screen's
  *  own terms rather than the column names, so the page does the mapping once
@@ -815,9 +818,181 @@ export interface PublishRow {
  * with a raw P0001 is exactly the behaviour that gate was written to replace,
  * so the row says whether it is signed and the button waits.
  */
+/**
+ * WHAT THE CHAIN ASKED FOR, on the card where HR decides.
+ *
+ * Requested: the PIP requests, training suggestions and recognition the
+ * raters proposed all reach the HR Head "at end so they can publish results
+ * and give recognizations and act accordingly".
+ *
+ * Placed inside the member card rather than on a tab of its own, because the
+ * decision it informs is the one being made right here — a separate screen
+ * would mean reading a proposal, navigating away, and publishing from memory.
+ *
+ * NONE OF THIS BLOCKS THE PUBLISH BUTTON. See publishWarnings: a rater can
+ * attach a proposal to anybody, so a pending one holding the result would
+ * let any rater stall any release. The warnings sit above the button and the
+ * button still works.
+ */
+function AskRow({ ask, onDecide }: {
+  ask: ChainAsk
+  onDecide?: (id: string, status: HrStatus, note: string) => void
+}) {
+  const [note, setNote] = useState(ask.hrNote ?? '')
+  const [open, setOpen] = useState(false)
+  const decided = ask.status !== 'PENDING'
+  return (
+    <div className={`askrow${decided ? ' decided' : ''}`}>
+      <div className="askhead">
+        <div>
+          <b>{ask.name || <span className="k">(unnamed)</span>}</b>
+          {ask.kind === 'TRAINING' && ask.category && (
+            <span className="k"> · {TRAINING_CATEGORY_LABEL[ask.category as TrainingCategory]
+                                    ?? ask.category.toLowerCase()}</span>
+          )}
+          <div className="k" style={{ marginTop: 2 }}>
+            Proposed by {ask.byName ?? ask.byRole ?? 'the chain'}
+            {ask.byName && ask.byRole ? ` (${ask.byRole.replace(/_/g, ' ')})` : ''}
+            {ask.at ? ` on ${ask.at.slice(0, 10)}` : ''}
+          </div>
+        </div>
+        <Pill tone={ask.status === 'ACCEPTED' ? 'green'
+                  : ask.status === 'DECLINED' ? 'grey' : 'amber'}>
+          {HR_STATUS_LABEL[ask.status]}
+        </Pill>
+      </div>
+
+      {ask.details && <div className="askdet">{ask.details}</div>}
+      {decided && ask.hrNote && (
+        <div className="askdet"><b>Your note.</b> {ask.hrNote}</div>
+      )}
+
+      {onDecide && ask.id && (
+        !open ? (
+          <div className="btnrow">
+            <button className="btn ghost sm" type="button" onClick={() => setOpen(true)}>
+              {decided ? 'Change this decision' : 'Decide'}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="fld">
+              <label htmlFor={`ask-${ask.id}`}>
+                Note {ask.kind === 'RECOGNITION'
+                  ? '(the employee does not see this; add the award itself under Recognition below)'
+                  : '(for the record and for the manager who suggested it)'}
+              </label>
+              <input id={`ask-${ask.id}`} value={note}
+                     placeholder={ask.kind === 'RECOGNITION'
+                       ? 'e.g. approved for the January cycle'
+                       : 'e.g. budgeted for Q1, nominated'}
+                     onChange={e => setNote(e.target.value)} />
+            </div>
+            <div className="btnrow">
+              <button className="btn sm" type="button"
+                      onClick={() => { onDecide(ask.id!, 'ACCEPTED', note.trim()); setOpen(false) }}>
+                Accept
+              </button>
+              <button className="btn ghost sm" type="button"
+                      onClick={() => { onDecide(ask.id!, 'DECLINED', note.trim()); setOpen(false) }}>
+                Decline
+              </button>
+              <button className="btn ghost sm" type="button" onClick={() => setOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )
+      )}
+    </div>
+  )
+}
+
+function ChainAsksBlock({ asks, onDecide }: {
+  asks: ChainAsks | undefined
+  onDecide?: (id: string, status: HrStatus, note: string) => void
+}) {
+  if (!asks || asks.empty) {
+    return (
+      <>
+        <Section>What the chain asked for</Section>
+        <div className="k" style={{ lineHeight: 1.6 }}>
+          Nobody in the chain proposed training, recognition or a PIP while
+          rating this person. That is the usual case — the blocks are optional
+          and a rater with nothing to add leaves them alone.
+        </div>
+      </>
+    )
+  }
+  return (
+    <>
+      <Section>What the chain asked for</Section>
+
+      {asks.recognition.length > 0 && (
+        <div className="askgroup">
+          <div className="asklbl">
+            Recognition proposed ({asks.recognition.length})
+            <span className="k"> — a proposal, not an award. Accepting one records
+              your decision; the award itself is the Recognition block below.</span>
+          </div>
+          {asks.recognition.map((a, i) => (
+            <AskRow key={a.id ?? i} ask={a} onDecide={onDecide} />
+          ))}
+        </div>
+      )}
+
+      {asks.training.length > 0 && (
+        <div className="askgroup">
+          <div className="asklbl">
+            Training suggested ({asks.training.length})
+            <span className="k"> — not shown to the employee. Your decision here
+              does not change what goes out with the rating.</span>
+          </div>
+          {asks.training.map((a, i) => (
+            <AskRow key={a.id ?? i} ask={a} onDecide={onDecide} />
+          ))}
+        </div>
+      )}
+
+      {asks.pips.length > 0 && (
+        <div className="askgroup">
+          <div className="asklbl">
+            PIP {asks.pips.length === 1 ? 'request' : 'requests'} ({asks.pips.length})
+            <span className="k"> — read-only here. A PIP has its own six-step
+              review in PIP Requests, and an RM cannot start one.</span>
+          </div>
+          {asks.pips.map((p, i) => (
+            <div className="askrow" key={p.id ?? i}>
+              <div className="askhead">
+                <div>
+                  <b>Raised by {p.byName ?? p.byRole ?? 'the chain'}</b>
+                  {p.triggerRating !== null && p.triggerRating !== undefined && (
+                    <span className="k"> · triggered at {p.triggerRating}</span>
+                  )}
+                  <div className="k" style={{ marginTop: 2 }}>
+                    {p.proposedStart && p.proposedEnd
+                      ? `Proposed ${p.proposedStart} to ${p.proposedEnd}` : 'No dates proposed'}
+                  </div>
+                </div>
+                <Pill tone={p.pip.status === 'REJECTED' || p.pip.status === 'CLOSED' ? 'grey'
+                          : p.pip.status === 'PENDING_HR' ? 'amber' : 'green'}>
+                  {STATUS_LABEL[p.pip.status]}
+                </Pill>
+              </div>
+              {p.reason && <div className="askdet">{p.reason}</div>}
+              <div className="k" style={{ marginTop: 6 }}>{pipLine(p)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
 export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishing,
                              periodLabel, bands = [], canAct = true, note,
-                             company, onCompany, companies = [], allowAll = false }: {
+                             company, onCompany, companies = [], allowAll = false,
+                             asks, onDecideAsk }: {
   rows: PublishRow[] | null
   loading?: boolean
   onPublish?: (employeeId: string) => void
@@ -851,6 +1026,13 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
   /** Whether an "all companies" option is offered at all — true only when at
    *  least one company's policy sets publish_scope = 'ALL'. */
   allowAll?: boolean
+  /**
+   * WHAT THE CHAIN ASKED FOR, keyed by employee. Loaded by the page, because
+   * three tables feed it and this component stays presentational.
+   */
+  asks?: Record<string, ChainAsks>
+  /** Accept or decline one proposal. Absent renders the block read-only. */
+  onDecideAsk?: (id: string, status: HrStatus, note: string) => void
 }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [draft, setDraft] = useState<{ appreciation: string; improvement: string
@@ -923,6 +1105,14 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
     }
   }
   const publishable = !!member && faults.length === 0
+  /**
+   * REPORTED, NOT ENFORCED, and deliberately computed after `publishable` so
+   * nothing here can be folded into the gate by accident. A pending proposal
+   * must never hold a result: a rater can attach one to anybody.
+   */
+  const warnings = member ? publishWarnings(asks?.[member.employeeId]
+    ?? { training: [], recognition: [], pips: [], pendingRecommendations: 0,
+         pendingPips: 0, empty: true }) : []
 
   return (
     <>
@@ -979,7 +1169,8 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                 <thead>
                   <tr>
                     <th>Code</th><th>Employee</th><th className="num">Rating</th>
-                    <th>Settled by</th><th>Settled on</th><th>Sign-off</th><th />
+                    <th>Settled by</th><th>Settled on</th><th>Sign-off</th>
+                    <th>Chain asked for</th><th />
                   </tr>
                 </thead>
                 <tbody>
@@ -996,6 +1187,9 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                       <td>{r.signedOff === false
                         ? <Pill tone="amber">not signed</Pill>
                         : <Pill tone="green">signed</Pill>}</td>
+                      <td className="k">
+                        {asksBadge(asks?.[r.employeeId]) ?? <span className="k">—</span>}
+                      </td>
                       <td>
                         <button className="btn ghost sm" type="button"
                                 onClick={() => { setPicked(r.employeeId); setDraft(null) }}>
@@ -1078,6 +1272,25 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                   </button>
                 )}
               </div>
+
+              <ChainAsksBlock asks={asks?.[member.employeeId]} onDecide={onDecideAsk} />
+
+              {warnings.length > 0 && (
+                <div className="banner b-blue" style={{ marginTop: 12 }}>
+                  <span aria-hidden="true">i</span>
+                  <div>
+                    <b>Worth knowing before you release this:</b>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                      {warnings.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                    {/* Said plainly, because an amber list that does not block
+                        trains people to ignore the amber list that does. */}
+                    <div className="k" style={{ marginTop: 6 }}>
+                      None of these stops the publication.
+                    </div>
+                  </div>
+                </div>
+              )}
 
               {faults.length > 0 && (
                 <div className="banner b-amber" style={{ marginTop: 12 }}>

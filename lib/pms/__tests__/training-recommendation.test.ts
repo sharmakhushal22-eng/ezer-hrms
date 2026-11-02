@@ -31,11 +31,12 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { checkTraining, checkTrainingBlock, filled, trainingSummary,
          TRAINING_CATEGORIES, TRAINING_CATEGORY_LABEL, TRAINING_EXAMPLE,
-         MIN_TRAINING_NAME, HR_STATUSES,
+         MIN_TRAINING_NAME, HR_STATUSES, kindOf,
          type TrainingRecommendation } from '../training.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const SQL = read('supabase/migrations/208_pms_training_recommendation.sql')
+const SQL210 = read('supabase/migrations/210_pms_recognition_is_not_training.sql')
 const MGR = read('components/pms/ManagerTabs.tsx')
 const PERF = read('components/ess/Performance.tsx')
 
@@ -156,8 +157,74 @@ test('many per person, from many raters — only exact duplicates are blocked', 
   // An RM L1 may suggest two courses and the HOD a third. The only thing
   // that is not a second opinion is the same rater naming the same training
   // twice, which is a double-submit.
+  //
+  // 208 wrote it over four columns; 210 widened it with kind, because one
+  // table now holds both kinds and the NAMES collide across them. Asserted
+  // against the migration in force, not only the one that introduced it.
   assert.match(SQL, /UNIQUE \(period_id, employee_id, recommended_by, training_name\)/,
     'the uniqueness is wrong, and either blocks a second opinion or allows a double-submit')
+  assert.match(SQL210, /UNIQUE \(period_id, employee_id, recommended_by, kind, training_name\)/,
+    'the widened key is wrong, so a recognition named after a training overwrites it')
+})
+
+// ── 210: the kind is a column, not a prefix ─────────────────────────
+
+test('210 adds the kind, and defaults it to the safe one', () => {
+  assert.match(SQL210, /ADD COLUMN IF NOT EXISTS kind text NOT NULL DEFAULT 'TRAINING'/,
+    'an older row would default to RECOGNITION, inventing a bonus nobody proposed')
+  assert.match(SQL210, /CHECK \(kind IN \('TRAINING','RECOGNITION'\)\)/)
+})
+
+test('kindOf defaults an unmarked row to training', () => {
+  assert.equal(kindOf({}), 'TRAINING')
+  assert.equal(kindOf({ kind: null }), 'TRAINING')
+  assert.equal(kindOf({ kind: 'RECOGNITION' }), 'RECOGNITION')
+  // Not a loose truthiness check: an unexpected value is not a bonus.
+  assert.equal(kindOf({ kind: 'recognition' }), 'TRAINING')
+  assert.equal(kindOf({ kind: 'SOMETHING_ELSE' }), 'TRAINING')
+})
+
+test('210 reads the old constraint name instead of guessing it', () => {
+  // 208 wrote the unique inline, so Postgres named it — and the name built
+  // from four column names is past the 63-byte identifier limit, so what is
+  // in the database is a truncation. A wrong guess would leave the narrow
+  // constraint in force BESIDE the new one, which is the failure that looks
+  // like the migration worked.
+  assert.match(SQL210, /FROM pg_constraint/,
+    'the old constraint is dropped by a guessed name')
+  assert.match(SQL210, /ARRAY\['employee_id','period_id','recommended_by','training_name'\]/,
+    'the match is not on the exact 208 column set, so it could drop the wrong unique')
+  assert.match(SQL210, /contype = 'u'/)
+})
+
+test('210 does not reinterpret anybody\'s words', () => {
+  // The prefix could only be translated into a kind by guessing which of
+  // somebody's sentences meant what. It is safe here because both tables
+  // were empty when it ran — which is a fact about WHEN, so it is recorded
+  // in the migration rather than left to memory.
+  // Comments AND string literals stripped: the prose in a COMMENT ON
+  // legitimately spells out both kinds and names the details column, and a
+  // non-greedy match to the next ";" stops inside it — the literal itself
+  // contains one. Quoted text is documentation; this test is about code.
+  const body = SQL210.replace(/^\s*--.*$/gm, ' ').replace(/'[^']*'/g, "''")
+  assert.ok(!/\bUPDATE\b/i.test(body), '210 rewrites existing rows')
+  // The only honest test of "it does not reinterpret the prose": it never
+  // reads the prose. No WHERE, no split, no LIKE on details.
+  assert.ok(!/\bdetails\b/.test(body),
+    '210 touches the details column, so it is parsing free text after all')
+  assert.match(SQL210, /0 rows/, 'the measurement that made this safe is not recorded')
+})
+
+test('nothing reads the prefix any more', () => {
+  // The writer stopped emitting it; a reader still looking for it would be
+  // silently classifying everything as training.
+  for (const [name, src] of [['Performance.tsx', PERF], ['ManagerTabs.tsx', MGR]] as const) {
+    assert.ok(!/RECOGNITION — \$\{|startsWith\('RECOGNITION/.test(src),
+      `${name} still uses the details prefix as a discriminator`)
+  }
+  assert.match(PERF, /kind: 'RECOGNITION'/, 'the recognition writer does not set the kind')
+  assert.match(PERF, /kind: 'TRAINING' as const/,
+    'the training writer leans on the column default rather than naming it')
 })
 
 test('208 is additive and re-runnable', () => {
@@ -219,6 +286,6 @@ test('re-approving does not duplicate a suggestion', () => {
   // A rater sent back and approving again must not leave two copies.
   const fn = PERF.slice(PERF.indexOf('const saveTraining'),
                         PERF.indexOf('const saveOverall'))
-  assert.match(fn, /onConflict: 'period_id,employee_id,recommended_by,training_name'/,
+  assert.match(fn, /onConflict: 'period_id,employee_id,recommended_by,kind,training_name'/,
     'the upsert key does not match the table\'s unique constraint')
 })

@@ -57,8 +57,20 @@ export const HR_STATUS_LABEL: Record<HrStatus, string> = {
   PENDING: 'Waiting on HR', ACCEPTED: 'Accepted', DECLINED: 'Declined',
 }
 
+/**
+ * WHAT A RATER PROPOSED, of either kind.
+ *
+ * One table holds both because both are proposals HR has not agreed to,
+ * both carry the same PENDING / ACCEPTED / DECLINED lifecycle, and HR should
+ * decide on them in one place. `kind` is what tells them apart — 210.
+ */
+export const RECOMMENDATION_KINDS = ['TRAINING', 'RECOGNITION'] as const
+export type RecommendationKind = typeof RECOMMENDATION_KINDS[number]
+
 export interface TrainingRecommendation {
   id?: string
+  /** Absent on a row written before 210, which was always a training. */
+  kind?: RecommendationKind
   trainingName: string
   category: TrainingCategory
   details?: string | null
@@ -68,6 +80,20 @@ export interface TrainingRecommendation {
   hrStatus?: HrStatus
   hrNote?: string | null
 }
+
+/**
+ * THE DEFAULT IS TRAINING, and that is the safe direction.
+ *
+ * A row with no kind was written by a build that only had the training
+ * block, so training is what it is. Reading an unknown row as recognition
+ * would invent a bonus proposal nobody made — and HR acts on these.
+ */
+export function kindOf(r: { kind?: string | null }): RecommendationKind {
+  return r.kind === 'RECOGNITION' ? 'RECOGNITION' : 'TRAINING'
+}
+
+export const isTraining = (r: { kind?: string | null }) => kindOf(r) === 'TRAINING'
+export const isRecognition = (r: { kind?: string | null }) => kindOf(r) === 'RECOGNITION'
 
 /** A name shorter than this is not a training, it is a word. */
 export const MIN_TRAINING_NAME = 3
@@ -122,7 +148,13 @@ export function checkTrainingBlock(rows: {
     .map(c => c.fault!)
 }
 
-/** What HR sees at a glance: how many, and how many still need a decision. */
+/**
+ * What HR sees at a glance: how many, and how many still need a decision.
+ *
+ * A row with no hrStatus counts as PENDING. The column defaults to PENDING,
+ * but a row fetched by a query that did not select it must not vanish from
+ * the count — that would hide work from the person whose queue this is.
+ */
 export function trainingSummary(rows: TrainingRecommendation[]): {
   total: number; pending: number; accepted: number; declined: number
 } {
@@ -131,6 +163,17 @@ export function trainingSummary(rows: TrainingRecommendation[]): {
     total: rows.length,
     pending: by('PENDING'), accepted: by('ACCEPTED'), declined: by('DECLINED'),
   }
+}
+
+/** The same count, per kind, for a queue that lists them separately. */
+export function recommendationSummary(rows: TrainingRecommendation[]): {
+  training: ReturnType<typeof trainingSummary>
+  recognition: ReturnType<typeof trainingSummary>
+  pending: number
+} {
+  const training = trainingSummary(rows.filter(isTraining))
+  const recognition = trainingSummary(rows.filter(isRecognition))
+  return { training, recognition, pending: training.pending + recognition.pending }
 }
 
 // ── what a score invites: a PIP at one end, recognition at the other ─────

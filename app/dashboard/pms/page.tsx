@@ -33,6 +33,10 @@ import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
 import { type Frequency, type Policy } from '@/lib/pms/policy'
 import { localToday } from '@/components/pms/CycleHeader'
+import { chainAsksByEmployee, type ChainAsks,
+         type RecRowDb } from '@/lib/pms/hrQueue'
+import { pipFromRow, type PipRowDb } from '@/lib/pms/pip'
+import { type HrStatus } from '@/lib/pms/training'
 
 // Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
 // the roll-up is what an admin opens first, and routing coverage is the thing
@@ -46,7 +50,14 @@ const MISSING_TABLE = 'PGRST205'
 /** The HR PIP queue reads pms_pip, which arrives with 066. Empty rather than
  *  sample rows: a made-up name in an action queue is something somebody tries
  *  to act on. Module scope so it is not a fresh array on every render. */
-const PIP_QUEUE: PipRow[] = []
+/**
+ * THE PIP QUEUE IS REAL NOW.
+ *
+ * This was a hardcoded empty array: raters could raise a PIP request and the
+ * HR tab that exists to review them always rendered "No PIP requests". The
+ * write had no reader. It is loaded with the publish workspace, because the
+ * two answer the same question about the same people.
+ */
 
 interface Coverage {
   total: number; l1: number; l2: number
@@ -116,6 +127,8 @@ export default function PmsPage() {
   const [fill, setFill] = useState<FillRow[] | null>(null)
   /** What has reached HR's rung — see the loader. */
   const [pubRows, setPubRows] = useState<PublishRow[] | null>(null)
+  const [asks, setAsks] = useState<Record<string, ChainAsks>>({})
+  const [pipQueue, setPipQueue] = useState<PipRow[]>([])
   const [publishing, setPublishing] = useState<string | null>(null)
   /**
    * WHICH COMPANY THE PUBLISH WORKSPACE IS ACTING IN. 203.
@@ -445,6 +458,8 @@ export default function PmsPage() {
         // that is a waiting state rather than a fault: every other tab works.
         console.error('[pms] publish queue unavailable:', pub.error)
         setPubRows([])
+        setAsks({})
+        setPipQueue([])
       } else {
         /**
          * Cast because chain_stage is NOT in the generated database types: 197
@@ -492,6 +507,72 @@ export default function PmsPage() {
             .in('period_id', periodIds).eq('discussion_type', 'FINAL_REVIEW')
             .in('employee_id', ids),
         ]) : [{ data: [] }, { data: [] }, { data: [] }, { data: [] }] as const
+
+        /**
+         * WHAT THE CHAIN ASKED FOR, for the whole period in two more reads.
+         *
+         * TOLERANT OF 210 NOT HAVING RUN. `kind` is what tells a training
+         * suggestion from a recognition proposal, and selecting a column
+         * PostgREST does not know about fails the entire request with a 400 —
+         * which would empty the publish workspace, not just this block. So the
+         * narrow select is tried first and a failure retries without it.
+         *
+         * A row read without `kind` falls back to TRAINING (kindOf), which is
+         * right for every row that can exist before 210: the recognition
+         * writer sets the kind, and it is the same change that added the
+         * column.
+         */
+        const byIdCode = new Map((emps.data ?? []).map(e => {
+          const r = e as { id: string; emp_code?: string; full_name?: string }
+          return [r.id, r] as const
+        }))
+        const recSel = 'id, employee_id, period_id, kind, training_name, category, '
+                     + 'details, recommended_by, recommended_by_role, recommended_at, '
+                     + 'hr_status, hr_note'
+        const [recsTry, pipsR] = ids.length ? await Promise.all([
+          supabase.from('pms_training_recommendation').select(recSel)
+            .in('period_id', periodIds).in('employee_id', ids),
+          supabase.from('pms_pip')
+            .select('id, employee_id, period_id, requested_by, requested_by_role, '
+                  + 'requested_at, trigger_rating, request_reason, proposed_start, '
+                  + 'proposed_end, hr_status, status, employee_ack, final_outcome')
+            .in('period_id', periodIds).in('employee_id', ids),
+        ]) : [{ data: [], error: null }, { data: [], error: null }] as const
+        const recsR = recsTry.error && ids.length
+          ? await supabase.from('pms_training_recommendation')
+              .select(recSel.replace('kind, ', ''))
+              .in('period_id', periodIds).in('employee_id', ids)
+          : recsTry
+        // Named, so a missing table reads as "nothing asked for" rather than
+        // as a screen that quietly lost a section.
+        const recRows = (recsR.data ?? []) as RecRowDb[]
+        const pipRows = (pipsR.data ?? []) as PipRowDb[]
+        // The raters' own names, from the employees already fetched for this
+        // period plus anybody who only appears as a proposer.
+        const askNames: Record<string, string> = {}
+        for (const e of emps.data ?? []) {
+          const r = e as { id: string; full_name?: string }
+          if (r.full_name) askNames[r.id] = r.full_name
+        }
+        const proposers = [...new Set([
+          ...recRows.map(r => r.recommended_by), ...pipRows.map(r => r.requested_by),
+        ].filter((x): x is string => !!x && !askNames[x]))]
+        if (proposers.length) {
+          const ps = await supabase.from('employees')
+            .select('id, full_name').in('id', proposers)
+          for (const e of ps.data ?? []) {
+            const r = e as { id: string; full_name?: string }
+            if (r.full_name) askNames[r.id] = r.full_name
+          }
+        }
+        setAsks(chainAsksByEmployee(recRows, pipRows, askNames))
+        setPipQueue(pipRows.map(r => ({
+          code: byIdCode.get(String(r.employee_id))?.emp_code ?? '',
+          name: byIdCode.get(String(r.employee_id))?.full_name ?? 'Unknown',
+          raisedBy: (r.requested_by && askNames[r.requested_by])
+                    || (r.requested_by_role ?? '').replace(/_/g, ' ') || 'a manager',
+          pip: pipFromRow(r),
+        })))
         // KEYED ON (period, employee). Keying on the employee alone was safe
         // while this read one period; across several it silently shows one
         // period's feedback against another's rating.
@@ -762,6 +843,41 @@ export default function PmsPage() {
     return (row.companyName ?? '') === (pubCompany ?? '')
   }, [pubRows, pubCompany, pubCompanies])
 
+  /**
+   * HR'S DECISION ON ONE PROPOSAL.
+   *
+   * Writes only hr_status, the note and who decided — never the proposal
+   * itself. A rater's words stay a rater's words; HR agreeing or not is a
+   * separate column, which is the whole reason 208 gave these rows their own
+   * lifecycle instead of filing them as awards.
+   *
+   * ACCEPTING DOES NOT AWARD ANYTHING. The recognition that actually reaches
+   * the employee is the benefits list on the publish card, written by HR and
+   * released by publishing. Making acceptance create a benefit row would mean
+   * a rater's proposal could put an award in front of an employee with HR
+   * having clicked once, and there would be no way to accept the intent while
+   * wording the award differently.
+   */
+  const decideAsk = useCallback(async (id: string, status: HrStatus, note: string) => {
+    setCommitNote(null)
+    const { error } = await supabase.from('pms_training_recommendation')
+      .update({
+        hr_status: status,
+        hr_note: note.trim() || null,
+        hr_actioned_by: grant.employeeId ?? null,
+        hr_actioned_at: new Date().toISOString(),
+      })
+      .eq('id', id)
+    if (error) {
+      setCommitNote(`That decision was refused: ${error.message}`)
+      return
+    }
+    // Reloaded rather than patched in place: the same row feeds the badge in
+    // the table, the counts and the warnings, and three hand-updated copies
+    // is how one of them ends up stale.
+    load()
+  }, [grant.employeeId, load])
+
   const saveFeedback = useCallback(async (employeeId: string, patch: {
     appreciation: string; improvement: string
     benefits: { type: string; note: string }[]
@@ -956,7 +1072,8 @@ export default function PmsPage() {
                                bands={bandList} canAct={canRunPostFinal}
                                note={postFinalNote(postFinalOwner, myHrRole)}
                                company={pubCompany} onCompany={setPubCompany}
-                               companies={pubCompanies} allowAll={pubAllowAll} />}
+                               companies={pubCompanies} allowAll={pubAllowAll}
+                               asks={asks} onDecideAsk={canRunPostFinal ? decideAsk : undefined} />}
           {tab === 'summary'  && <SummaryTab rows={pubRows} loading={loading}
                                deptNames={deptNames} bands={bandList}
                                periodLabel={naming?.title} />}
@@ -970,7 +1087,7 @@ export default function PmsPage() {
                                improvementAtOrBelow={improvementAtOrBelow}
                                periodId={periodId} periodLabel={naming?.title}
                                onCommitted={m => { setCommitNote(m); load() }} />}
-          {tab === 'pip'      && <PipTab queue={PIP_QUEUE} />}
+          {tab === 'pip'      && <PipTab queue={pipQueue} />}
           {tab === 'reports'  && <ReportsTab />}
           {tab === 'chain'    && <FlowTab chainCoverage={cov ? <ChainCoverage cov={cov} /> : null} />}
         </>
