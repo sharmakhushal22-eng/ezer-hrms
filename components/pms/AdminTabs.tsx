@@ -915,9 +915,11 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
       faults.push(`Improvement feedback is mandatory at a rating of ${member.finalRating}.`)
     }
     if (member.signedOff === false) {
-      faults.push('The final review one-to-one is not acknowledged by both of '
-                + 'them yet. The rating is settled; it is the employee seeing '
-                + 'it that waits on their acknowledgement.')
+      // 207: the manager's acknowledgement, not both. The employee's is
+      // recorded when they give it and gates nothing.
+      faults.push('The final review one-to-one is not on record with the '
+                + 'manager\u2019s acknowledgement yet. The conversation has to '
+                + 'have happened before the rating reaches them.')
     }
   }
   const publishable = !!member && faults.length === 0

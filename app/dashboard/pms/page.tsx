@@ -512,9 +512,13 @@ export default function PmsPage() {
         // 200's gate: BOTH acknowledgements. A row with no final review at all
         // is NOT signed, which is the honest answer — the trigger will refuse
         // it for exactly that reason.
+        // 207: THE MANAGER'S ACKNOWLEDGEMENT ALONE. It used to need the
+        // employee's too, which left a finalised rating unpublishable while
+        // the person it was about had not yet ticked a box about a
+        // conversation their HOD had already confirmed. The employee's half
+        // is still recorded; it no longer gates the result.
         const signed = new Set((frs.data ?? [])
-          .filter(x => (x as { employee_ack?: boolean }).employee_ack
-                    && (x as { manager_ack?: boolean }).manager_ack)
+          .filter(x => (x as { manager_ack?: boolean }).manager_ack)
           .map(x => { const r = x as { employee_id: string; period_id: string }
                       return K(r.period_id, r.employee_id) }))
         const byId = new Map((emps.data ?? []).map(e => {

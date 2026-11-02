@@ -144,8 +144,15 @@ test('relTime speaks the inbox voice', () => {
 })
 
 test('dayLabel labels days in a thread', () => {
-  assert.equal(dayLabel(min(10)), 'Today')
-  { const p = pinned(); assert.equal(dayLabel(p.yesterday, p.now), 'Yesterday') }
+  // PINNED, like the two below it. This one kept the wall clock and so had
+  // a ten-minute window of failure every night: run it at 00:05 and "ten
+  // minutes ago" is yesterday, so 'Today' is wrong and the code is fine.
+  // Observed at 00:0x on 3 November. The sibling assertions were pinned for
+  // this exact reason and this one was missed.
+  const p = pinned()
+  const tenAgo = new Date(p.now - 10 * 60_000).toISOString()
+  assert.equal(dayLabel(tenAgo, p.now), 'Today')
+  assert.equal(dayLabel(p.yesterday, p.now), 'Yesterday')
 })
 
 test('messages group inside a 5-minute window', () => {

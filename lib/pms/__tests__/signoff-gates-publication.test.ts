@@ -22,7 +22,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { finaliseQueue, type TeamMember } from '../team.ts'
-import { canPublishResult } from '../oneToOne.ts'
+import { canLockWeightage, canPublishResult } from '../oneToOne.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const MGR = read('components/pms/ManagerTabs.tsx')
@@ -71,16 +71,44 @@ test('the finalise queue no longer chases the employee', () => {
     'the not-logged message still asks for acknowledgements')
 })
 
-test('PUBLICATION still requires both signatures — nothing was weakened', () => {
-  // The gate did not disappear; it moved to the step it protects.
-  assert.equal(canPublishResult([
-    { discussion_type: 'FINAL_REVIEW', employee_ack: true, manager_ack: false },
-  ]).open, false)
+test('PUBLICATION needs the manager\'s signature — 207 dropped the employee\'s', () => {
+  // 200 moved this gate from finalisation to publication and required BOTH
+  // signatures, which is what docx Stage 6 and §230 ask for.
+  //
+  // 207 narrowed it, on instruction, after the full-cycle walk left Isha
+  // Nair SRS9057 finalised at 4 and unpublishable because her FINAL_REVIEW
+  // log carried the HOD's tick and not hers: "no need to ack of employee at
+  // this stage."
+  //
+  // A DELIBERATE DIVERGENCE FROM THE SPEC, recorded here, in 207's header
+  // and on canPublishResult — not left as a silent difference.
   assert.equal(canPublishResult([
     { discussion_type: 'FINAL_REVIEW', employee_ack: false, manager_ack: true },
-  ]).open, false)
+  ]).open, true, 'the manager\'s acknowledgement alone no longer opens it')
   assert.equal(canPublishResult([
     { discussion_type: 'FINAL_REVIEW', employee_ack: true, manager_ack: true },
+  ]).open, true)
+  // What survives: somebody in authority asserting the conversation
+  // happened. The employee's tick alone is not that.
+  assert.equal(canPublishResult([
+    { discussion_type: 'FINAL_REVIEW', employee_ack: true, manager_ack: false },
+  ]).open, false, 'a result can be published on the employee\'s tick alone')
+  // And no log at all is still no.
+  assert.equal(canPublishResult([]).open, false)
+})
+
+test('locking weightage still needs BOTH sides', () => {
+  // 207 touched publication only. The KRA one-to-one is about agreeing what
+  // is measured, and that gate is unchanged — if this ever starts passing
+  // on one signature, the narrowing has leaked.
+  assert.equal(canLockWeightage([
+    { discussion_type: 'KRA_SETTING', employee_ack: false, manager_ack: true },
+  ]).open, false, 'weightage locks on the manager\'s signature alone')
+  assert.equal(canLockWeightage([
+    { discussion_type: 'KRA_SETTING', employee_ack: true, manager_ack: false },
+  ]).open, false)
+  assert.equal(canLockWeightage([
+    { discussion_type: 'KRA_SETTING', employee_ack: true, manager_ack: true },
   ]).open, true)
 })
 
@@ -128,4 +156,57 @@ test('200 relaxes finalise and adds the publication trigger', () => {
   assert.match(sql, /OLD\.workflow_status IN \('PUBLISHED','ACKNOWLEDGED'\)/)
   // And only when the policy asks for a final review at all.
   assert.match(sql, /IF NOT COALESCE\(v_req, false\) THEN RETURN NEW; END IF;/)
+})
+
+// ── 207: publication stops waiting on the employee ───────────────────────
+
+test('207 narrows the publish gate to the manager', () => {
+  const sql = read('supabase/migrations/207_pms_publish_needs_the_manager_not_the_employee.sql')
+  const code = sql.replace(/^\s*--.*$/gm, ' ')
+  assert.match(code, /AND discussion_type = 'FINAL_REVIEW' AND manager_ack;/,
+    'the publish trigger still demands the employee acknowledgement')
+  assert.ok(!/employee_ack AND manager_ack/.test(code),
+    'both signatures are still required to publish')
+  // The log still has to exist and be signed by somebody in authority.
+  assert.match(code, /IF v_n = 0 THEN/, 'the gate no longer refuses anything')
+  assert.match(code, /RAISE EXCEPTION '%', v_why/,
+    'the refusal is gone, or the RAISE format is not a literal')
+})
+
+test('207 keeps the policy opt-out it inherited', () => {
+  // A policy with final_review_one_to_one off never had this gate, and
+  // narrowing the gate must not accidentally switch it on for them.
+  const sql = read('supabase/migrations/207_pms_publish_needs_the_manager_not_the_employee.sql')
+  assert.match(sql, /IF NOT COALESCE\(v_req, false\) THEN RETURN NEW; END IF;/,
+    'the policy check was lost in the rewrite')
+})
+
+test('207 still ignores anything that is not a fresh publish', () => {
+  // Re-saving a published row, or any other status change, must not be
+  // re-gated — 204 exists because that mistake stranded a record once.
+  const sql = read('supabase/migrations/207_pms_publish_needs_the_manager_not_the_employee.sql')
+  assert.match(sql, /OR OLD\.workflow_status IN \('PUBLISHED','ACKNOWLEDGED'\)/,
+    'an already-published row is gated again')
+})
+
+test('207 changes no data and replaces one function', () => {
+  const sql = read('supabase/migrations/207_pms_publish_needs_the_manager_not_the_employee.sql')
+  const body = sql.replace(/^\s*--.*$/gm, ' ')
+  for (const f of [/\bDROP\s+TABLE\b/i, /\bDELETE\s+FROM\b/i, /\bTRUNCATE\b/i]) {
+    assert.ok(!f.test(body), `207 matches ${f}`)
+  }
+  assert.match(sql, /CREATE OR REPLACE FUNCTION pms_block_unsigned_publish\(\)/)
+  assert.match(sql, /DROP TRIGGER IF EXISTS trg_pms_publish_needs_signoff/)
+})
+
+test('the divergence from the spec is written down', () => {
+  // §230 halts publication until the log is "mutually signed off". This
+  // product no longer does. A future reader comparing the two must find the
+  // reason here, not a silent difference.
+  const sql = read('supabase/migrations/207_pms_publish_needs_the_manager_not_the_employee.sql')
+  assert.match(sql, /divergence/i, '207 does not record that it diverges from the spec')
+  assert.match(sql, /§230|Stage 6/, '207 does not name what it diverges from')
+  const oto = read('lib/pms/oneToOne.ts')
+  assert.match(oto, /divergence/i,
+    'canPublishResult does not record that it diverges from the spec')
 })

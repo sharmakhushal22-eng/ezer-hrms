@@ -200,15 +200,23 @@ export interface Gate {
   because: string
 }
 
-function gateOn(logs: Log[], type: DiscussionType, whatItUnblocks: string): Gate {
+/**
+ * `enough` decides what counts as signed, because the two gates no longer
+ * ask the same question. Weightage locking still needs BOTH sides; 207
+ * dropped the employee's half from publication. Passing the predicate in
+ * keeps one implementation of "find the log, explain what is missing"
+ * rather than two that drift.
+ */
+function gateOn(logs: Log[], type: DiscussionType, whatItUnblocks: string,
+                enough: (l: Log) => boolean = l => ackState(l) === 'both'): Gate {
   const of = logs.filter(l => l.discussion_type === type)
   if (of.length === 0) {
     return { open: false, because:
       `No ${TYPE_LABEL[type].toLowerCase()} discussion has been logged. ${whatItUnblocks}` }
   }
-  const done = of.find(l => ackState(l) === 'both')
+  const done = of.find(enough)
   if (done) return { open: true, because: '' }
-  // There is a log, but it is not acknowledged by both — say which side.
+  // There is a log, but it is not signed enough — say which side.
   const nearest = of[of.length - 1]
   return { open: false, because:
     `${waitingOn(nearest)}. ${whatItUnblocks}` }
@@ -224,12 +232,28 @@ export function canLockWeightage(logs: Log[]): Gate {
 }
 
 /**
- * RULE 8 — the result publishes only after the final-review one-to-one is
- * acknowledged by both sides.
+ * RULE 8, AS AMENDED BY 207 — the result publishes once the final-review
+ * one-to-one is on record WITH THE MANAGER'S ACKNOWLEDGEMENT.
+ *
+ * It used to need both. Reported while walking the full cycle: a HOD had
+ * finalised, the log carried their tick and not the employee's, and the
+ * result could not be released. Answered: no employee acknowledgement is
+ * needed at this stage.
+ *
+ * So the employee's half is RECORDED AND NO LONGER A GATE. This is a
+ * deliberate divergence from docx Stage 6 and §230, which halt publication
+ * until the log is "mutually signed off" — written down here and in 207's
+ * header rather than left as a silent difference between the product and
+ * the spec.
+ *
+ * What survives is the half that carries the weight: somebody in authority
+ * asserting the conversation happened before the rating reaches the person
+ * it is about.
  */
 export function canPublishResult(logs: Log[]): Gate {
   return gateOn(logs, 'FINAL_REVIEW',
-    'A rating that reaches somebody before the conversation does is how an appraisal turns into a grievance.')
+    'A rating that reaches somebody before the conversation does is how an appraisal turns into a grievance.',
+    l => !!l.manager_ack)
 }
 
 /** The rows §3.3's table shows: every logged discussion, plus a placeholder
