@@ -29,6 +29,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb, grantForRequest, actorFromRequest } from '@/lib/rms/server'
 import { companyFilter } from '@/lib/rms/resolve'
 import { canManage } from '@/lib/rms/resolve'
+import { isHrRole, pmsRoleOf } from '@/lib/pms/postFinal'
 
 export const dynamic = 'force-dynamic'
 
@@ -109,10 +110,45 @@ function pick(body: Record<string, unknown>, cols: readonly string[]) {
   return out
 }
 
-async function gate(req: NextRequest) {
+/**
+ * ACTIONS HR MAY TAKE WITHOUT MANAGING THE MODULE.
+ *
+ * Everything else behind this route is admin CONFIGURATION — the policy, the
+ * KRA library, the rating scale, generating and opening periods — and HR does
+ * not configure the module.
+ *
+ * The bulk rating upload is not configuration. It is HR's own job: §2 grants
+ * bulk_upload_ratings to HR Manager, HR Head and Admin, and to nobody else.
+ * It shared this route only because the route happened to be where the RPC
+ * was called from, and so inherited a gate meant for the editor — which left
+ * HR able to open Final Rating Upload, parse a file and build a validated
+ * batch, only to be refused at the commit.
+ */
+const HR_ACTIONS = new Set(['upload_commit'])
+
+/**
+ * WHY THE TEST IS pmsRoleOf AND NOT canSeeScreen('pms.upload').
+ *
+ * The screen key looks like the natural answer and is the wrong one: it is
+ * held by L1_MANAGER, L2_MANAGER and HOD as well, which is exactly how
+ * Publish Results became reachable by every line manager when it borrowed
+ * that key. Gating a bulk override on it would let any line manager rewrite
+ * final ratings for the whole period.
+ *
+ * pmsRoleOf is the reading the publish path already uses, so the two cannot
+ * drift into disagreeing about who counts as HR, and it maps an unknown role
+ * to EMPLOYEE rather than to anything privileged.
+ */
+async function gate(req: NextRequest, action?: string) {
   const grant = await grantForRequest(req)
-  if (!canManage(grant, 'Performance')) {
-    return { error: bad('You need full access to Performance to change this.', 403) } as const
+  const manages = canManage(grant, 'Performance')
+  const hrMay = !!action && HR_ACTIONS.has(action)
+             && isHrRole(pmsRoleOf(grant.roles, grant.isSuperAdmin))
+  if (!manages && !hrMay) {
+    return { error: bad(action && HR_ACTIONS.has(action)
+      ? 'A bulk rating upload is HR\'s to commit. This account is not an HR '
+        + 'Manager, HR Head or Admin.'
+      : 'You need full access to Performance to change this.', 403) } as const
   }
   const actor = await actorFromRequest(req)
   return { grant, actor } as const
@@ -164,12 +200,17 @@ export async function GET(req: NextRequest) {
 
 // ─── POST: one write ─────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const g = await gate(req)
+  // READ BEFORE GATING, because the gate depends on WHICH action is being
+  // asked for — the upload is HR's, the rest is admin configuration.
+  // Parsing JSON has no side effects, and an unparseable body yields an
+  // empty action, which matches no case and is refused as admin-only.
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  const action = String(body.action ?? '')
+
+  const g = await gate(req, action)
   if ('error' in g) return g.error
   const { actor } = g
 
-  const body = await req.json().catch(() => ({})) as Record<string, unknown>
-  const action = String(body.action ?? '')
   const str = (k: string) => (typeof body[k] === 'string' && (body[k] as string).trim())
     ? (body[k] as string).trim() : null
 

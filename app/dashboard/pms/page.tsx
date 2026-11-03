@@ -18,7 +18,7 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { companyFilter, canSeeScreen } from '@/lib/rms/resolve'
+import { companyFilter, canSeeScreen, canManage } from '@/lib/rms/resolve'
 import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
 import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
@@ -113,6 +113,29 @@ interface Coverage {
 const SCREEN_KEY: Partial<Record<Tab, string>> = {}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
 
+/**
+ * TABS THAT CONFIGURE THE MODULE, which HR does not do.
+ *
+ * Setup & Controls is the write surface for the policy, the KRA library, the
+ * rating scale and the period calendar. Every one of its saves goes through
+ * /api/pms/admin, which requires canManage('Performance') — so for anyone
+ * else the tab could only ever render a refusal.
+ *
+ * It is HIDDEN rather than left to refuse because the screen permission that
+ * governs it is default-visible: HR roles have no PMS screen rows at all, so
+ * canSeeScreen says yes to a tab whose every action says no.
+ *
+ * NOT the final rating upload. That looks like an admin screen and is not:
+ * bulk_upload_ratings is HR's under §2, and the route now gates it on being
+ * HR rather than on managing the module.
+ *
+ * This reads the SAME canManage the API enforces, so the navigation and the
+ * server cannot disagree. Nothing is written to the roles module to achieve
+ * it — adding rows for a role there would start hiding every tab it has no
+ * row for, which is the privilege removal migration 142 warns about.
+ */
+const CONFIGURES_THE_MODULE = new Set<Tab>(['setup'])
+
 
 /**
  * THE THREE STREAMS A RATER CAN OPEN, fetched together.
@@ -193,7 +216,10 @@ export default function PmsPage() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
   useEffect(() => {
-    const vis = (['overview','config','setup','policies','fill','publish','summary','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, screenKeyOf(k)))
+    const mayConfigure = canManage(grant, 'Performance')
+    const canOpen = (k: Tab) => canSeeScreen(grant, screenKeyOf(k))
+      && (mayConfigure || !CONFIGURES_THE_MODULE.has(k))
+    const vis = (['overview','config','setup','policies','fill','publish','summary','upload','pip','reports','chain'] as Tab[]).filter(canOpen)
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
@@ -1053,7 +1079,9 @@ export default function PmsPage() {
           eight tabs, eight filled chips read as eight competing buttons; an
           underline puts the weight on the one you are in. */}
       <div className="tabs">
-        {TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))).map(t => (
+        {TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))
+                        && (canManage(grant, 'Performance')
+                            || !CONFIGURES_THE_MODULE.has(t.k))).map(t => (
           <button key={t.k} type="button" onClick={() => setTab(t.k)}
                   className={tab === t.k ? 'on' : undefined}
                   aria-current={tab === t.k ? 'page' : undefined}>
