@@ -251,3 +251,97 @@ export function oneRow(entry: {
     appreciation_remark: t(entry.appreciation),
   }
 }
+
+// ── who the chain has finished with ──────────────────────────────────────
+//
+// Requested: Final Rating Upload should show "all the employees that have
+// already done with finalization from hod and ready for hr final rating
+// upload ... and their current status".
+//
+// ── WHOEVER SIGNED IT ────────────────────────────────────────────────────
+//
+// Not only the rows whose finalised_by_role is HOD. Who may finalise is a
+// policy setting — who_can_finalise — so on this database three people were
+// settled by the HOD and one by an HR Manager, and that fourth rating is
+// every bit as finished and every bit as much HR's to act on. Filtering on
+// the role would hide it with no way to tell it was hidden.
+//
+// ── THE 386 ──────────────────────────────────────────────────────────────
+//
+// COUNTED, NOT LISTED. Of 395 enrolled in the open period, 386 have not
+// started. The publish queue once listed all of them — 392 rows of which 2
+// were actionable — and the screen whose entire job was "which results are
+// ready" became the one place you could not find them. So the people still
+// with the chain are reported as a number and a sentence, never as rows.
+
+export type QueueStatus = 'READY' | 'PUBLISHED' | 'ACKNOWLEDGED'
+
+export interface QueueRow {
+  code: string
+  name: string
+  rating: number | null
+  /** The role that settled it — HOD, HR_MANAGER, whoever the policy allows. */
+  finalisedBy: string | null
+  status: QueueStatus
+  /**
+   * Exited AND already rated, which rule 12 locks. Surfaced here rather than
+   * left to the commit: a row offered as "ready" that the engine then refuses
+   * is worse than one that says up front it cannot be touched.
+   */
+  locked: boolean
+  flag: string | null
+  periodCode: string | null
+}
+
+export interface FinalisedQueue {
+  /** Settled by the chain and not yet released. HR's actual work. */
+  ready: QueueRow[]
+  /** Already out. Shown separately so it cannot read as work outstanding. */
+  done: QueueRow[]
+  /** Everyone else, as a number. See the note above. */
+  inChain: number
+}
+
+export function finalisedQueue(
+  rows: { employee_code?: string | null; employee_name?: string | null
+          final_rating?: number | null; finalised_by_role?: string | null
+          workflow_status?: string | null; employment_flag?: string | null
+          period_code?: string | null }[] | null | undefined,
+): FinalisedQueue {
+  const ready: QueueRow[] = []
+  const done: QueueRow[] = []
+  let inChain = 0
+
+  for (const r of rows ?? []) {
+    const wf = String(r.workflow_status ?? '').toUpperCase()
+    const out = wf === 'PUBLISHED' || wf === 'ACKNOWLEDGED'
+    const rated = r.final_rating !== null && r.final_rating !== undefined
+    // A RATING IS THE MARKER, the same one the publish workspace uses: the
+    // finalise step is what writes it, so a row without one has not been
+    // settled however far along its status looks. `|| out` keeps a released
+    // row visible even in the odd case that it carries no number.
+    if (!rated && !out) { inChain++; continue }
+
+    const flag = String(r.employment_flag ?? '').toUpperCase()
+    const row: QueueRow = {
+      code: String(r.employee_code ?? '').trim(),
+      name: String(r.employee_name ?? '').trim(),
+      rating: rated ? Number(r.final_rating) : null,
+      finalisedBy: r.finalised_by_role ?? null,
+      status: wf === 'PUBLISHED' ? 'PUBLISHED' : wf === 'ACKNOWLEDGED' ? 'ACKNOWLEDGED' : 'READY',
+      locked: flag === 'EXITED' && rated,
+      flag: r.employment_flag ?? null,
+      periodCode: r.period_code ?? null,
+    }
+    ;(out ? done : ready).push(row)
+  }
+
+  const byCode = (a: QueueRow, b: QueueRow) => a.code.localeCompare(b.code)
+  return { ready: ready.sort(byCode), done: done.sort(byCode), inChain }
+}
+
+export const QUEUE_STATUS_LABEL: Record<QueueStatus, string> = {
+  READY: 'Finalised — waiting on you',
+  PUBLISHED: 'Published to the employee',
+  ACKNOWLEDGED: 'Published and acknowledged',
+}

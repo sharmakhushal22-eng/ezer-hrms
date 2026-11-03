@@ -51,7 +51,8 @@ import { PERIODS_PER_YEAR, previewPeriods, windowsFor, periodState, conflicts,
          type Frequency, type Policy, type Person } from '@/lib/pms/policy'
 import { FLAG_LABEL, FLAG_MEANING, type Flag } from '@/lib/pms/employment'
 import { TEMPLATE_COLUMNS, ERROR_TEXT, checkUpload, summarise,
-         searchEnrolled, oneRow, type Candidate, type Known,
+         searchEnrolled, oneRow, finalisedQueue, QUEUE_STATUS_LABEL,
+         type Candidate, type Known, type QueueRow,
          type UploadRow } from '@/lib/pms/upload'
 import { STATUS_LABEL, whatNext, type Pip } from '@/lib/pms/pip'
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
@@ -1564,6 +1565,106 @@ async function commitRatings(
 }
 
 /**
+ * WHO THE CHAIN HAS FINISHED WITH, on the screen where HR acts on them.
+ *
+ * Requested: show "all the employees that have already done with
+ * finalization from hod and ready for hr final rating upload ... and their
+ * current status".
+ *
+ * Three groups, and the third is a sentence rather than rows: 386 of the
+ * 395 people enrolled in this period have not started, and listing them is
+ * what made the publish queue unreadable before it was narrowed. The ones
+ * already released are kept, separately, so the screen can be used to
+ * confirm the cycle is finished — but never mistaken for work outstanding.
+ */
+function FinalisedQueue({ rows, periodLabel, onPick, picked }: {
+  rows?: FillRow[] | null
+  periodLabel?: string
+  onPick: (c: Candidate) => void
+  picked: Candidate | null
+}) {
+  const q = useMemo(() => finalisedQueue(rows), [rows])
+  const toCandidate = (r: QueueRow): Candidate => ({
+    code: r.code, name: r.name, rating: r.rating,
+    flag: r.flag, periodCode: r.periodCode,
+  })
+
+  if (rows === null || rows === undefined) return <div className="k">Loading…</div>
+
+  return (
+    <>
+      <Card title={`Finalised by the chain, waiting on you (${q.ready.length})`}
+            sub={`Settled ratings for ${periodLabel || 'this period'}, whoever signed them off`
+               + ` — the finaliser is the HOD on most policies and may be another role.`
+               + (q.inChain ? ` ${q.inChain} more ${q.inChain === 1 ? 'appraisal is' : 'appraisals are'}`
+                            + ' still with the chain and will appear here once settled.' : '')}>
+        {!q.ready.length ? (
+          <Empty what="Nothing is waiting"
+                 why={q.inChain
+                   ? `A rating reaches this list once the chain has settled it. ${q.inChain} ${q.inChain === 1 ? 'appraisal is' : 'appraisals are'} still in the chain.`
+                   : 'A rating reaches this list once the chain has settled it.'} />
+        ) : (
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Finalised by</th><th>Status</th><th /></tr>
+              </thead>
+              <tbody>
+                {q.ready.map(r => (
+                  <tr key={r.code}>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num"><b>{r.rating ?? '—'}</b></td>
+                    <td className="k">{(r.finalisedBy ?? '—').replace(/_/g, ' ')}</td>
+                    <td>
+                      {r.locked
+                        ? <Pill tone="grey">locked — exited and rated</Pill>
+                        : <Pill tone="amber">{QUEUE_STATUS_LABEL[r.status]}</Pill>}
+                    </td>
+                    <td>
+                      <button className="btn ghost sm" type="button" disabled={r.locked}
+                              onClick={() => onPick(toCandidate(r))}>
+                        {picked?.code === r.code ? 'Open below' : 'Set rating'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {q.done.length > 0 && (
+        <Card title={`Already released (${q.done.length})`}
+              sub="Out to the employee. Here so the cycle can be read at a glance, not because anything is owed on them.">
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Finalised by</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {q.done.map(r => (
+                  <tr key={r.code}>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num">{r.rating ?? '—'}</td>
+                    <td className="k">{(r.finalisedBy ?? '—').replace(/_/g, ' ')}</td>
+                    <td><Pill tone="green">{QUEUE_STATUS_LABEL[r.status]}</Pill></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </>
+  )
+}
+
+/**
  * ONE PERSON'S FINAL RATING, found by employee code or name.
  *
  * Requested: "final rating can be uploaded in bulk or hr can also give
@@ -1579,16 +1680,24 @@ async function commitRatings(
  * and applied; one person is looked up, and the rating they are on NOW is
  * put in front of the reviewer before they change it.
  */
-function OneEmployeeRating({ enrolled, known, periodId, periodLabel, onCommitted }: {
+function OneEmployeeRating({ enrolled, known, periodId, periodLabel, onCommitted,
+                             picked, onPicked }: {
   enrolled?: FillRow[] | null
   known: Known
   periodId?: string | null
   periodLabel?: string
   onCommitted?: (message: string) => void
+  /**
+   * CONTROLLED BY THE TAB, so the queue above can hand somebody straight to
+   * this form. The tab also keys this component on the person, so choosing
+   * a different one remounts it rather than leaving the previous rating,
+   * reason and feedback sitting in the boxes under a new name.
+   */
+  picked: Candidate | null
+  onPicked: (c: Candidate | null) => void
 }) {
   const [query, setQuery] = useState('')
-  const [picked, setPicked] = useState<Candidate | null>(null)
-  const [rating, setRating] = useState('')
+  const [rating, setRating] = useState(picked?.rating != null ? String(picked.rating) : '')
   const [reason, setReason] = useState('')
   const [improvement, setImprovement] = useState('')
   const [appreciation, setAppreciation] = useState('')
@@ -1598,7 +1707,7 @@ function OneEmployeeRating({ enrolled, known, periodId, periodLabel, onCommitted
   const matches = picked ? [] : searchEnrolled(enrolled, query)
 
   const reset = () => {
-    setPicked(null); setQuery(''); setRating('')
+    onPicked(null); setQuery(''); setRating('')
     setReason(''); setImprovement(''); setAppreciation('')
   }
 
@@ -1651,8 +1760,7 @@ function OneEmployeeRating({ enrolled, known, periodId, periodLabel, onCommitted
                       <td className="k">{(m.flag ?? '').replace(/_/g, ' ').toLowerCase() || '—'}</td>
                       <td>
                         <button className="btn ghost sm" type="button"
-                                onClick={() => { setPicked(m)
-                                                 setRating(m.rating != null ? String(m.rating) : '') }}>
+                                onClick={() => onPicked(m)}>
                           Choose
                         </button>
                       </td>
@@ -1772,6 +1880,8 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+  /** Lifted out of the form so a queue row can hand somebody to it. */
+  const [picked, setPicked] = useState<Candidate | null>(null)
 
   /**
    * THE REAL LOOKUP. This was KNOWN_NOTHING, which answered "no such
@@ -1835,9 +1945,18 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
         </div>
       </div>
 
-      <OneEmployeeRating enrolled={enrolled} known={known}
+      <FinalisedQueue rows={enrolled} periodLabel={periodLabel}
+                      onPick={setPicked} picked={picked} />
+
+      {/* KEYED ON THE PERSON. Choosing somebody else remounts the form, so
+          the previous rating, reason and feedback cannot be left sitting in
+          the boxes under a new name — which, on a control that overrides a
+          final rating, is the mistake worth designing out. */}
+      <OneEmployeeRating key={picked?.code ?? 'none'}
+                         enrolled={enrolled} known={known}
                          periodId={periodId} periodLabel={periodLabel}
-                         onCommitted={onCommitted} />
+                         onCommitted={onCommitted}
+                         picked={picked} onPicked={setPicked} />
 
       <Card title="Several at once, from a file"
             sub="For when a calibration happened offline, or legacy data has to be brought in.">

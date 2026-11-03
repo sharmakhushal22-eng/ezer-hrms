@@ -21,7 +21,7 @@ import assert from 'node:assert/strict'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { searchEnrolled, oneRow, checkUpload, TEMPLATE_COLUMNS,
-         type Known } from '../upload.ts'
+         finalisedQueue, QUEUE_STATUS_LABEL, type Known } from '../upload.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const TABS = read('components/pms/AdminTabs.tsx')
@@ -251,4 +251,140 @@ test('the banner no longer tells HR not to use this for one person', () => {
   // it; leaving it would contradict the form directly beneath it.
   assert.ok(!/not to correct one person/.test(TABS),
     'the warning still forbids what the screen now offers')
+})
+
+// ── who the chain has finished with ──────────────────────────────────────
+
+const QROSTER = [
+  { employee_code: 'SRS9057', employee_name: 'Isha Nair', final_rating: 4,
+    workflow_status: 'FINALISED', finalised_by_role: 'HOD', employment_flag: 'ACTIVE' },
+  { employee_code: 'SRS9088', employee_name: 'Nikhil Reddy', final_rating: 4,
+    workflow_status: 'FINALISED', finalised_by_role: 'HR_MANAGER', employment_flag: 'ACTIVE' },
+  { employee_code: 'STC9028', employee_name: 'Nisha Verma', final_rating: 5,
+    workflow_status: 'FINALISED', finalised_by_role: 'HOD', employment_flag: 'ACTIVE' },
+  { employee_code: 'SRS9003', employee_name: 'Krishna Mehta', final_rating: 2,
+    workflow_status: 'PUBLISHED', finalised_by_role: 'HOD', employment_flag: 'ACTIVE' },
+  { employee_code: 'SRS9030', employee_name: 'Shreya Singh', final_rating: 4,
+    workflow_status: 'ACKNOWLEDGED', finalised_by_role: 'HOD', employment_flag: 'ACTIVE' },
+  { employee_code: 'SRS9099', employee_name: 'Exited Person', final_rating: 3,
+    workflow_status: 'FINALISED', finalised_by_role: 'HOD', employment_flag: 'EXITED' },
+  ...Array.from({ length: 20 }, (_, i) => ({
+    employee_code: `NS${String(i).padStart(3, '0')}`, employee_name: `Not Started ${i}`,
+    final_rating: null, workflow_status: 'NOT_STARTED',
+    finalised_by_role: null, employment_flag: 'ACTIVE',
+  })),
+]
+
+test('a rating settled by anyone in the chain is ready, not only the HOD\'s', () => {
+  // THE DECISION THE OWNER MADE, and the one a literal reading of the
+  // request would have got wrong. who_can_finalise is a policy setting, so
+  // on this database one rating was settled by an HR Manager — every bit as
+  // finished, and invisible if the list filtered on the role.
+  const q = finalisedQueue(QROSTER)
+  const codes = q.ready.map(r => r.code)
+  assert.ok(codes.includes('SRS9088'), 'the HR Manager\'s finalisation was hidden')
+  assert.ok(codes.includes('SRS9057') && codes.includes('STC9028'))
+  assert.deepEqual(q.ready.map(r => r.finalisedBy).sort(),
+    ['HOD', 'HOD', 'HOD', 'HR_MANAGER'])
+})
+
+test('released results are separated, not counted as work', () => {
+  const q = finalisedQueue(QROSTER)
+  assert.deepEqual(q.done.map(r => r.code), ['SRS9003', 'SRS9030'])
+  assert.deepEqual(q.done.map(r => r.status), ['PUBLISHED', 'ACKNOWLEDGED'])
+  for (const r of q.ready) {
+    assert.equal(r.status, 'READY', `${r.code} is already out and listed as waiting`)
+  }
+})
+
+test('the ones still with the chain are counted, never listed', () => {
+  // 386 of 395 on the live database. Listing them is what made the publish
+  // queue useless — 392 rows of which 2 were actionable.
+  const q = finalisedQueue(QROSTER)
+  assert.equal(q.inChain, 20)
+  assert.equal(q.ready.length + q.done.length, 6)
+  for (const r of [...q.ready, ...q.done]) {
+    assert.ok(!r.code.startsWith('NS'), 'an unstarted appraisal is being listed')
+  }
+})
+
+test('a rating is the marker, not the status label', () => {
+  // The finalise step is what writes final_rating, so a row without one has
+  // not been settled however far along its workflow_status looks.
+  const q = finalisedQueue([
+    { employee_code: 'X1', employee_name: 'No rating', final_rating: null,
+      workflow_status: 'FINALISED' },
+  ])
+  assert.equal(q.ready.length, 0, 'a row with no rating was offered as ready')
+  assert.equal(q.inChain, 1)
+})
+
+test('a released row with no rating still shows', () => {
+  // The odd case, kept visible rather than vanished: something was sent to
+  // an employee, and the screen must not deny it.
+  const q = finalisedQueue([
+    { employee_code: 'X2', employee_name: 'Odd', final_rating: null,
+      workflow_status: 'PUBLISHED' },
+  ])
+  assert.equal(q.done.length, 1)
+  assert.equal(q.inChain, 0)
+})
+
+test('an exited person already rated is flagged locked, up front', () => {
+  // Rule 12 locks them, so the commit would refuse. Saying so on the row is
+  // better than offering a "Set rating" button that fails on click.
+  const q = finalisedQueue(QROSTER)
+  const exited = q.ready.find(r => r.code === 'SRS9099')!
+  assert.equal(exited.locked, true)
+  assert.ok(q.ready.filter(r => r.code !== 'SRS9099').every(r => !r.locked))
+})
+
+test('both lists are ordered by code, so a row stays where it was', () => {
+  const q = finalisedQueue(QROSTER)
+  for (const list of [q.ready, q.done]) {
+    const codes = list.map(r => r.code)
+    assert.deepEqual(codes, [...codes].sort(), 'the list order is arbitrary')
+  }
+})
+
+test('an empty or missing roster is not an error', () => {
+  for (const r of [[], null, undefined]) {
+    const q = finalisedQueue(r)
+    assert.deepEqual([q.ready, q.done, q.inChain], [[], [], 0])
+  }
+})
+
+test('every status has a label HR can read', () => {
+  for (const s of ['READY', 'PUBLISHED', 'ACKNOWLEDGED'] as const) {
+    assert.ok(QUEUE_STATUS_LABEL[s]?.length > 3, `${s} has no label`)
+  }
+  assert.match(QUEUE_STATUS_LABEL.READY, /waiting on you/)
+})
+
+// ── the queue is wired to the form ───────────────────────────────────────
+
+test('a queue row hands the person to the form', () => {
+  const qc = TABS.slice(TABS.indexOf('function FinalisedQueue'),
+                        TABS.indexOf('function OneEmployeeRating'))
+  assert.ok(qc.length > 200, 'the queue component is gone')
+  assert.match(qc, /onClick=\{\(\) => onPick\(toCandidate\(r\)\)\}/,
+    'the row action does not load the person into the form')
+  assert.match(qc, /disabled=\{r\.locked\}/,
+    'a locked row offers an action that will be refused')
+})
+
+test('the form remounts when a different person is chosen', () => {
+  // Otherwise the previous rating, reason and feedback stay in the boxes
+  // under the new name — on a control that overrides a final rating.
+  assert.match(TABS, /<OneEmployeeRating key=\{picked\?\.code \?\? 'none'\}/,
+    'the form is not keyed on the person')
+})
+
+test('the queue does not re-derive what the form already knows', () => {
+  // Both read the same `enrolled` rows the tab was given. A second query
+  // here would be a second answer to "who is finalised".
+  const tab = TABS.slice(TABS.indexOf('export function UploadTab'))
+  assert.match(tab, /<FinalisedQueue rows=\{enrolled\}/)
+  assert.ok(!/supabase\./.test(tab.slice(0, tab.indexOf('return ('))),
+    'the upload tab has started querying on its own')
 })
