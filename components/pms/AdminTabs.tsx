@@ -51,6 +51,7 @@ import { PERIODS_PER_YEAR, previewPeriods, windowsFor, periodState, conflicts,
          type Frequency, type Policy, type Person } from '@/lib/pms/policy'
 import { FLAG_LABEL, FLAG_MEANING, type Flag } from '@/lib/pms/employment'
 import { TEMPLATE_COLUMNS, ERROR_TEXT, checkUpload, summarise,
+         searchEnrolled, oneRow, type Candidate, type Known,
          type UploadRow } from '@/lib/pms/upload'
 import { STATUS_LABEL, whatNext, type Pip } from '@/lib/pms/pip'
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
@@ -1543,6 +1544,209 @@ export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLa
 
 // ── §6.4 Final Rating Upload ─────────────────────────────────────────────
 
+/**
+ * ONE COMMIT PATH, used by the file and by the single-employee form.
+ *
+ * Two call sites writing their own fetch is how the two routes drift: the
+ * actor role, the period, the error handling and the audit row all have to
+ * be identical, because the RPC behind them treats both as the same kind of
+ * override.
+ */
+async function commitRatings(
+  periodId: string,
+  rows: UploadRow[],
+): Promise<{ ok: boolean; text: string }> {
+  const r = await pmsAdmin<{ message?: string; applied?: number }>(
+    'upload_commit',
+    { period_id: periodId, actor_role: 'HR_MANAGER', rows })
+  if (r.error) return { ok: false, text: r.error.message }
+  return { ok: true, text: r.data?.message ?? 'Committed.' }
+}
+
+/**
+ * ONE PERSON'S FINAL RATING, found by employee code or name.
+ *
+ * Requested: "final rating can be uploaded in bulk or hr can also give
+ * rating per employee basis using there employee code and name."
+ *
+ * A BATCH OF ONE, deliberately. This builds an ordinary UploadRow, runs it
+ * through the same checkUpload the file goes through, and commits it with
+ * commitRatings. Nothing here can get a rating past a rule the bulk route
+ * enforces — eligibility, a locked record, the policy's scale, a reason for
+ * an override, the audit row — because it is not a second write path.
+ *
+ * What differs is the reading, not the writing. A file is checked in bulk
+ * and applied; one person is looked up, and the rating they are on NOW is
+ * put in front of the reviewer before they change it.
+ */
+function OneEmployeeRating({ enrolled, known, periodId, periodLabel, onCommitted }: {
+  enrolled?: FillRow[] | null
+  known: Known
+  periodId?: string | null
+  periodLabel?: string
+  onCommitted?: (message: string) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [picked, setPicked] = useState<Candidate | null>(null)
+  const [rating, setRating] = useState('')
+  const [reason, setReason] = useState('')
+  const [improvement, setImprovement] = useState('')
+  const [appreciation, setAppreciation] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const matches = picked ? [] : searchEnrolled(enrolled, query)
+
+  const reset = () => {
+    setPicked(null); setQuery(''); setRating('')
+    setReason(''); setImprovement(''); setAppreciation('')
+  }
+
+  // Validated THROUGH THE SHARED ENGINE on every keystroke, so the reviewer
+  // sees the same sentence the file would have shown them — before they
+  // press anything, rather than after.
+  const row = picked && rating
+    ? oneRow({ employeeCode: picked.code, periodCode: picked.periodCode,
+               finalRating: Number(rating), overrideReason: reason,
+               improvementFeedback: improvement, appreciation })
+    : null
+  const checked = row ? checkUpload([row], known) : null
+  const faults = checked?.rows[0]?.errors ?? []
+  const delta = checked?.rows[0]?.delta ?? null
+  const ready = !!checked?.canCommit && !!periodId && !busy
+
+  return (
+    <Card title="One employee at a time"
+          sub="Look somebody up by employee code or name and set their final rating. Same rules, same audit trail as the file.">
+      {result && (
+        <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
+          <span aria-hidden="true">{result.ok ? '✓' : '⚠️'}</span>
+          <div>{result.text}</div>
+        </div>
+      )}
+
+      {!picked ? (
+        <>
+          <Field label="Employee"
+                 hint="Type an employee code or a name. Nothing is listed until you do.">
+            <input value={query} placeholder="e.g. SRS9057, or Isha"
+                   onChange={e => setQuery(e.target.value)} />
+          </Field>
+          {query.trim() && !matches.length && (
+            <div className="k">Nobody in {periodLabel || 'this period'} matches that.</div>
+          )}
+          {matches.length > 0 && (
+            <div className="tblwrap">
+              <table>
+                <thead>
+                  <tr><th>Code</th><th>Employee</th><th className="num">Rating now</th>
+                      <th>Status</th><th /></tr>
+                </thead>
+                <tbody>
+                  {matches.map(m => (
+                    <tr key={m.code}>
+                      <td>{m.code}</td>
+                      <td style={{ fontWeight: 600 }}>{m.name}</td>
+                      <td className="num">{m.rating ?? <span className="k">not rated</span>}</td>
+                      <td className="k">{(m.flag ?? '').replace(/_/g, ' ').toLowerCase() || '—'}</td>
+                      <td>
+                        <button className="btn ghost sm" type="button"
+                                onClick={() => { setPicked(m)
+                                                 setRating(m.rating != null ? String(m.rating) : '') }}>
+                          Choose
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="banner b-blue">
+            <span aria-hidden="true">i</span>
+            <div>
+              <b>{picked.name} · {picked.code}</b> — on record at{' '}
+              {picked.rating ?? 'no rating yet'}
+              {periodLabel ? ` for ${periodLabel}` : ''}.
+              {' '}<button className="btn ghost sm" type="button" onClick={reset}>
+                Choose somebody else
+              </button>
+            </div>
+          </div>
+
+          <div className="grid g2">
+            <Field label="Final rating"
+                   hint={delta ? `${delta > 0 ? '+' : ''}${delta} against the rating on record` : 'The rating that will stand'}>
+              <select value={rating} onChange={e => setRating(e.target.value)}>
+                <option value="">Choose a rating</option>
+                {known.scale.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          <div className="fld">
+            <label htmlFor="oe-reason">
+              Reason{faults.includes('ERROR_REASON_MISSING') ? ' (required: this changes the rating on record)' : ''}
+            </label>
+            <textarea id="oe-reason" rows={2} value={reason}
+                      placeholder="What decided this — a calibration meeting, a correction, a late input."
+                      onChange={e => setReason(e.target.value)} />
+          </div>
+
+          <div className="fld">
+            <label htmlFor="oe-impr">
+              Improvement feedback{known.improvementMandatoryAtOrBelow != null
+                && Number(rating) <= known.improvementMandatoryAtOrBelow && rating
+                ? ' (mandatory at this rating)' : ' (optional)'}
+            </label>
+            <textarea id="oe-impr" rows={2} value={improvement}
+                      onChange={e => setImprovement(e.target.value)} />
+          </div>
+
+          <div className="fld">
+            <label htmlFor="oe-appr">Appreciation remark (optional)</label>
+            <textarea id="oe-appr" rows={2} value={appreciation}
+                      onChange={e => setAppreciation(e.target.value)} />
+          </div>
+
+          {faults.length > 0 && (
+            <div className="banner b-amber">
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>Before this can be saved:</b>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                  {faults.map(f => <li key={f}>{ERROR_TEXT[f]}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          <div className="btnrow">
+            <button className="btn" type="button" disabled={!ready}
+                    onClick={async () => {
+                      if (!row || !periodId) return
+                      setBusy(true); setResult(null)
+                      const r = await commitRatings(periodId, [row])
+                      setBusy(false)
+                      setResult(r)
+                      if (!r.ok) return
+                      reset()
+                      onCommitted?.(r.text)
+                    }}>
+              {busy ? 'Saving…' : !rating ? 'Choose a rating'
+                : ready ? `Set ${picked.name}'s rating to ${rating}` : 'Cannot save yet'}
+            </button>
+            <button className="btn ghost" type="button" onClick={reset}>Cancel</button>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
 export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
                             periodId, periodLabel, onCommitted }: {
   /** vw_pms_fill_status for the open period. Null while loading. */
@@ -1623,14 +1827,19 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
       <div className="banner b-amber">
         <span aria-hidden="true">⚠️</span>
         <div>
-          These are <b>override rights</b>. A manual upload replaces the rating the
-          system computed, and every row is written to the audit log with the actor,
-          the timestamp and the reason. Use it for an offline calibration or a legacy
-          migration, not to correct one person.
+          These are <b>override rights</b>. Setting a rating here replaces the one
+          the system computed, and every change is written to the audit log with the
+          actor, the timestamp and the reason — whether it arrives in a file or one
+          person at a time. A rating that differs from the computed one cannot be
+          saved without a reason.
         </div>
       </div>
 
-      <Card title="Final rating upload"
+      <OneEmployeeRating enrolled={enrolled} known={known}
+                         periodId={periodId} periodLabel={periodLabel}
+                         onCommitted={onCommitted} />
+
+      <Card title="Several at once, from a file"
             sub="For when a calibration happened offline, or legacy data has to be brought in.">
         {result && (
           <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
@@ -1722,14 +1931,12 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
                       disabled={!preview.canCommit || !periodId || busy}
                       onClick={async () => {
                         setBusy(true); setResult(null)
-                        const r = await pmsAdmin<{ message?: string; applied?: number }>(
-                          'upload_commit',
-                          { period_id: periodId, actor_role: 'HR_MANAGER',
-                            rows: preview.rows.map(x => x.row) })
+                        // The SAME commit the single-employee form uses.
+                        const r = await commitRatings(periodId!, preview.rows.map(x => x.row))
                         setBusy(false)
-                        if (r.error) { setResult({ ok: false, text: r.error.message }); return }
-                        const msg = r.data?.message ?? 'Committed.'
-                        setResult({ ok: true, text: msg })
+                        setResult(r)
+                        if (!r.ok) return
+                        const msg = r.text
                         // The file is spent: its preview was computed against
                         // ratings this commit has just changed, so leaving it
                         // on screen would invite a second application of the

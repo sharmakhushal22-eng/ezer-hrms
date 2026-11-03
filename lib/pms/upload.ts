@@ -143,3 +143,111 @@ export function summarise(p: Preview): string {
   return `${p.rows.length} rows ready. ${p.changedCount} would change a rating, `
        + 'each with a reason recorded against it.'
 }
+
+// ── one employee at a time ───────────────────────────────────────────────
+//
+// Requested: "final rating can be uploaded in bulk or hr can also give
+// rating per employee basis using their employee code and name."
+//
+// THE SAME ENGINE, A BATCH OF ONE. Everything below produces an UploadRow
+// and hands it to checkUpload and the same commit RPC. That is the whole
+// design: a second write path would be a second set of rules, and the
+// moment they disagreed the single-employee route would become the way to
+// get a rating past a check the bulk route enforces — eligibility, the
+// locked record, the scale, the reason for an override, the audit row.
+//
+// The screen is different because the work is different. A file is checked
+// in bulk and applied; one person is looked up by code or name, against a
+// rating the reviewer can see before they change it.
+
+/** One enrolled person, as the picker needs them. */
+export interface Candidate {
+  code: string
+  name: string
+  /** The rating on record now, so a reviewer sees what they are replacing. */
+  rating: number | null
+  flag: string | null
+  periodCode: string | null
+}
+
+/**
+ * Find people by employee code OR name.
+ *
+ * AN EMPTY QUERY MATCHES NOBODY, deliberately. Returning the whole roster
+ * to an empty box invites picking the first row of 133 by accident, and
+ * this control overwrites a final rating.
+ *
+ * Code prefix first, then name prefix, then anything containing the text —
+ * because somebody who types a full code knows exactly who they mean, and
+ * making them scan partial name matches to find it is the difference
+ * between a lookup and a search.
+ *
+ * THERE IS NO SEPARATE "EXACT MATCH" RANK, and there was: it could never
+ * change an answer. Any other code sharing the typed prefix is longer, so
+ * the alphabetical tie-break inside the prefix rank already puts the exact
+ * one first — "SRS9003" before "SRS90031". A mutation test proved the
+ * branch dead by removing it and changing no result, so it is gone rather
+ * than kept as a rule nothing can observe.
+ */
+export function searchEnrolled(
+  rows: { employee_code?: string | null; employee_name?: string | null
+          final_rating?: number | null; employment_flag?: string | null
+          period_code?: string | null }[] | null | undefined,
+  query: string,
+  limit = 8,
+): Candidate[] {
+  const q = (query ?? '').trim().toUpperCase()
+  if (!q) return []
+  const scored: { c: Candidate; rank: number }[] = []
+  for (const r of rows ?? []) {
+    const code = String(r.employee_code ?? '').trim()
+    const name = String(r.employee_name ?? '').trim()
+    if (!code && !name) continue
+    const C = code.toUpperCase(), N = name.toUpperCase()
+    const rank = C.startsWith(q) ? 0
+               : N.startsWith(q) ? 1
+               : C.includes(q) || N.includes(q) ? 2
+               : -1
+    if (rank < 0) continue
+    scored.push({ rank, c: {
+      code, name,
+      rating: r.final_rating === null || r.final_rating === undefined
+        ? null : Number(r.final_rating),
+      flag: r.employment_flag ?? null,
+      periodCode: r.period_code ?? null,
+    } })
+  }
+  return scored
+    .sort((a, b) => a.rank - b.rank || a.c.code.localeCompare(b.c.code))
+    .slice(0, limit)
+    .map(x => x.c)
+}
+
+/**
+ * One person's entry, in the shape the bulk file uses.
+ *
+ * Built with the template's own column names so checkUpload and the commit
+ * RPC cannot tell it apart from a row that arrived in a CSV — which is the
+ * point: they must not be able to.
+ */
+export function oneRow(entry: {
+  employeeCode: string
+  periodCode?: string | null
+  finalRating: number | string | null
+  overrideReason?: string | null
+  improvementFeedback?: string | null
+  appreciation?: string | null
+}): UploadRow {
+  const t = (v: string | null | undefined) => {
+    const s = (v ?? '').trim()
+    return s ? s : null
+  }
+  return {
+    employee_code: entry.employeeCode.trim(),
+    period_code: t(entry.periodCode),
+    final_rating: entry.finalRating,
+    override_reason: t(entry.overrideReason),
+    improvement_feedback: t(entry.improvementFeedback),
+    appreciation_remark: t(entry.appreciation),
+  }
+}
