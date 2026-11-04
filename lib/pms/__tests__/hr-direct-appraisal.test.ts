@@ -464,3 +464,60 @@ test('the HR Head’s rating is not filed under a manager’s role', () => {
     assert.ok(!fn.includes(r), `the HR Head's rating is filed as ${r}`)
   }
 })
+
+test('the success message survives the reload that follows it', () => {
+  // THE FORM CANNOT HOLD IT. load() flips `loading` and the whole tab block
+  // sits behind `!loading`, so the form unmounts and any banner it set goes
+  // with it. Observed in the browser: the appraisal saved correctly and the
+  // screen said nothing — on the one action that creates a result out of
+  // nothing, leaving no way to tell success from silent failure.
+  //
+  // UploadTab documents the same trap on its onCommitted prop.
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  const note = fn.indexOf('setCommitNote(')
+  const reload = fn.indexOf('\n    load()')
+  assert.ok(note > 0, 'nothing tells the HR Head the appraisal was saved')
+  assert.ok(reload > note,
+    'the message is set after the reload that destroys the component holding it')
+})
+
+// ── the screen must waive exactly what the database waives ──────────────
+
+test('the sign-off fault is skipped for a direct appraisal', () => {
+  // THE MIRROR OF THE USUAL BUG. Normally the danger is a screen that
+  // allows what the trigger refuses; here the screen REFUSED what the
+  // trigger allows, so the publish button stayed disabled forever and the
+  // whole feature was unusable through the UI while working perfectly
+  // underneath it. Found by building a direct appraisal and reading the
+  // card, not by reading the code.
+  const gate = TABS.slice(TABS.indexOf('const faults: string[] = []'),
+                          TABS.indexOf('const publishable ='))
+  assert.match(gate, /if \(member\.signedOff === false && !member\.hrDirect\)/,
+    'the screen blocks on a rule 212 waives')
+  // The OTHER gates must still apply to a direct appraisal. Asserted on the
+  // WHOLE line: matching the call alone still passed when the mutation
+  // wrapped it in `member.hrDirect ? null : ...`, which is exactly the
+  // weakening it was meant to catch.
+  assert.match(gate,
+    /const hrFault = hrPublishFault\(member\.hrFinal, member\.hrFinalRequired !== false\)\n/,
+    '211 is conditional on something — a direct appraisal must still be settled')
+  assert.ok(!/appreciation[\s\S]{0,80}hrDirect/i.test(gate),
+    'the appreciation requirement was waived for direct appraisals')
+})
+
+test('the row and the card say it was built outside the chain', () => {
+  // A waived rule that looks like an unmet one invites somebody to go
+  // chasing a manager who does not exist.
+  assert.match(TABS, /<Pill tone="grey">waived · direct<\/Pill>/,
+    'a direct row still reads as "not signed"')
+  assert.match(TABS, /<b>Built outside the chain\.<\/b>/)
+  assert.match(TABS, /\{member\.hrDirectReason &&/,
+    'the reason for the exception is not shown where the decision is made')
+})
+
+test('the flag reaches the screen from the row', () => {
+  assert.match(PAGE, /hr_direct, hr_direct_reason/,
+    'hr_direct is not selected, so it is inert')
+  assert.match(PAGE, /hrDirect: \(r as \{ hr_direct\?: boolean \}\)\.hr_direct === true/)
+})

@@ -598,7 +598,8 @@ export default function PmsPage() {
        * the migration had not been applied yet.
        */
       const PUB_HR = ', hr_final_confirmed_at, hr_final_confirmed_by,'
-                   + ' hr_management_discussed, hr_final_reason, chain_final_rating'
+                   + ' hr_management_discussed, hr_final_reason, chain_final_rating,'
+                   + ' hr_direct, hr_direct_reason'
       const PUB_BASE = 'employee_id, period_id, company_id, final_rating, final_rating_code,'
                      + 'finalised_by_role, finalised_at, chain_stage, workflow_status, employee_ack'
       const askPub = (sel: string) => supabase.from('pms_overall_rating')
@@ -756,6 +757,10 @@ export default function PmsPage() {
               hr_final_reason: (r as { hr_final_reason?: string | null }).hr_final_reason ?? null,
             },
             hrFinalRequired: hrGateOf(String(r.period_id)),
+            // 212. Carried so the screen can waive the sign-off fault
+            // exactly where the database waives the rule.
+            hrDirect: (r as { hr_direct?: boolean }).hr_direct === true,
+            hrDirectReason: (r as { hr_direct_reason?: string | null }).hr_direct_reason ?? null,
             acknowledged: r.employee_ack === true,
             // Either marker counts. The stage is what this screen moves, the
             // status is what the employee's screen reads, and a row that has
@@ -1142,6 +1147,22 @@ export default function PmsPage() {
     }).eq('employee_id', e.id).eq('period_id', periodId)
     if (fin.error) return `The final rating could not be saved: ${fin.error.message}`
 
+    /**
+     * THE MESSAGE IS HELD BY THE PAGE, NOT BY THE FORM.
+     *
+     * load() flips `loading`, and the whole tab block sits behind
+     * `!loading` — so the form unmounts and any banner it set disappears in
+     * the same tick. Observed: the appraisal saved correctly and the screen
+     * said nothing at all, which leaves the HR Head unable to tell a
+     * success from a silent failure on the one action that creates a
+     * result out of nothing.
+     *
+     * UploadTab already documents this trap on its onCommitted prop. Same
+     * answer: whoever survives the reload holds the sentence.
+     */
+    setCommitNote(`${row.employee_name ?? 'That employee'} now has a full `
+      + 'appraisal on record. It is waiting on Publish Results, where you '
+      + 'confirm the final rating and release it.')
     load()
     return null
   }, [myHrRole, fill, bandList, periodId, grant, load])

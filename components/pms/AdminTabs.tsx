@@ -785,6 +785,9 @@ export interface PublishRow {
   hrFinal?: HrFinalRow | null
   /** Whether this row's policy requires that settlement before publishing. */
   hrFinalRequired?: boolean
+  /** 212: built by the HR Head outside the chain, so 207's rule is waived. */
+  hrDirect?: boolean
+  hrDirectReason?: string | null
   /** Whether the employee has confirmed reading the result. */
   acknowledged?: boolean
 }
@@ -1285,7 +1288,17 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
      */
     const hrFault = hrPublishFault(member.hrFinal, member.hrFinalRequired !== false)
     if (hrFault) faults.push(hrFault)
-    if (member.signedOff === false) {
+    /**
+     * 212 WAIVES THIS ONE, so the screen has to as well.
+     *
+     * The database lets a direct appraisal publish with no final-review
+     * one-to-one, because there is no manager who could have had it. The
+     * fault list did not know that, so it listed a blocker the trigger
+     * does not enforce and the publish button stayed disabled forever —
+     * the feature was unusable through the screen while working perfectly
+     * underneath it. Found by building one and looking at the card.
+     */
+    if (member.signedOff === false && !member.hrDirect) {
       // 207: the manager's acknowledgement, not both. The employee's is
       // recorded when they give it and gates nothing.
       faults.push('The final review one-to-one is not on record with the '
@@ -1373,9 +1386,11 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                       </td>
                       <td className="k">{r.finalisedByRole ?? '—'}</td>
                       <td className="k">{r.finalisedAt ? r.finalisedAt.slice(0, 10) : '—'}</td>
-                      <td>{r.signedOff === false
-                        ? <Pill tone="amber">not signed</Pill>
-                        : <Pill tone="green">signed</Pill>}</td>
+                      <td>{r.hrDirect
+                        ? <Pill tone="grey">waived · direct</Pill>
+                        : r.signedOff === false
+                          ? <Pill tone="amber">not signed</Pill>
+                          : <Pill tone="green">signed</Pill>}</td>
                       <td>
                         {r.hrFinalRequired === false
                           ? <span className="k">not required</span>
@@ -1427,6 +1442,19 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
               {/* SETTLE THE NUMBER BEFORE WRITING THE WORDS. An appreciation
                   remark composed about a 4 and then published beside a 3
                   is a result that contradicts itself. */}
+              {member.hrDirect && (
+                <div className="banner b-amber">
+                  <span aria-hidden="true">!</span>
+                  <div>
+                    <b>Built outside the chain.</b> No manager rated this
+                    person and there is no final-review one-to-one, so that
+                    requirement is waived for this result alone.
+                    {member.hrDirectReason && <div style={{ marginTop: 4 }}>
+                      {member.hrDirectReason}</div>}
+                  </div>
+                </div>
+              )}
+
               <HrFinalBlock row={member.hrFinal}
                             required={member.hrFinalRequired !== false}
                             scale={bands.map(b => b.value)}
