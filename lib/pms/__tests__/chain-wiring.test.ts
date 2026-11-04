@@ -198,8 +198,13 @@ test('the publish queue cannot miss a settled rating', () => {
   // The RULE is that the loader must not narrow in a way that can drop a
   // settled rating. Narrowing by nothing satisfies it; the tab filters what
   // it shows.
-  const q = PAGE.slice(PAGE.indexOf('const pub = await supabase'),
-                       PAGE.indexOf('const pub = await supabase') + 700)
+  // Anchored on the helper, not on a fixed window from a `const pub =`
+  // line: 211 moved the call behind askPub() so the select can be retried
+  // without its new columns, and a window from a vanished anchor silently
+  // sliced nothing at all.
+  const a = PAGE.indexOf('const askPub = (sel: string) => supabase')
+  assert.ok(a > 0, 'could not find the publish/summary loader')
+  const q = PAGE.slice(a, PAGE.indexOf('if (pub.error) {', a))
   assert.ok(q.length > 200, 'could not find the publish/summary loader')
   assert.ok(!/\.in\('chain_stage'/.test(q),
     'the loader filters on chain_stage, which excludes NULL-stage rows — the '

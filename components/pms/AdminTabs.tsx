@@ -64,6 +64,8 @@ import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { csvText, parseCsv } from '@/lib/pms/csv'
 import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
+import { checkFinal, hrFinalState, publishFault as hrPublishFault,
+         HR_FINAL_PROMPT, type FinalIntent, type HrFinalRow } from '@/lib/pms/hrFinal'
 import { type ChainAsks, type ChainAsk, publishWarnings, asksBadge, pipLine } from '@/lib/pms/hrQueue'
 import { HR_STATUS_LABEL, TRAINING_CATEGORY_LABEL, type HrStatus,
          type TrainingCategory } from '@/lib/pms/training'
@@ -102,6 +104,8 @@ export interface PolicyConfig {
   postFinalOwner?: string | null
   /** 203: may this company's employees be published from a combined list. */
   publishScope?: string | null
+  /** 211: whether the HR Head must settle the final rating before publishing. */
+  hrHeadFinalRating?: boolean | null
 }
 
 export type AdminTab =
@@ -774,6 +778,10 @@ export interface PublishRow {
    * answer with a raw P0001 is the behaviour that gate exists to replace.
    */
   signedOff?: boolean
+  /** 211: the HR Head's settlement of the final rating, as the row holds it. */
+  hrFinal?: HrFinalRow | null
+  /** Whether this row's policy requires that settlement before publishing. */
+  hrFinalRequired?: boolean
   /** Whether the employee has confirmed reading the result. */
   acknowledged?: boolean
 }
@@ -991,10 +999,175 @@ function ChainAsksBlock({ asks, onDecide }: {
   )
 }
 
+/**
+ * THE HR HEAD SETTLING THE FINAL RATING.
+ *
+ * Requested: a checkbox asking whether the rating was discussed with the
+ * company's management; the HR Head's number overwrites what the chain
+ * settled and counts as THE final rating; they may instead keep the chain's;
+ * and nothing publishes until they have done one or the other.
+ *
+ * Placed above the feedback boxes because the order is the point: settle
+ * what the number is, THEN write the words that go out beside it. Writing
+ * an appreciation remark about a 4 and then changing it to a 3 is how a
+ * result goes out contradicting itself.
+ *
+ * READ-ONLY FOR EVERYONE ELSE. An HR Manager sees where the appraisal has
+ * got to and who it is waiting on; they do not get the controls, because
+ * the owner chose the HR_HEAD role over "any HR-level user" precisely so
+ * that an HR Manager cannot set the number that overrides the HOD.
+ */
+function HrFinalBlock({ row, required, scale, canSettle, onSettle, busy }: {
+  row: HrFinalRow | null | undefined
+  required: boolean
+  scale: number[]
+  canSettle: boolean
+  onSettle?: (intent: FinalIntent) => void
+  busy?: boolean
+}) {
+  const state = hrFinalState(row)
+  const chainRating = state.overrode ? state.chainRating : state.rating
+  const [choice, setChoice] = useState<'KEEP' | 'REPLACE'>('KEEP')
+  const [rating, setRating] = useState('')
+  const [reason, setReason] = useState('')
+  const [discussed, setDiscussed] = useState(false)
+
+  if (!required) {
+    return (
+      <>
+        <Section>Final rating</Section>
+        <div className="k" style={{ lineHeight: 1.6 }}>
+          This policy does not require the HR Head to settle the rating, so
+          the chain&rsquo;s rating of <b>{state.rating ?? '—'}</b> stands and the
+          result can be published as it is.
+        </div>
+      </>
+    )
+  }
+
+  if (state.settled) {
+    return (
+      <>
+        <Section>Final rating</Section>
+        <div className="banner b-green">
+          <span aria-hidden="true">✓</span>
+          <div>
+            <b>Settled by the HR Head at {state.rating ?? '—'}</b>
+            {state.overrode
+              ? <> — replacing the <b>{state.chainRating}</b> the chain settled.</>
+              : <> — the rating the chain settled, kept.</>}
+            {state.at ? ` ${state.at.slice(0, 10)}.` : ''}
+            {state.reason && <div style={{ marginTop: 4 }}>{state.reason}</div>}
+            <div className="k" style={{ marginTop: 4 }}>
+              Discussed with the company&rsquo;s management.
+            </div>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  if (!canSettle) {
+    return (
+      <>
+        <Section>Final rating</Section>
+        <div className="banner b-amber">
+          <span aria-hidden="true">!</span>
+          <div>
+            The chain settled <b>{state.rating ?? '—'}</b>, and the HR Head has
+            not confirmed it yet. <b>This result cannot be published until they
+            do.</b> Only the HR Head can settle a final rating.
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  const intent: FinalIntent = {
+    choice,
+    rating: rating === '' ? null : Number(rating),
+    reason, discussed,
+  }
+  const check = checkFinal(intent, chainRating, scale)
+
+  return (
+    <>
+      <Section>Final rating</Section>
+      <div className="k" style={{ marginBottom: 8, lineHeight: 1.6 }}>
+        The chain settled <b>{chainRating ?? '—'}</b>. Keep it, or set the rating
+        that will stand instead — yours replaces it as the final rating. What
+        each manager scored stays on the record either way.
+      </div>
+
+      <div className="btnrow" style={{ marginBottom: 8 }}>
+        <button type="button"
+                className={`btn ${choice === 'KEEP' ? '' : 'ghost'} sm`}
+                onClick={() => setChoice('KEEP')}>
+          Keep {chainRating ?? 'the chain\u2019s rating'}
+        </button>
+        <button type="button"
+                className={`btn ${choice === 'REPLACE' ? '' : 'ghost'} sm`}
+                onClick={() => setChoice('REPLACE')}>
+          Set a different rating
+        </button>
+      </div>
+
+      {choice === 'REPLACE' && (
+        <>
+          <div className="grid g2">
+            <Field label="Final rating" hint="This becomes the rating the employee reads">
+              <select value={rating} onChange={e => setRating(e.target.value)}>
+                <option value="">Choose a rating</option>
+                {scale.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="fld">
+            <label htmlFor="hrf-reason">Why this replaces the chain&rsquo;s rating</label>
+            <textarea id="hrf-reason" rows={2} value={reason}
+                      placeholder="The only record of this decision — say what decided it."
+                      onChange={e => setReason(e.target.value)} />
+          </div>
+        </>
+      )}
+
+      {/* THE CHECKBOX, on both paths. The question is as live when the HR
+          Head agrees with the chain as when they overrule it. */}
+      <label className="chk" style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                                      margin: '8px 0', lineHeight: 1.6 }}>
+        <input type="checkbox" checked={discussed}
+               onChange={e => setDiscussed(e.target.checked)} />
+        <span>{HR_FINAL_PROMPT}</span>
+      </label>
+
+      {check.faults.length > 0 && discussed && (
+        <div className="banner b-amber">
+          <span aria-hidden="true">!</span>
+          <div>
+            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+              {check.faults.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      <div className="btnrow">
+        <button className="btn" type="button" disabled={!check.ok || !onSettle || busy}
+                onClick={() => onSettle?.(intent)}>
+          {busy ? 'Settling…'
+            : choice === 'KEEP' ? `Settle the final rating at ${chainRating ?? '—'}`
+            : `Settle the final rating at ${rating || '—'}`}
+        </button>
+      </div>
+    </>
+  )
+}
+
 export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishing,
                              periodLabel, bands = [], canAct = true, note,
                              company, onCompany, companies = [], allowAll = false,
-                             asks, onDecideAsk }: {
+                             asks, onDecideAsk,
+                             canSettleFinal = false, onSettleFinal, settling }: {
   rows: PublishRow[] | null
   loading?: boolean
   onPublish?: (employeeId: string) => void
@@ -1035,6 +1208,10 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
   asks?: Record<string, ChainAsks>
   /** Accept or decline one proposal. Absent renders the block read-only. */
   onDecideAsk?: (id: string, status: HrStatus, note: string) => void
+  /** 211: whether the viewer holds the HR_HEAD role and may settle a rating. */
+  canSettleFinal?: boolean
+  onSettleFinal?: (employeeId: string, intent: FinalIntent) => void
+  settling?: string | null
 }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [draft, setDraft] = useState<{ appreciation: string; improvement: string
@@ -1098,6 +1275,13 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
     if (improvementRequired && !d.improvement.trim()) {
       faults.push(`Improvement feedback is mandatory at a rating of ${member.finalRating}.`)
     }
+    /**
+     * 211. THE SAME CONDITION THE DATABASE ENFORCES, asked once in the
+     * engine rather than re-derived here — a screen that disagreed with the
+     * trigger would show an enabled button that throws on click.
+     */
+    const hrFault = hrPublishFault(member.hrFinal, member.hrFinalRequired !== false)
+    if (hrFault) faults.push(hrFault)
     if (member.signedOff === false) {
       // 207: the manager's acknowledgement, not both. The employee's is
       // recorded when they give it and gates nothing.
@@ -1172,7 +1356,7 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                   <tr>
                     <th>Code</th><th>Employee</th><th className="num">Rating</th>
                     <th>Settled by</th><th>Settled on</th><th>Sign-off</th>
-                    <th>Chain asked for</th><th />
+                    <th>Final rating</th><th>Chain asked for</th><th />
                   </tr>
                 </thead>
                 <tbody>
@@ -1189,6 +1373,13 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                       <td>{r.signedOff === false
                         ? <Pill tone="amber">not signed</Pill>
                         : <Pill tone="green">signed</Pill>}</td>
+                      <td>
+                        {r.hrFinalRequired === false
+                          ? <span className="k">not required</span>
+                          : hrFinalState(r.hrFinal).settled
+                            ? <Pill tone="green">settled</Pill>
+                            : <Pill tone="amber">awaiting HR Head</Pill>}
+                      </td>
                       <td className="k">
                         {asksBadge(asks?.[r.employeeId]) ?? <span className="k">—</span>}
                       </td>
@@ -1229,6 +1420,17 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                   the result in — the input arriving after the decision it is
                   supposed to inform. */}
               <ChainAsksBlock asks={asks?.[member.employeeId]} onDecide={onDecideAsk} />
+
+              {/* SETTLE THE NUMBER BEFORE WRITING THE WORDS. An appreciation
+                  remark composed about a 4 and then published beside a 3
+                  is a result that contradicts itself. */}
+              <HrFinalBlock row={member.hrFinal}
+                            required={member.hrFinalRequired !== false}
+                            scale={bands.map(b => b.value)}
+                            canSettle={canSettleFinal}
+                            busy={settling === member.employeeId}
+                            onSettle={onSettleFinal
+                              ? i => onSettleFinal(member.employeeId, i) : undefined} />
 
               <div className="fld">
                 <label htmlFor="pf-appr">Appreciation remark</label>

@@ -37,6 +37,8 @@ import { chainAsksByEmployee, type ChainAsks,
          type RecRowDb } from '@/lib/pms/hrQueue'
 import { pipFromRow, type PipRowDb } from '@/lib/pms/pip'
 import { type HrStatus } from '@/lib/pms/training'
+import { canSettleFinal, finalPatch, checkFinal,
+         type FinalIntent } from '@/lib/pms/hrFinal'
 
 // Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
 // the roll-up is what an admin opens first, and routing coverage is the thing
@@ -110,6 +112,19 @@ interface Coverage {
  * they do not have a row for — a privilege removal disguised as a grant,
  * which is the trap migration 142 documents.
  */
+/**
+ * EVERY COLUMN toConfig READS, in one place so the 211 retry can drop one
+ * from it rather than restate the list and drift.
+ */
+const POLICY_SELECT =
+  'id, company_id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
+  + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
+  + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
+  + ' final_review_one_to_one, approval_chain, rating_scale_type,'
+  + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
+  + ' publish_scope, hr_head_final_rating,'
+  + ' include_notice_period, include_exited'
+
 const SCREEN_KEY: Partial<Record<Tab, string>> = {}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
 
@@ -230,6 +245,7 @@ export default function PmsPage() {
   /** What has reached HR's rung — see the loader. */
   const [pubRows, setPubRows] = useState<PublishRow[] | null>(null)
   const [asks, setAsks] = useState<Record<string, ChainAsks>>({})
+  const [settling, setSettling] = useState<string | null>(null)
   const [pipQueue, setPipQueue] = useState<PipRow[]>([])
   const [publishing, setPublishing] = useState<string | null>(null)
   /**
@@ -397,20 +413,31 @@ export default function PmsPage() {
         // workspace had no company to narrow to, and it filtered out every
         // row and said "Nothing is waiting" while two finalised ratings sat
         // in it. MEASURED: 5 settled rows for this company, 0 shown.
-        .select('id, company_id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
-              + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
-              + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
-              + ' final_review_one_to_one, approval_chain, rating_scale_type,'
-              + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
-              + ' publish_scope,'
-              + ' include_notice_period, include_exited')
+        .select(POLICY_SELECT)
       if (co) polQ = polQ.eq('company_id', co)
       // ORDER BY, because "the first policy" was meaningless without one.
       // Postgres makes no promise about unordered row order, and an UPDATE
       // physically moves a row — so saving a policy could change which one
       // this screen called first. Ordered by company then name, which is also
       // the order the selector lists them in.
-      const pol = await polQ.order('company_id').order('policy_name').limit(50)
+      const ordered = () => polQ.order('company_id').order('policy_name').limit(50)
+      let pol = await ordered()
+      /**
+       * TOLERANT OF 211 NOT HAVING RUN.
+       *
+       * hr_head_final_rating is new, and selecting a column PostgREST does
+       * not know about fails the WHOLE request — which would take out the
+       * policy list, the config tab, the company narrowing and with it the
+       * publish workspace, for the sake of one boolean. So the narrow select
+       * is retried without it, and toConfig defaults the flag to TRUE: a
+       * policy read before the migration must not read as "the gate is off".
+       */
+      if (pol.error && POLICY_SELECT.includes('hr_head_final_rating')) {
+        polQ = supabase.from('pms_policies').select(
+          POLICY_SELECT.replace(' hr_head_final_rating,', ''))
+        if (co) polQ = polQ.eq('company_id', co)
+        pol = await ordered()
+      }
       if (!pol.error) {
         setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
           id: String(r.id), name: String(r.policy_name ?? 'Policy'),
@@ -469,6 +496,11 @@ export default function PmsPage() {
           includeExited: p.include_exited as boolean ?? null,
           postFinalOwner: (p.post_final_owner as string) ?? 'HR',
           publishScope: (p.publish_scope as string) ?? 'COMPANY',
+          // 211. DEFAULTS TRUE, matching the column and the trigger: a
+          // policy read before the migration runs must not read as "the
+          // gate is off", which would let a result out unsettled.
+          hrHeadFinalRating: p.hr_head_final_rating === undefined
+            ? true : p.hr_head_final_rating as boolean,
         })
         setConfigs(polRows.map(toConfig))
 
@@ -556,11 +588,21 @@ export default function PmsPage() {
       // the ones still in the chain, shown as such. Fetching twice would be
       // two queries disagreeing about the same period.
       const periodIds = openPeriods.map(x => x.id)
-      const pub = await supabase.from('pms_overall_rating')
-        .select('employee_id, period_id, company_id, final_rating, final_rating_code,'
-              + 'finalised_by_role, finalised_at, chain_stage, workflow_status, employee_ack')
-        .in('period_id', periodIds)
-        .limit(4000)
+      /**
+       * TOLERANT OF 211 NOT HAVING RUN, for the reason the policy select is:
+       * one unknown column fails the WHOLE request, and this one feeds both
+       * the publish workspace and the ratings summary. Without the retry,
+       * adding the gate would have emptied two tabs on any database where
+       * the migration had not been applied yet.
+       */
+      const PUB_HR = ', hr_final_confirmed_at, hr_final_confirmed_by,'
+                   + ' hr_management_discussed, hr_final_reason, chain_final_rating'
+      const PUB_BASE = 'employee_id, period_id, company_id, final_rating, final_rating_code,'
+                     + 'finalised_by_role, finalised_at, chain_stage, workflow_status, employee_ack'
+      const askPub = (sel: string) => supabase.from('pms_overall_rating')
+        .select(sel).in('period_id', periodIds).limit(4000)
+      let pub = await askPub(PUB_BASE + PUB_HR)
+      if (pub.error) pub = await askPub(PUB_BASE)
       if (pub.error) {
         // Before 197 is applied there is no chain_stage column at all, and
         // that is a waiting state rather than a fault: every other tab works.
@@ -583,6 +625,26 @@ export default function PmsPage() {
         const periodLabelOf = new Map(openPeriods.map(x =>
           [String(x.id), String(x.period_code ?? x.period_name ?? '')]))
         const companyOf = new Map(Object.entries(coNames))
+        /**
+         * WHETHER A ROW'S POLICY REQUIRES THE HR HEAD'S SETTLEMENT (211).
+         *
+         * Defaults TRUE on every miss — an unknown period, an unknown
+         * policy, a policy read before the migration. The gate must fail
+         * CLOSED: reading "not required" when the database thinks otherwise
+         * would show an enabled publish button that the trigger then throws
+         * on, and the one time it did not throw, a result would go out
+         * unsettled.
+         */
+        const gateOfPolicy = new Map(configs.map(c =>
+          [String(c.policyId), c.hrHeadFinalRating !== false]))
+        const policyOfPeriod = new Map(openPeriods.map(x =>
+          [String(x.id), String((x as { policy_id?: string }).policy_id ?? '')]))
+        const hrGateOf = (periodId: string) => {
+          const pid = policyOfPeriod.get(periodId)
+          if (!pid) return true
+          const g = gateOfPolicy.get(pid)
+          return g === undefined ? true : g
+        }
 
         const pubData = (pub.data ?? []) as unknown as {
           employee_id: string
@@ -680,6 +742,18 @@ export default function PmsPage() {
             improvement: fbBy.get(K(r.period_id, r.employee_id))?.improvement_feedback ?? null,
             benefits: benBy.get(K(r.period_id, r.employee_id)) ?? [],
             signedOff: signed.has(K(r.period_id, r.employee_id)),
+            // 211. The row's own HR-final columns, and whether this row's
+            // POLICY requires them — read per period, because HR Head spans
+            // companies and each runs its own policy.
+            hrFinal: {
+              final_rating: r.final_rating == null ? null : Number(r.final_rating),
+              chain_final_rating: (r as { chain_final_rating?: number | null }).chain_final_rating ?? null,
+              hr_final_confirmed_at: (r as { hr_final_confirmed_at?: string | null }).hr_final_confirmed_at ?? null,
+              hr_final_confirmed_by: (r as { hr_final_confirmed_by?: string | null }).hr_final_confirmed_by ?? null,
+              hr_management_discussed: (r as { hr_management_discussed?: boolean | null }).hr_management_discussed ?? false,
+              hr_final_reason: (r as { hr_final_reason?: string | null }).hr_final_reason ?? null,
+            },
+            hrFinalRequired: hrGateOf(String(r.period_id)),
             acknowledged: r.employee_ack === true,
             // Either marker counts. The stage is what this screen moves, the
             // status is what the employee's screen reads, and a row that has
@@ -947,6 +1021,39 @@ export default function PmsPage() {
     setPipQueue(chain.queue)
   }, [grant.employeeId, pubRows])
 
+  /**
+   * THE HR HEAD SETTLING THE FINAL RATING (211).
+   *
+   * Re-checked HERE, not only in the component. The button is disabled
+   * while checkFinal reports a fault, but a disabled button is a courtesy,
+   * not a control — this is the write, and it is the last place in the
+   * application that can refuse. The database refuses too, on the publish
+   * rather than on this update, so all three have to agree.
+   */
+  const settleFinal = useCallback(async (employeeId: string, intent: FinalIntent) => {
+    if (!canSettleFinal(myHrRole)) {
+      setCommitNote('Only the HR Head can settle a final rating.')
+      return
+    }
+    const row = pubRows?.find(r => r.employeeId === employeeId)
+    const periodId = row?.periodId
+    if (!periodId) return
+    // The band the chain settled: what stands now, unless it has already
+    // been replaced once, in which case the chain's own number is the one
+    // kept aside.
+    const chainRating = row?.hrFinal?.chain_final_rating ?? row?.finalRating ?? null
+    const check = checkFinal(intent, chainRating, bandList.map(b => b.value))
+    if (!check.ok) { setCommitNote(check.faults[0]); return }
+
+    setSettling(employeeId); setCommitNote(null)
+    const { error } = await supabase.from('pms_overall_rating')
+      .update(finalPatch(intent, chainRating, grant.employeeId ?? null))
+      .eq('employee_id', employeeId).eq('period_id', periodId)
+    setSettling(null)
+    if (error) { setCommitNote(`That could not be saved: ${error.message}`); return }
+    load()
+  }, [myHrRole, pubRows, bandList, grant.employeeId, load])
+
   const saveFeedback = useCallback(async (employeeId: string, patch: {
     appreciation: string; improvement: string
     benefits: { type: string; note: string }[]
@@ -1144,7 +1251,9 @@ export default function PmsPage() {
                                note={postFinalNote(postFinalOwner, myHrRole)}
                                company={pubCompany} onCompany={setPubCompany}
                                companies={pubCompanies} allowAll={pubAllowAll}
-                               asks={asks} onDecideAsk={canRunPostFinal ? decideAsk : undefined} />}
+                               asks={asks} onDecideAsk={canRunPostFinal ? decideAsk : undefined}
+                               canSettleFinal={canSettleFinal(myHrRole)}
+                               onSettleFinal={settleFinal} settling={settling} />}
           {tab === 'summary'  && <SummaryTab rows={pubRows} loading={loading}
                                deptNames={deptNames} bands={bandList}
                                periodLabel={naming?.title} />}
