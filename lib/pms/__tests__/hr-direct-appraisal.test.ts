@@ -418,3 +418,49 @@ test('213 leaves the other gates alone', () => {
     assert.ok(!body.includes(name), `213 touches ${name}`)
   }
 })
+
+// ── 214: the HR Head is a rater ──────────────────────────────────────────
+
+const SQL214 = read('supabase/migrations/214_pms_hr_head_can_be_a_rater.sql')
+
+test('214 widens rater_role without dropping anybody', () => {
+  // Found the same way as 213 — by running the write, not by reading the
+  // code. 066's list was complete until something outside the chain could
+  // rate, which 212 introduced.
+  const m = SQL214.match(/CHECK \(rater_role IN \(([^)]*)\)\)/)
+  assert.ok(m, 'the widened constraint is gone')
+  const allowed = [...m![1].matchAll(/'([^']+)'/g)].map(x => x[1])
+  for (const r of ['SELF', 'RM_L1', 'RM_L2', 'HOD', 'MD']) {
+    assert.ok(allowed.includes(r), `${r} was dropped from rater_role`)
+  }
+  assert.ok(allowed.includes('HR_HEAD'), 'the HR Head still cannot be a rater')
+})
+
+test('214 drops the old constraint by its real name', () => {
+  // The database told us the name in the error it raised, so there is no
+  // guessing here — but it is dropped IF EXISTS, and the new one is named,
+  // so a second run is a no-op rather than a duplicate.
+  assert.match(SQL214, /DROP CONSTRAINT IF EXISTS pms_reviews_rater_role_check/)
+  assert.match(SQL214, /DROP CONSTRAINT IF EXISTS pms_reviews_rater_role_allowed/)
+  assert.match(SQL214, /ADD CONSTRAINT pms_reviews_rater_role_allowed/)
+})
+
+test('214 changes no data and no other table', () => {
+  const body = SQL214.replace(/^\s*--.*$/gm, ' ').replace(/'[^']*'/g, "''")
+  for (const f of [/\bINSERT\b/i, /^\s*UPDATE\s+\w/mi, /\bDELETE\s+FROM\b/i,
+                   /\bDROP\s+TABLE\b/i, /\bDROP\s+COLUMN\b/i]) {
+    assert.ok(!f.test(body), `214 matches ${f}`)
+  }
+  assert.ok(!/pms_overall_rating|pms_employee_goals/.test(body),
+    '214 touches a table it has no business in')
+})
+
+test('the HR Head’s rating is not filed under a manager’s role', () => {
+  // The whole reason 214 exists rather than reusing 'HOD'.
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  assert.match(fn, /rater_role: 'HR_HEAD'/)
+  for (const r of ["rater_role: 'HOD'", "rater_role: 'RM_L1'", "rater_role: 'SELF'"]) {
+    assert.ok(!fn.includes(r), `the HR Head's rating is filed as ${r}`)
+  }
+})
