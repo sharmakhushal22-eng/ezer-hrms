@@ -64,6 +64,9 @@ import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { csvText, parseCsv } from '@/lib/pms/csv'
 import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
+import { canActDirect, whyNotDirect, checkDirect, suggestedFinal,
+         type DirectIntent } from '@/lib/pms/hrDirect'
+import { CATEGORIES, CATEGORY_LABEL, type Kra } from '@/lib/pms/kra'
 import { checkFinal, hrFinalState, publishFault as hrPublishFault,
          HR_FINAL_PROMPT, type FinalIntent, type HrFinalRow } from '@/lib/pms/hrFinal'
 import { type ChainAsks, type ChainAsk, publishWarnings, asksBadge, pipLine } from '@/lib/pms/hrQueue'
@@ -2057,8 +2060,291 @@ function OneEmployeeRating({ enrolled, known, periodId, periodLabel, onCommitted
   )
 }
 
+/**
+ * AN APPRAISAL THE CHAIN NEVER PICKED UP, built by the HR Head.
+ *
+ * Requested as "a special case feature": set the KRAs, rate them, set the
+ * final rating, publish. The exceptions — somebody who transferred in after
+ * the cycle opened, a role the routing never covered — who would otherwise
+ * end the year with no appraisal at all.
+ *
+ * ── WHAT THIS FORM DOES NOT DO ─────────────────────────────────────────
+ *
+ * It does not publish. It builds the record and leaves it FINALISED, which
+ * puts it on Publish Results like any other settled appraisal — where the
+ * HR Head settles it under 211 and releases it.
+ *
+ * That is deliberate. The 211 attestation asks whether the rating was
+ * discussed with the company's management, and that question is MORE live
+ * for an appraisal nobody else saw, not less. Asking it here as well would
+ * be asking twice; skipping it would be the one result in the system that
+ * never faced it.
+ *
+ * ── ONLY PEOPLE THE CHAIN NEVER TOUCHED ────────────────────────────────
+ *
+ * And when somebody is not eligible they are shown with the REASON rather
+ * than omitted, because a name missing from a list cannot explain itself.
+ */
+function DirectAppraisal({ enrolled, scale, periodId, periodLabel, canAct,
+                           onDone }: {
+  enrolled?: FillRow[] | null
+  scale: number[]
+  periodId?: string | null
+  periodLabel?: string
+  canAct: boolean
+  onDone?: (employeeId: string, intent: DirectIntent, code: string) => Promise<string | null>
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [picked, setPicked] = useState<FillRow | null>(null)
+  const [reason, setReason] = useState('')
+  const [kras, setKras] = useState<Kra[]>([])
+  const [scores, setScores] = useState<Record<number, number | null>>({})
+  const [finalRating, setFinalRating] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  if (!canAct) return null
+
+  const matches = (() => {
+    const q = query.trim().toUpperCase()
+    if (!q || picked) return []
+    return (enrolled ?? []).filter(r =>
+      String(r.employee_code ?? '').toUpperCase().includes(q)
+      || String(r.employee_name ?? '').toUpperCase().includes(q)).slice(0, 8)
+  })()
+
+  const reset = () => {
+    setPicked(null); setQuery(''); setReason(''); setKras([]); setScores({})
+    setFinalRating('')
+  }
+
+  const addKra = () => setKras(k => [...k, {
+    seq_no: k.length + 1, kra_title: '', kpi_metric: '', target_value: '',
+    category: 'BUSINESS', weightage: 0,
+  }])
+  const setKra = (i: number, patch: Partial<Kra>) =>
+    setKras(k => k.map((x, j) => j === i ? { ...x, ...patch } : x))
+  const dropKra = (i: number) => setKras(k => k.filter((_, j) => j !== i)
+    .map((x, j) => ({ ...x, seq_no: j + 1 })))
+
+  const intent: DirectIntent = {
+    reason, kras,
+    scores,
+    finalRating: finalRating === '' ? null : Number(finalRating),
+  }
+  const check = checkDirect(intent, scale)
+  const suggested = suggestedFinal(intent)
+
+  if (!open) {
+    return (
+      <Card title="Somebody the chain never picked up"
+            sub="Build an appraisal directly — KRAs, a rating for each, and the final rating — for an employee no chain was assigned to.">
+        <div className="k" style={{ marginBottom: 10, lineHeight: 1.6 }}>
+          A special case, and recorded as one: your name and your reason stay
+          on the record, and the final-review sign-off is waived because there
+          is no manager to have had that conversation. Everything else — the
+          KRA rules, the rating scale, your settlement before publishing —
+          applies exactly as it does to everybody else.
+        </div>
+        <div className="btnrow">
+          <button className="btn ghost" type="button" onClick={() => setOpen(true)}>
+            Build an appraisal outside the chain
+          </button>
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <Card title="Building an appraisal outside the chain"
+          sub={`For ${periodLabel || 'the open period'}. Recorded against your name, with your reason.`}>
+      {result && (
+        <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
+          <span aria-hidden="true">{result.ok ? '✓' : '⚠️'}</span>
+          <div>{result.text}</div>
+        </div>
+      )}
+
+      {!picked ? (
+        <>
+          <Field label="Employee"
+                 hint="Employee code or name. Only people the chain never started can be taken outside it.">
+            <input value={query} placeholder="e.g. SRS9012, or Priya"
+                   onChange={e => setQuery(e.target.value)} />
+          </Field>
+          {query.trim() && !matches.length && (
+            <div className="k">Nobody in {periodLabel || 'this period'} matches that.</div>
+          )}
+          {matches.length > 0 && (
+            <div className="tblwrap">
+              <table>
+                <thead><tr><th>Code</th><th>Employee</th><th>Status</th><th /></tr></thead>
+                <tbody>
+                  {matches.map(m => {
+                    const why = whyNotDirect({
+                      final_rating: m.final_rating, workflow_status: m.workflow_status,
+                      kra_count: m.kra_count, self_score: m.self_score,
+                    })
+                    return (
+                      <tr key={String(m.employee_code)}>
+                        <td>{m.employee_code}</td>
+                        <td style={{ fontWeight: 600 }}>{m.employee_name}</td>
+                        <td className="k">{why ?? 'Never started — can be built here'}</td>
+                        <td>
+                          <button className="btn ghost sm" type="button" disabled={!!why}
+                                  onClick={() => setPicked(m)}>
+                            {why ? 'Not eligible' : 'Choose'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="btnrow">
+            <button className="btn ghost sm" type="button"
+                    onClick={() => { reset(); setOpen(false) }}>Close</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="banner b-blue">
+            <span aria-hidden="true">i</span>
+            <div>
+              <b>{picked.employee_name} · {picked.employee_code}</b> — no KRAs, no
+              ratings, nothing from the chain.{' '}
+              <button className="btn ghost sm" type="button" onClick={reset}>
+                Choose somebody else
+              </button>
+            </div>
+          </div>
+
+          <div className="fld">
+            <label htmlFor="da-reason">Why this is being done outside the chain</label>
+            <textarea id="da-reason" rows={2} value={reason}
+                      placeholder="e.g. Transferred in after the cycle opened; no reporting chain was assigned."
+                      onChange={e => setReason(e.target.value)} />
+          </div>
+
+          <Section>KRAs and their ratings</Section>
+          {!kras.length && (
+            <div className="k" style={{ marginBottom: 8 }}>
+              Nothing yet. The same rules apply as to anybody else&rsquo;s
+              scorecard — the weightages have to add up, and every KRA needs a
+              rating.
+            </div>
+          )}
+          {kras.map((k, i) => (
+            <div key={i} className="askrow">
+              <div className="grid g2">
+                <Field label={`KRA ${k.seq_no}`}>
+                  <input value={k.kra_title} placeholder="What they were measured on"
+                         onChange={e => setKra(i, { kra_title: e.target.value })} />
+                </Field>
+                <Field label="Measure">
+                  <input value={k.kpi_metric} placeholder="How it was measured"
+                         onChange={e => setKra(i, { kpi_metric: e.target.value })} />
+                </Field>
+              </div>
+              <div className="grid g3">
+                <Field label="Target">
+                  <input value={k.target_value}
+                         onChange={e => setKra(i, { target_value: e.target.value })} />
+                </Field>
+                <Field label="Weightage %">
+                  <input type="number" value={k.weightage || ''}
+                         onChange={e => setKra(i, { weightage: Number(e.target.value) || 0 })} />
+                </Field>
+                <Field label="Rating">
+                  <select value={scores[k.seq_no] ?? ''}
+                          onChange={e => setScores(s => ({ ...s,
+                            [k.seq_no]: e.target.value === '' ? null : Number(e.target.value) }))}>
+                    <option value="">—</option>
+                    {scale.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div className="grid g2">
+                <Field label="Category">
+                  <select value={k.category}
+                          onChange={e => setKra(i, { category: e.target.value as Kra['category'] })}>
+                    {CATEGORIES.map(c => (
+                      <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="fld" style={{ alignSelf: 'end' }}>
+                  <button className="btn ghost sm" type="button" onClick={() => dropKra(i)}>
+                    Remove this KRA
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="btnrow">
+            <button className="btn ghost sm" type="button" onClick={addKra}>+ Add a KRA</button>
+          </div>
+
+          <Section>Final rating</Section>
+          <div className="grid g2">
+            <Field label="Final rating"
+                   hint={suggested === null
+                     ? 'The weighted average appears once the KRAs are rated.'
+                     : `The weighted average of what you have rated is ${suggested}. You are not bound by it.`}>
+              <select value={finalRating} onChange={e => setFinalRating(e.target.value)}>
+                <option value="">Choose a rating</option>
+                {scale.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          {check.faults.length > 0 && (
+            <div className="banner b-amber">
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>Before this can be saved:</b>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                  {check.faults.map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          <div className="k" style={{ margin: '8px 0', lineHeight: 1.6 }}>
+            Saving does not publish. The appraisal becomes a settled record and
+            appears on <b>Publish Results</b>, where you confirm the final
+            rating and release it — the same last step as everybody else.
+          </div>
+
+          <div className="btnrow">
+            <button className="btn" type="button"
+                    disabled={!check.ok || !periodId || busy || !onDone}
+                    onClick={async () => {
+                      setBusy(true); setResult(null)
+                      const err = await onDone?.(String(picked.employee_code), intent,
+                        String(picked.employee_code))
+                      setBusy(false)
+                      if (err) { setResult({ ok: false, text: err }); return }
+                      setResult({ ok: true, text: `${picked.employee_name}\u2019s appraisal is `
+                        + 'on record and waiting on Publish Results.' })
+                      reset()
+                    }}>
+              {busy ? 'Saving…' : check.ok ? 'Save this appraisal' : 'Cannot save yet'}
+            </button>
+            <button className="btn ghost" type="button" onClick={reset}>Cancel</button>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
 export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
-                            periodId, periodLabel, onCommitted }: {
+                            periodId, periodLabel, onCommitted,
+                            canBuildDirect = false, onDirect }: {
   /** vw_pms_fill_status for the open period. Null while loading. */
   rows?: FillRow[] | null
   scale?: number[]
@@ -2066,6 +2352,10 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
   /** The open period. Without it the commit has nowhere to write. */
   periodId?: string | null
   periodLabel?: string
+  /** 212: whether the viewer holds the HR_HEAD role. */
+  canBuildDirect?: boolean
+  /** Writes the whole direct appraisal. Returns an error sentence, or null. */
+  onDirect?: (employeeCode: string, intent: DirectIntent) => Promise<string | null>
   /**
    * Called with the success sentence, NOT just as a refresh signal.
    *
@@ -2146,6 +2436,11 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
           saved without a reason.
         </div>
       </div>
+
+      <DirectAppraisal enrolled={enrolled} scale={scale?.length ? scale : [1,2,3,4,5]}
+                       periodId={periodId} periodLabel={periodLabel}
+                       canAct={canBuildDirect}
+                       onDone={onDirect ? (code, intent) => onDirect(code, intent) : undefined} />
 
       <FinalisedQueue rows={enrolled} periodLabel={periodLabel}
                       onPick={setPicked} picked={picked} />

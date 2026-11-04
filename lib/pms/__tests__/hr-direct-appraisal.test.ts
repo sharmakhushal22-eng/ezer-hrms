@@ -278,3 +278,143 @@ test('211’s settlement is not waived by 212', () => {
   assert.ok(!body.includes('DROP TRIGGER IF EXISTS trg_pms_publish_needs_signoff'),
     '212 drops the 207 trigger it depends on')
 })
+
+// ── the wiring ───────────────────────────────────────────────────────────
+
+const TABS = read('components/pms/AdminTabs.tsx')
+const PAGE = read('app/dashboard/pms/page.tsx')
+
+test('the stamp is written BEFORE the KRAs', () => {
+  // THE ORDER IS LOAD-BEARING. 212's guard refuses the stamp on a row that
+  // already has KRAs, so writing the goals first would make the database
+  // refuse the very appraisal this feature exists to create.
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  assert.ok(fn.length > 400, 'saveDirect is gone')
+  const stamp = fn.indexOf('directStamp(')
+  const goals = fn.indexOf("from('pms_employee_goals')")
+  const reviews = fn.indexOf("from('pms_reviews')")
+  const settle = fn.indexOf('workflow_status: \'FINALISED\'')
+  assert.ok(stamp > 0 && goals > stamp, 'the KRAs are written before the stamp')
+  assert.ok(reviews > goals, 'the ratings are written before the KRAs they belong to')
+  assert.ok(settle > reviews, 'the rating is settled before the KRAs are rated')
+})
+
+test('it stops at the first failure', () => {
+  // A half-built appraisal looks finished on the publish queue, which is
+  // worse than none at all.
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  for (const step of ['stamp.error', 'goals.error', 'reviews.error', 'fin.error']) {
+    assert.ok(fn.includes(`if (${step})`), `${step} is not checked`)
+  }
+})
+
+test('it does not publish — it joins the queue like everybody else', () => {
+  // 211's attestation is MORE live for an appraisal nobody else saw. This
+  // must leave the record FINALISED, not PUBLISHED.
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  assert.ok(!fn.includes("'PUBLISHED'"), 'a direct appraisal publishes itself')
+  assert.ok(!fn.includes('published_at'))
+  assert.ok(!fn.includes('hr_final_confirmed_at'),
+    'a direct appraisal settles its own 211 attestation')
+  assert.match(fn, /workflow_status: 'FINALISED'/)
+})
+
+test('the write re-checks eligibility and the role', () => {
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  assert.match(fn, /if \(!canActDirect\(myHrRole\)\)/, 'the write skips the role check')
+  assert.match(fn, /const why = whyNotDirect\(/, 'the write skips the eligibility check')
+  assert.match(fn, /if \(why\) return why/)
+  assert.match(fn, /const check = checkDirect\(/, 'the write skips the content check')
+})
+
+test('the ratings are attributed to the HR Head, not to a manager', () => {
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  assert.match(fn, /rater_role: 'HR_HEAD'/,
+    'the HR Head\'s ratings are filed under somebody else\'s role')
+  assert.match(fn, /finalised_by_role: 'HR_HEAD'/)
+  assert.match(fn, /rating_source: 'HR_OVERRIDE'/,
+    'a report cannot tell this from a rating the chain produced')
+})
+
+test('the form is offered only to an HR Head', () => {
+  assert.match(PAGE, /canBuildDirect=\{canActDirect\(myHrRole\)\}/)
+  const comp = TABS.slice(TABS.indexOf('function DirectAppraisal'),
+                          TABS.indexOf('export function UploadTab'))
+  assert.match(comp, /if \(!canAct\) return null/,
+    'the form renders for anybody who can open the tab')
+})
+
+test('an ineligible person is shown with the reason, not hidden', () => {
+  // A name missing from a list cannot explain itself.
+  const comp = TABS.slice(TABS.indexOf('function DirectAppraisal'),
+                          TABS.indexOf('export function UploadTab'))
+  assert.match(comp, /const why = whyNotDirect\(/)
+  assert.match(comp, /\{why \?\? 'Never started — can be built here'\}/,
+    'the reason is not shown on the row')
+  assert.match(comp, /disabled=\{!!why\}/,
+    'an ineligible person can still be chosen')
+})
+
+test('the form says that saving does not publish', () => {
+  const comp = TABS.slice(TABS.indexOf('function DirectAppraisal'),
+                          TABS.indexOf('export function UploadTab'))
+  assert.match(comp, /Saving does not publish/,
+    'the form implies it releases the result')
+  assert.match(comp, /Publish Results/)
+})
+
+// ── 213: the second rule a direct appraisal cannot satisfy ───────────────
+
+const SQL213 = read('supabase/migrations/213_pms_direct_needs_no_self_rating.sql')
+const SQL066 = read('supabase/migrations/066_pms_module.sql')
+
+test('213 waives the self-rating-first rule, and nothing else', () => {
+  // FOUND BY RUNNING IT, not by reading. The four-step write failed at step
+  // 3 against the live database with "Self rating must be submitted before
+  // manager rating" — after the stamp and the KRAs were already written.
+  // An employee the chain never started has no self rating and never will.
+  const fn = (s: string) => {
+    const a = s.indexOf('CREATE OR REPLACE FUNCTION pms_check_self_first')
+    return s.slice(a, s.indexOf('END $$;', a)).split('\n')
+  }
+  const before = fn(SQL066), after = fn(SQL213)
+  const code = (ls: string[]) => ls.filter(l => l.trim() && !l.trim().startsWith('--'))
+  const added = code(after).filter(l => !code(before).includes(l))
+  // The declaration gains v_direct, plus the lookup and the early return.
+  assert.equal(added.length, 4, `unexpected changes:\n${added.join('\n')}`)
+  assert.ok(added.some(l => /IF COALESCE\(v_direct, false\) THEN RETURN NEW; END IF;/.test(l)))
+  const removed = code(before).filter(l => !code(after).includes(l))
+  assert.deepEqual(removed, ['DECLARE v_self int; v_req boolean;'],
+    'a line of the 066 rule was dropped')
+})
+
+test('the waiver reads hr_direct from the appraisal, keyed on both columns', () => {
+  // Keyed on period AND employee: pms_overall_rating is one row per person
+  // per period, and keying on the employee alone would read another
+  // period's stamp.
+  assert.match(SQL213, /WHERE o\.period_id = NEW\.period_id AND o\.employee_id = NEW\.employee_id/)
+})
+
+test('213 does not write a self rating on the employee’s behalf', () => {
+  // The alternative, and the worse one: it puts words in the employee's
+  // mouth and leaves nobody able to tell which self ratings were real.
+  const body = SQL213.replace(/^\s*--.*$/gm, ' ')
+  for (const f of [/\bINSERT\b/i, /\bUPDATE\b/i, /\bDELETE\b/i]) {
+    assert.ok(!f.test(body), `213 matches ${f}`)
+  }
+  assert.ok(!/rater_role\s*=\s*'SELF'\s*,/.test(body))
+})
+
+test('213 leaves the other gates alone', () => {
+  const body = SQL213.replace(/^\s*--.*$/gm, ' ')
+  for (const name of ['pms_block_unsigned_publish', 'pms_block_unconfirmed_publish',
+                      'pms_guard_hr_direct', 'trg_pms_publish_needs_hr_final',
+                      'trg_pms_guard_hr_direct']) {
+    assert.ok(!body.includes(name), `213 touches ${name}`)
+  }
+})

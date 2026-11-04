@@ -39,6 +39,8 @@ import { pipFromRow, type PipRowDb } from '@/lib/pms/pip'
 import { type HrStatus } from '@/lib/pms/training'
 import { canSettleFinal, finalPatch, checkFinal,
          type FinalIntent } from '@/lib/pms/hrFinal'
+import { canActDirect, checkDirect, directStamp, whyNotDirect,
+         suggestedFinal, type DirectIntent } from '@/lib/pms/hrDirect'
 
 // Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
 // the roll-up is what an admin opens first, and routing coverage is the thing
@@ -1054,6 +1056,96 @@ export default function PmsPage() {
     load()
   }, [myHrRole, pubRows, bandList, grant.employeeId, load])
 
+  /**
+   * WRITING AN APPRAISAL THE CHAIN NEVER PICKED UP (212).
+   *
+   * FOUR WRITES, AND THE ORDER IS LOAD-BEARING. 212's guard refuses the
+   * stamp on a row that already has KRAs or a rating, so the stamp has to
+   * go on FIRST, while the row is still untouched; everything after it is
+   * the HR Head's own work on a row that is now marked as theirs. Writing
+   * the goals first would make the guard refuse the very appraisal this
+   * exists to create.
+   *
+   * It stops at the first failure rather than carrying on. A half-built
+   * appraisal — stamped with no KRAs, or KRAs with no ratings — is worse
+   * than none, because it looks finished on the publish queue. What it
+   * cannot do is undo the steps that already succeeded: there is no
+   * transaction across four PostgREST calls, so the sentence returned says
+   * which step failed and the row is left where a second attempt can see
+   * it. The guard then refuses a re-stamp, which is the honest outcome: the
+   * record needs a look, not another blind write.
+   */
+  const saveDirect = useCallback(async (
+    employeeCode: string, intent: DirectIntent,
+  ): Promise<string | null> => {
+    if (!canActDirect(myHrRole)) return 'Only the HR Head can do this.'
+    const row = (fill ?? []).find(f => String(f.employee_code) === employeeCode)
+    if (!row) return 'That employee is not in this period.'
+    const why = whyNotDirect({
+      final_rating: row.final_rating, workflow_status: row.workflow_status,
+      kra_count: row.kra_count, self_score: row.self_score,
+    })
+    if (why) return why
+    const check = checkDirect(intent, bandList.map(b => b.value))
+    if (!check.ok) return check.faults[0]
+
+    const emp = await supabase.from('employees')
+      .select('id, company_id').eq('emp_code', employeeCode).limit(1)
+    const e = (emp.data ?? [])[0] as { id?: string; company_id?: string } | undefined
+    if (!e?.id || !periodId) return 'Could not resolve that employee.'
+    const co = e.company_id ?? companyFilter(grant, grant.companyId)
+
+    // 1. The stamp, while the row is still clean.
+    const stamp = await supabase.from('pms_overall_rating')
+      .update(directStamp(intent.reason ?? '', grant.employeeId ?? null))
+      .eq('employee_id', e.id).eq('period_id', periodId)
+    if (stamp.error) return `The appraisal could not be marked as direct: ${stamp.error.message}`
+
+    // 2. The KRAs.
+    const goals = await supabase.from('pms_employee_goals').insert(
+      intent.kras.map(k => ({
+        company_id: co, period_id: periodId, employee_id: e.id,
+        seq_no: k.seq_no, kra_title: k.kra_title, kpi_metric: k.kpi_metric,
+        target_value: k.target_value, category: k.category,
+        weightage: k.weightage, source: 'MANUAL', status: 'LOCKED',
+        locked_at: new Date().toISOString(), locked_by: grant.employeeId ?? null,
+      }))).select('id, seq_no')
+    if (goals.error) return `The KRAs could not be saved: ${goals.error.message}`
+
+    // 3. A rating against each, attributed to the HR Head.
+    const bySeq = new Map((goals.data ?? []).map(g => {
+      const r = g as { id: string; seq_no: number }
+      return [Number(r.seq_no), String(r.id)]
+    }))
+    const reviews = await supabase.from('pms_reviews').insert(
+      intent.kras.map(k => ({
+        company_id: co, period_id: periodId, employee_id: e.id,
+        goal_id: bySeq.get(k.seq_no), rater_id: grant.employeeId ?? null,
+        rater_role: 'HR_HEAD', rating: intent.scores[k.seq_no] ?? null,
+        submitted: true, submitted_at: new Date().toISOString(),
+      })))
+    if (reviews.error) return `The ratings could not be saved: ${reviews.error.message}`
+
+    // 4. The settled record. FINALISED, not PUBLISHED: it joins the publish
+    // queue, where 211 asks the HR Head the attestation like everybody else.
+    const fin = await supabase.from('pms_overall_rating').update({
+      final_rating: Number(intent.finalRating),
+      final_score: suggestedFinal(intent),
+      workflow_status: 'FINALISED',
+      chain_stage: 'HR',
+      finalised_by: grant.employeeId ?? null,
+      finalised_by_role: 'HR_HEAD',
+      finalised_at: new Date().toISOString(),
+      rating_source: 'HR_OVERRIDE',
+      kra_count: intent.kras.length,
+      total_weightage: intent.kras.reduce((t, k) => t + (Number(k.weightage) || 0), 0),
+    }).eq('employee_id', e.id).eq('period_id', periodId)
+    if (fin.error) return `The final rating could not be saved: ${fin.error.message}`
+
+    load()
+    return null
+  }, [myHrRole, fill, bandList, periodId, grant, load])
+
   const saveFeedback = useCallback(async (employeeId: string, patch: {
     appreciation: string; improvement: string
     benefits: { type: string; note: string }[]
@@ -1266,6 +1358,8 @@ export default function PmsPage() {
           {tab === 'upload'   && <UploadTab rows={fill} scale={scale}
                                improvementAtOrBelow={improvementAtOrBelow}
                                periodId={periodId} periodLabel={naming?.title}
+                               canBuildDirect={canActDirect(myHrRole)}
+                               onDirect={saveDirect}
                                onCommitted={m => { setCommitNote(m); load() }} />}
           {tab === 'pip'      && <PipTab queue={pipQueue} />}
           {tab === 'reports'  && <ReportsTab />}
