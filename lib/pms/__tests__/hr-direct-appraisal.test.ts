@@ -29,6 +29,7 @@ import { canActDirect, whyNotDirect, neverStarted, checkDirect,
          suggestedFinal, directStamp, isDirect,
          MIN_DIRECT_REASON } from '../hrDirect.ts'
 import type { Kra } from '../kra.ts'
+import { publishFaults } from '../publishGate.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const SQL = read('supabase/migrations/212_pms_hr_direct_appraisal.sql')
@@ -491,19 +492,21 @@ test('the sign-off fault is skipped for a direct appraisal', () => {
   // whole feature was unusable through the UI while working perfectly
   // underneath it. Found by building a direct appraisal and reading the
   // card, not by reading the code.
-  const gate = TABS.slice(TABS.indexOf('const faults: string[] = []'),
-                          TABS.indexOf('const publishable ='))
-  assert.match(gate, /if \(member\.signedOff === false && !member\.hrDirect\)/,
-    'the screen blocks on a rule 212 waives')
-  // The OTHER gates must still apply to a direct appraisal. Asserted on the
-  // WHOLE line: matching the call alone still passed when the mutation
-  // wrapped it in `member.hrDirect ? null : ...`, which is exactly the
-  // weakening it was meant to catch.
-  assert.match(gate,
-    /const hrFault = hrPublishFault\(member\.hrFinal, member\.hrFinalRequired !== false\)\n/,
-    '211 is conditional on something — a direct appraisal must still be settled')
-  assert.ok(!/appreciation[\s\S]{0,80}hrDirect/i.test(gate),
-    'the appreciation requirement was waived for direct appraisals')
+  // ASSERTED BEHAVIOURALLY NOW. Bulk publishing turned this rule into a
+  // shared function, so pinning it to lines inside the component stopped
+  // describing where it lives — and a source slice whose anchor has
+  // vanished passes a negative assertion for free.
+  const ok = { finalRating: 4, appreciation: 'ok',
+               hrFinal: { hr_final_confirmed_at: 'T', hr_management_discussed: true } }
+  assert.deepEqual(publishFaults({ ...ok, signedOff: false, hrDirect: true }), [],
+    'a direct appraisal is blocked on the sign-off that 212 waives')
+  assert.equal(publishFaults({ ...ok, signedOff: false, hrDirect: false }).length, 1,
+    'the sign-off rule stopped applying to everybody else')
+  // The OTHER gates must still apply to a direct appraisal.
+  assert.equal(publishFaults({ ...ok, hrFinal: null, signedOff: false, hrDirect: true }).length,
+    1, '211 was waived for direct appraisals too')
+  assert.equal(publishFaults({ ...ok, appreciation: '', signedOff: false, hrDirect: true }).length,
+    1, 'the appreciation requirement was waived for direct appraisals')
 })
 
 test('the row and the card say it was built outside the chain', () => {

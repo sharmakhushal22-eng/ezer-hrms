@@ -67,7 +67,11 @@ import { humanDate } from '@/lib/pms/cycle'
 import { canActDirect, whyNotDirect, checkDirect, suggestedFinal,
          type DirectIntent } from '@/lib/pms/hrDirect'
 import { CATEGORIES, CATEGORY_LABEL, type Kra } from '@/lib/pms/kra'
-import { checkFinal, hrFinalState, publishFault as hrPublishFault,
+import { publishFaults } from '@/lib/pms/publishGate'
+import { selectRows, split as bulkSplit, blockedSummary, choices as bulkChoices,
+         outcomeText, type BulkRow, type BulkFilter,
+         type BulkOutcome } from '@/lib/pms/bulkPublish'
+import { checkFinal, hrFinalState,
          HR_FINAL_PROMPT, type FinalIntent, type HrFinalRow } from '@/lib/pms/hrFinal'
 import { type ChainAsks, type ChainAsk, publishWarnings, asksBadge, pipLine } from '@/lib/pms/hrQueue'
 import { HR_STATUS_LABEL, TRAINING_CATEGORY_LABEL, type HrStatus,
@@ -788,6 +792,9 @@ export interface PublishRow {
   /** 212: built by the HR Head outside the chain, so 207's rule is waived. */
   hrDirect?: boolean
   hrDirectReason?: string | null
+  /** The branch, for the bulk filter. Null where the employee has none. */
+  locationId?: string | null
+  locationName?: string | null
   /** Whether the employee has confirmed reading the result. */
   acknowledged?: boolean
 }
@@ -1169,11 +1176,260 @@ function HrFinalBlock({ row, required, scale, canSettle, onSettle, busy }: {
   )
 }
 
+/**
+ * RELEASING MANY RESULTS AT ONCE.
+ *
+ * Requested: "Bulk publish at one click for multiple employees with
+ * different employee ids in multiple departments filter by
+ * group/branch/company. Default filter: selected all."
+ *
+ * ── THE SHAPE OF THE SCREEN ────────────────────────────────────────────
+ *
+ * Filters first, then what the filter found, split into who can go and who
+ * cannot. The split is the point: a batch that silently publishes some
+ * people and ignores others is the worst possible version of this, so the
+ * ones left behind are counted, grouped by WHY, and listed by name.
+ *
+ * Every filter starts at "all", as asked. Group is the whole group of
+ * companies — a scope above Company — because the columns literally named
+ * unit and business_unit are empty on every employee in the database.
+ *
+ * ── NOTHING IS RELAXED ─────────────────────────────────────────────────
+ *
+ * Each person goes through the same publishFaults the single card uses.
+ * The difference is only which text is judged: the card weighs what is
+ * being typed, this weighs what was saved, because a batch releases
+ * results that were already prepared.
+ */
+function BulkPublish({ rows, deptNames, periodLabel, canAct, onPublishMany }: {
+  rows: PublishRow[] | null
+  deptNames: Record<string, string>
+  periodLabel?: string | null
+  canAct: boolean
+  onPublishMany?: (ids: string[], onDone: (n: number) => void) => Promise<BulkOutcome>
+}) {
+  const [filter, setFilter] = useState<BulkFilter>({})
+  const [picked, setPicked] = useState<Set<string> | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [running, setRunning] = useState<number | null>(null)
+  const [outcome, setOutcome] = useState<{ o: BulkOutcome; skipped: number } | null>(null)
+
+  const all: BulkRow[] = useMemo(() => (rows ?? []).map(r => ({
+    employeeId: r.employeeId, periodId: r.periodId, code: r.code, name: r.name,
+    companyName: r.companyName, departmentId: r.departmentId,
+    departmentName: r.departmentId ? (deptNames[r.departmentId] ?? null) : null,
+    locationId: r.locationId, locationName: r.locationName,
+    published: r.published,
+    finalRating: r.finalRating,
+    appreciation: r.appreciation, improvement: r.improvement,
+    // The band's own rule travels with the row; the card computes it from
+    // `bands` and this must not guess differently.
+    improvementRequired: false,
+    signedOff: r.signedOff, hrDirect: r.hrDirect,
+    hrFinal: r.hrFinal, hrFinalRequired: r.hrFinalRequired,
+  })), [rows, deptNames])
+
+  const opts = useMemo(() => bulkChoices(all), [all])
+  const inScope = useMemo(() => selectRows(all, filter), [all, filter])
+  const { ready, blocked, inChain } = useMemo(() => bulkSplit(inScope), [inScope])
+  const summary = useMemo(() => blockedSummary(blocked), [blocked])
+
+  // DEFAULT: EVERYTHING THE FILTER FOUND. `picked` stays null until somebody
+  // unticks something, so changing a filter cannot leave a stale selection
+  // of people who are no longer on screen.
+  const chosen = ready.filter(r => picked === null || picked.has(r.employeeId))
+  const toggle = (id: string) => setPicked(p => {
+    const next = new Set(p ?? ready.map(r => r.employeeId))
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const setFilterPart = (k: keyof BulkFilter, v: string) => {
+    setFilter(f => ({ ...f, [k]: v === '' ? null : v }))
+    setPicked(null); setOutcome(null); setConfirming(false)
+  }
+
+  if (!canAct) return null
+
+  return (
+    <Card title="Publish several at once"
+          sub={`Release every settled result in a company, branch or department for ${periodLabel || 'this period'}. Everything starts selected.`}>
+      {outcome && (
+        <div className={outcome.o.published.length ? 'banner b-green' : 'banner b-amber'}>
+          <span aria-hidden="true">{outcome.o.published.length ? '✓' : '!'}</span>
+          <div>
+            {outcomeText(outcome.o, outcome.skipped)}
+            {outcome.o.failed.length > 0 && (
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                {outcome.o.failed.map(f => (
+                  <li key={f.code}><b>{f.name} · {f.code}</b> — {f.message}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="grid g3">
+        <Field label="Company" hint="Group — every company at once — is the default">
+          <select value={filter.company ?? ''}
+                  onChange={e => setFilterPart('company', e.target.value)}>
+            <option value="">Group · all companies</option>
+            {opts.companies.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Branch">
+          <select value={filter.location ?? ''}
+                  onChange={e => setFilterPart('location', e.target.value)}>
+            <option value="">All branches</option>
+            {opts.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Department">
+          <select value={filter.department ?? ''}
+                  onChange={e => setFilterPart('department', e.target.value)}>
+            <option value="">All departments</option>
+            {opts.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <div className="grid g3" style={{ margin: '12px 0' }}>
+        <Stat label="Ready to publish" value={ready.length}
+              tone={ready.length ? 'accent' : undefined}
+              note={chosen.length !== ready.length ? `${chosen.length} selected` : 'all selected'} />
+        <Stat label="Waiting on you" value={blocked.length}
+              note={blocked.length ? 'settled, but missing something' : 'nothing held up'} />
+        <Stat label="Still with the chain" value={inChain}
+              note="nobody has rated them yet — not yours to act on" />
+      </div>
+
+      {ready.length === 0 ? (
+        <Empty what="Nothing here is ready to publish"
+               why={blocked.length
+                 ? 'Every settled result this filter found is still missing something. The reasons are below.'
+                 : inChain
+                   ? `${inChain} ${inChain === 1 ? 'appraisal is' : 'appraisals are'} still with the chain. A result reaches this list once the chain has settled it.`
+                   : 'No unpublished results match this filter. Widen it, or wait for the chain to settle more.'} />
+      ) : (
+        <>
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 34 }}>
+                    <input type="checkbox" aria-label="Select everybody ready"
+                           checked={chosen.length === ready.length}
+                           onChange={() => setPicked(chosen.length === ready.length
+                             ? new Set() : null)} />
+                  </th>
+                  <th>Code</th><th>Employee</th><th className="num">Rating</th>
+                  <th>Company</th><th>Branch</th><th>Department</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ready.map(r => (
+                  <tr key={r.employeeId}>
+                    <td>
+                      <input type="checkbox"
+                             aria-label={`Publish ${r.name}`}
+                             checked={picked === null || picked.has(r.employeeId)}
+                             onChange={() => toggle(r.employeeId)} />
+                    </td>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num"><b>{r.finalRating}</b></td>
+                    <td className="k">{r.companyName ?? '—'}</td>
+                    <td className="k">{r.locationName ?? '—'}</td>
+                    <td className="k">{r.departmentName ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!confirming ? (
+            <div className="btnrow">
+              <button className="btn" type="button"
+                      disabled={!chosen.length || !onPublishMany || running !== null}
+                      onClick={() => { setConfirming(true); setOutcome(null) }}>
+                {chosen.length
+                  ? `Publish ${chosen.length} ${chosen.length === 1 ? 'result' : 'results'}`
+                  : 'Nobody selected'}
+              </button>
+            </div>
+          ) : (
+            <div className="banner b-amber" style={{ marginTop: 12 }}>
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>Releasing {chosen.length} {chosen.length === 1 ? 'result' : 'results'} to{' '}
+                {chosen.length === 1 ? 'that employee' : 'those employees'}.</b> This cannot be
+                undone — once a result is out, the employee has seen it.
+                <div className="btnrow" style={{ marginTop: 8 }}>
+                  <button className="btn" type="button" disabled={running !== null}
+                          onClick={async () => {
+                            setRunning(0)
+                            const o = await onPublishMany!(chosen.map(r => r.employeeId),
+                              n => setRunning(n))
+                            setRunning(null); setConfirming(false); setPicked(null)
+                            setOutcome({ o, skipped: blocked.length })
+                          }}>
+                    {running !== null
+                      ? `Publishing… ${running} of ${chosen.length}`
+                      : `Yes, publish ${chosen.length}`}
+                  </button>
+                  <button className="btn ghost" type="button" disabled={running !== null}
+                          onClick={() => setConfirming(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {blocked.length > 0 && (
+        <>
+          <Section>Settled, but not ready to go out ({blocked.length})</Section>
+          <div className="k" style={{ marginBottom: 8, lineHeight: 1.6 }}>
+            These are left exactly as they are. Nothing below was touched.
+          </div>
+          <div className="chips" style={{ marginBottom: 10 }}>
+            {summary.map(s => (
+              <Pill key={s.reason} tone="amber">{s.n} · {s.reason}</Pill>
+            ))}
+          </div>
+          <div className="tblwrap">
+            <table>
+              <thead><tr><th>Code</th><th>Employee</th><th>What is missing</th></tr></thead>
+              <tbody>
+                {blocked.slice(0, 50).map(b => (
+                  <tr key={b.row.employeeId}>
+                    <td>{b.row.code}</td>
+                    <td style={{ fontWeight: 600 }}>{b.row.name}</td>
+                    <td className="k">{b.faults[0]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {blocked.length > 50 && (
+            <div className="k" style={{ marginTop: 8 }}>
+              Showing the first 50 of {blocked.length}. Narrow the filter to see the rest.
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  )
+}
+
 export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishing,
                              periodLabel, bands = [], canAct = true, note,
                              company, onCompany, companies = [], allowAll = false,
                              asks, onDecideAsk,
-                             canSettleFinal = false, onSettleFinal, settling }: {
+                             canSettleFinal = false, onSettleFinal, settling,
+                             onPublishMany, deptNames = {} }: {
   rows: PublishRow[] | null
   loading?: boolean
   onPublish?: (employeeId: string) => void
@@ -1218,6 +1474,9 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
   canSettleFinal?: boolean
   onSettleFinal?: (employeeId: string, intent: FinalIntent) => void
   settling?: string | null
+  /** Bulk release. Absent hides the whole section. */
+  onPublishMany?: (ids: string[], onDone: (n: number) => void) => Promise<BulkOutcome>
+  deptNames?: Record<string, string>
 }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [draft, setDraft] = useState<{ appreciation: string; improvement: string
@@ -1275,37 +1534,27 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
   }
   const band = bands.find(b => b.value === member?.finalRating)
   const improvementRequired = !!band?.improvementMandatory
-  const faults: string[] = []
-  if (member) {
-    if (!d.appreciation.trim()) faults.push('An appreciation remark is needed.')
-    if (improvementRequired && !d.improvement.trim()) {
-      faults.push(`Improvement feedback is mandatory at a rating of ${member.finalRating}.`)
-    }
-    /**
-     * 211. THE SAME CONDITION THE DATABASE ENFORCES, asked once in the
-     * engine rather than re-derived here — a screen that disagreed with the
-     * trigger would show an enabled button that throws on click.
-     */
-    const hrFault = hrPublishFault(member.hrFinal, member.hrFinalRequired !== false)
-    if (hrFault) faults.push(hrFault)
-    /**
-     * 212 WAIVES THIS ONE, so the screen has to as well.
-     *
-     * The database lets a direct appraisal publish with no final-review
-     * one-to-one, because there is no manager who could have had it. The
-     * fault list did not know that, so it listed a blocker the trigger
-     * does not enforce and the publish button stayed disabled forever —
-     * the feature was unusable through the screen while working perfectly
-     * underneath it. Found by building one and looking at the card.
-     */
-    if (member.signedOff === false && !member.hrDirect) {
-      // 207: the manager's acknowledgement, not both. The employee's is
-      // recorded when they give it and gates nothing.
-      faults.push('The final review one-to-one is not on record with the '
-                + 'manager\u2019s acknowledgement yet. The conversation has to '
-                + 'have happened before the rating reaches them.')
-    }
-  }
+  /**
+   * THE SHARED GATE. This was thirty lines inline, which was fine while the
+   * card was the only way to publish; bulk made it two copies waiting to
+   * drift, and the looser copy would have become the way to release a
+   * result the other refuses. See lib/pms/publishGate.ts for why each fault
+   * is there and which of them mirror a database trigger.
+   *
+   * The DRAFT is passed, not the saved row: somebody typing a remark should
+   * watch the fault clear as they type. Bulk passes the saved values,
+   * because a batch releases what was already prepared.
+   */
+  const faults = publishFaults({
+    finalRating: member?.finalRating ?? null,
+    appreciation: d.appreciation,
+    improvement: d.improvement,
+    improvementRequired,
+    signedOff: member?.signedOff,
+    hrDirect: member?.hrDirect,
+    hrFinal: member?.hrFinal,
+    hrFinalRequired: member?.hrFinalRequired,
+  })
   const publishable = !!member && faults.length === 0
   /**
    * REPORTED, NOT ENFORCED, and deliberately computed after `publishable` so
@@ -1419,6 +1668,9 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
           along it looks.
         </div>
       </Card>
+
+      <BulkPublish rows={scoped} deptNames={deptNames} periodLabel={periodLabel}
+                   canAct={canAct && !!onPublishMany} onPublishMany={onPublishMany} />
 
       {member && (
         <Card title={`${member.name} — ${member.code}`}

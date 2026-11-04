@@ -276,9 +276,20 @@ test('the handlers refuse an out-of-scope row, not just the list', () => {
   const page = read('app/dashboard/pms/page.tsx')
   assert.match(page, /const inPublishScope = useCallback/,
     'there is no scope check in the handlers')
+  // EVERY handler that acts on a row, which is three now: publishOne,
+  // saveFeedback and publishMany. The count is asserted rather than left
+  // open because the failure this guards against is a NEW handler added
+  // without the check — a bulk release reaching another company's people
+  // is the same irreversible mistake, multiplied.
   const guards = page.match(/if \(!inPublishScope\(employeeId\)\) \{/g) ?? []
-  assert.equal(guards.length, 2,
-    `expected publishOne and saveFeedback to both guard, found ${guards.length}`)
+  assert.equal(guards.length, 3,
+    `expected publishOne, saveFeedback and publishMany to guard, found ${guards.length}`)
+  for (const fn of ['const publishOne', 'const saveFeedback', 'const publishMany']) {
+    const i = page.indexOf(fn)
+    assert.ok(i > 0, `${fn} is gone`)
+    assert.ok(page.slice(i, i + 2500).includes('inPublishScope(employeeId)'),
+      `${fn} does not check the company scope`)
+  }
   // And it must be a real check, not a pass-through.
   assert.match(page, /return \(row\.companyName \?\? ''\) === \(pubCompany \?\? ''\)/)
 })

@@ -239,8 +239,14 @@ test('HR cannot change a rating or a KRA from the publish screen', () => {
   assert.ok(tab.length > 1000, 'could not isolate the publish workspace')
   assert.ok(!/type="number"/.test(tab),
     'the publish workspace offers a numeric input — HR must not set a rating')
-  assert.ok(!/final_rating|finalRating:\s/.test(tab.replace(/finalRating[\s)}\]]/g, '')),
-    'the workspace writes a final rating')
+  // THE COLUMN NAME, not the camelCase field. `finalRating:` now appears
+  // legitimately as an argument to publishFaults — the gate has to be TOLD
+  // the rating to judge whether it can go out, and reading a number is not
+  // writing one. final_rating is what a write would have to name, and the
+  // component never calls the database at all.
+  assert.ok(!/final_rating/.test(tab), 'the workspace writes a final rating')
+  assert.ok(!/\.update\(|\.insert\(|\.upsert\(/.test(tab),
+    'the publish workspace writes to the database directly')
   // No KRA editing either: that is the employee's set, locked long before.
   assert.ok(!/weightage|kra_title/i.test(tab), 'the workspace touches KRAs')
   // And no reject path — a rating that needs changing goes back through the

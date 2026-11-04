@@ -41,6 +41,7 @@ import { canSettleFinal, finalPatch, checkFinal,
          type FinalIntent } from '@/lib/pms/hrFinal'
 import { canActDirect, checkDirect, directStamp, whyNotDirect,
          suggestedFinal, type DirectIntent } from '@/lib/pms/hrDirect'
+import { publishFaults } from '@/lib/pms/publishGate'
 
 // Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
 // the roll-up is what an admin opens first, and routing coverage is the thing
@@ -668,7 +669,11 @@ export default function PmsPage() {
         // the summary both need all of it, and a per-row query would be
         // 390 x 5 against tables already keyed on (period, employee).
         const [emps, fbs, bens, frs] = ids.length ? await Promise.all([
-          supabase.from('employees').select('id, emp_code, full_name, department_id').in('id', ids),
+          // location_id joins the select for the bulk-publish branch filter.
+          // "Branch" in the request is the locations table: ten of them,
+          // typed Factory, Branch, Head Office and Corporate Office.
+          supabase.from('employees')
+            .select('id, emp_code, full_name, department_id, location_id').in('id', ids),
           supabase.from('pms_feedback')
             .select('employee_id, period_id, appreciation_remark, improvement_feedback')
             .in('period_id', periodIds).in('employee_id', ids),
@@ -721,9 +726,29 @@ export default function PmsPage() {
           .map(x => { const r = x as { employee_id: string; period_id: string }
                       return K(r.period_id, r.employee_id) }))
         const byId = new Map((emps.data ?? []).map(e => {
-          const r = e as { id: string; emp_code?: string; full_name?: string; department_id?: string }
+          const r = e as { id: string; emp_code?: string; full_name?: string
+                           department_id?: string; location_id?: string }
           return [r.id, r]
         }))
+        /**
+         * BRANCH NAMES, for the bulk filter.
+         *
+         * Read for the locations actually in play rather than the whole
+         * table, and tolerant of the read failing: a filter that cannot be
+         * labelled is worth losing, the publish workspace is not.
+         */
+        const locIds = [...new Set((emps.data ?? [])
+          .map(e => (e as { location_id?: string }).location_id)
+          .filter((x): x is string => !!x))]
+        const locNames: Record<string, string> = {}
+        if (locIds.length) {
+          const lo = await supabase.from('locations')
+            .select('id, location_name').in('id', locIds)
+          for (const l of lo.data ?? []) {
+            const r = l as { id: string; location_name?: string }
+            if (r.location_name) locNames[r.id] = r.location_name
+          }
+        }
         setPubRows(pubData.map(r => {
           const e = byId.get(String(r.employee_id))
           return {
@@ -761,6 +786,8 @@ export default function PmsPage() {
             // exactly where the database waives the rule.
             hrDirect: (r as { hr_direct?: boolean }).hr_direct === true,
             hrDirectReason: (r as { hr_direct_reason?: string | null }).hr_direct_reason ?? null,
+            locationId: e?.location_id ?? null,
+            locationName: e?.location_id ? (locNames[e.location_id] ?? null) : null,
             acknowledged: r.employee_ack === true,
             // Either marker counts. The stage is what this screen moves, the
             // status is what the employee's screen reads, and a row that has
@@ -1258,6 +1285,96 @@ export default function PmsPage() {
     load()
   }, [pubRows, grant, load, inPublishScope])
 
+  /**
+   * RELEASING A BATCH.
+   *
+   * ONE ROW AT A TIME, NOT ONE STATEMENT. A single UPDATE with `in` would
+   * be fewer round trips and the wrong shape: the publish triggers RAISE,
+   * so one unexpected refusal anywhere in the set would abort the whole
+   * statement and release nobody. Per-row, a refusal costs that one person
+   * and the other hundred still go out — which is what the owner chose
+   * when they picked "publish the ready ones, list the rest".
+   *
+   * Each row is re-checked against the SAME gate the screen used, because
+   * the list was built when the screen rendered and something may have
+   * settled or unsettled since. The database is the final authority either
+   * way; this just means the reported reason is a sentence rather than a
+   * constraint name.
+   *
+   * It does NOT stop at the first failure, unlike the direct appraisal.
+   * There the four writes build one record and half of it is worse than
+   * none; here each publish is independent and stopping would strand the
+   * rest for no reason.
+   */
+  const publishMany = useCallback(async (
+    ids: string[], onDone: (n: number) => void,
+  ): Promise<{ published: string[]; failed: { code: string; name: string; message: string }[] }> => {
+    const published: string[] = []
+    const failed: { code: string; name: string; message: string }[] = []
+    let n = 0
+
+    for (const employeeId of ids) {
+      const row = pubRows?.find(r => r.employeeId === employeeId)
+      const named = { code: row?.code ?? employeeId, name: row?.name ?? 'Unknown' }
+      if (!row?.periodId) {
+        failed.push({ ...named, message: 'No open period for this appraisal.' })
+        onDone(++n); continue
+      }
+      if (!inPublishScope(employeeId)) {
+        // 203 again: the company narrowing is not advisory.
+        failed.push({ ...named, message: 'Not in the company you are working on.' })
+        onDone(++n); continue
+      }
+      const faults = publishFaults({
+        finalRating: row.finalRating, appreciation: row.appreciation,
+        improvement: row.improvement,
+        improvementRequired: !!bandList.find(b => b.value === row.finalRating)?.improvementMandatory,
+        signedOff: row.signedOff, hrDirect: row.hrDirect,
+        hrFinal: row.hrFinal, hrFinalRequired: row.hrFinalRequired,
+      })
+      if (faults.length) { failed.push({ ...named, message: faults[0] }); onDone(++n); continue }
+
+      // Same two writes as publishOne, in the same order: the feedback is
+      // opened first, so a failure there cannot leave a rating visible with
+      // its words still hidden.
+      const fb = await supabase.from('pms_feedback')
+        .update({ visible_to_employee: true })
+        .eq('period_id', row.periodId).eq('employee_id', employeeId)
+      if (fb.error) console.error('[pms] bulk: feedback visibility failed', employeeId, fb.error)
+
+      const st = await supabase.from('pms_overall_rating')
+        .update({ workflow_status: 'PUBLISHED',
+                  published_at: new Date().toISOString(),
+                  chain_stage: 'DONE' })
+        .eq('period_id', row.periodId).eq('employee_id', employeeId)
+      if (st.error) failed.push({ ...named, message: st.error.message })
+      else published.push(employeeId)
+      onDone(++n)
+    }
+
+    /**
+     * THE ROWS ARE UPDATED IN PLACE, NOT RELOADED.
+     *
+     * THIRD TIME THIS SESSION. load() flips `loading` and the tab block
+     * sits behind `!loading`, so a reload unmounts the bulk screen — and
+     * with it the outcome panel listing exactly who went out and who was
+     * refused. Observed: a batch published correctly and the screen showed
+     * nothing, which on a bulk irreversible action is the worst moment to
+     * say nothing at all.
+     *
+     * Patched rather than refetched, and that is safe HERE where it was
+     * not for the settlement: what changed is known exactly — these ids
+     * are published — rather than decided by a trigger that might have
+     * adjusted something. Anything refused is already in `failed`.
+     */
+    if (published.length) {
+      const done = new Set(published)
+      setPubRows(rows => (rows ?? []).map(r =>
+        done.has(r.employeeId) ? { ...r, published: true } : r))
+    }
+    return { published, failed }
+  }, [pubRows, bandList, inPublishScope])
+
   const publishOne = useCallback(async (employeeId: string) => {
     // 203: a result released to the wrong person cannot be unreleased.
     if (!inPublishScope(employeeId)) {
@@ -1405,7 +1522,8 @@ export default function PmsPage() {
                                companies={pubCompanies} allowAll={pubAllowAll}
                                asks={asks} onDecideAsk={canRunPostFinal ? decideAsk : undefined}
                                canSettleFinal={canSettleFinal(myHrRole)}
-                               onSettleFinal={settleFinal} settling={settling} />}
+                               onSettleFinal={settleFinal} settling={settling}
+                               onPublishMany={publishMany} deptNames={deptNames} />}
           {tab === 'summary'  && <SummaryTab rows={pubRows} loading={loading}
                                deptNames={deptNames} bands={bandList}
                                periodLabel={naming?.title} />}

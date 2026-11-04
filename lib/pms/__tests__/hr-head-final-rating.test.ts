@@ -27,6 +27,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { canSettleFinal, checkFinal, hrFinalState, publishFault, finalPatch,
          HR_FINAL_PROMPT, MIN_FINAL_REASON } from '../hrFinal.ts'
+import { publishFaults } from '../publishGate.ts'
 
 const read = (p: string) => readFileSync(join(process.cwd(), p), 'utf8')
 const SQL = read('supabase/migrations/211_pms_hr_head_final_rating.sql')
@@ -282,12 +283,23 @@ const PAGE = read('app/dashboard/pms/page.tsx')
 test('the publish gate asks the engine, it does not re-derive the rule', () => {
   // A screen that disagreed with the trigger would show an enabled button
   // that throws on click.
-  const gate = TABS.slice(TABS.indexOf('const faults: string[] = []'),
-                          TABS.indexOf('const publishable ='))
-  assert.match(gate, /hrPublishFault\(member\.hrFinal, member\.hrFinalRequired !== false\)/,
-    'the HR-final rule is re-implemented in the component')
-  assert.match(gate, /faults\.push\(hrFault\)/,
+  // The rule moved into lib/pms/publishGate.ts when bulk publishing needed
+  // the same answer. Asserted where it lives, and behaviourally — a source
+  // slice whose anchor has vanished silently matches nothing.
+  const GATE = read('lib/pms/publishGate.ts')
+  assert.match(GATE, /hrPublishFault\(i\.hrFinal, i\.hrFinalRequired !== false\)/,
+    'the HR-final rule is re-implemented instead of reused')
+  assert.match(GATE, /faults\.push\(hrFault\)/,
     'the HR-final fault does not block publication')
+  assert.equal(publishFaults({ finalRating: 4, appreciation: 'ok',
+    signedOff: true, hrFinal: null }).length, 1,
+    'an unsettled rating no longer blocks a publish')
+  // And the card still hands it the settlement to judge.
+  const call = TABS.slice(TABS.indexOf('const faults = publishFaults({'),
+                          TABS.indexOf('const publishable ='))
+  assert.match(call, /hrFinal: member\?\.hrFinal/,
+    'the card does not pass the settlement into the gate')
+  assert.match(call, /hrFinalRequired: member\?\.hrFinalRequired/)
 })
 
 test('the rating is settled above the words written about it', () => {
