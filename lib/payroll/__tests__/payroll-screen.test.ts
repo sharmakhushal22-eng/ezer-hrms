@@ -60,3 +60,30 @@ test('the dashboard opens the Negotiation salary calculator', () => {
   assert.ok(/import\('@\/components\/recruitment\/CtcBreakupCalculator'\)/.test(panel) && /<CtcBreakupCalculator bare \/>/.test(panel))
   assert.ok(/createPortal\(/.test(panel), 'drawn on document.body, clear of transformed ancestors')
 })
+
+test('every Statutory & Tax sub-tab has an employee-wise register of its components', async () => {
+  const { STATUTORY_REPORTS, snapshotColumns, IDENTITY } = await import('../statutory-report.ts')
+  assert.deepEqual(Object.keys(STATUTORY_REPORTS), ['pf', 'esic', 'pt', 'lwf', 'tds'])
+  const must: Record<string, string[]> = {
+    pf: ['uan_number', 'pf_applicable', 'vpf_percent', 'epf_wage_base', 'epf_employee', 'vpf_amount', 'eps_contribution', 'edli_contribution', 'admin_charges', 'employer_pf', 'arrear_employee_pf'],
+    esic: ['esic_number', 'esic_covered', 'esic_threshold_wage', 'earn_basic_monthly', 'earn_hra_monthly', 'pay_incentive', 'esic_wages', 'esic_employee', 'esic_employer', 'employer_esic', 'arrear_employee_esic'],
+    pt: ['pt_state', 'earn_gross_monthly', 'pt_gross', 'pt_slab', 'pt_amount', 'pt_monthly', 'arrear_pt'],
+    lwf: ['lwf_state_used', 'lwf_month_applicable', 'lwf_employee', 'lwf_employer', 'lwf_total', 'arrear_lwf'],
+    tds: ['pan_number', 'tds_regime_used', 'tds_annual_gross', 'tds_hra_exempt', 'tds_chapter_via', 'employer_nps', 'tds_taxable_income', 'tds_rebate_87a', 'tds_cess', 'tds_monthly', 'tds_additional'],
+  }
+  for (const [k, keys] of Object.entries(must)) {
+    const rep = STATUTORY_REPORTS[k]
+    const have = rep.groups.flatMap(g => g.cols.map(c => c.key))
+    for (const key of keys) assert.ok(have.includes(key), `${k} shows ${key}`)
+    const sel = snapshotColumns(rep)
+    assert.ok(!sel.includes('vpf_amount') && !sel.includes('lwf_total'), 'derived columns are not selected')
+    for (const id of IDENTITY) assert.ok(sel.includes(id.key), `${k} selects ${id.key}`)
+  }
+  const pf = STATUTORY_REPORTS.pf.groups.flatMap(g => g.cols).find(c => c.key === 'vpf_amount')!
+  assert.equal(pf.derive!({ voluntary_pf_applicable: true, vpf_percent: 4, epf_wage_base: 25000 }), 1000)
+  assert.equal(pf.derive!({ voluntary_pf_applicable: false, vpf_percent: 4, epf_wage_base: 25000 }), 0)
+  const page = src('app/dashboard/payroll/page.tsx')
+  for (const [id, kind] of [['pf', 'pf'], ['esic', 'esic'], ['lwf', 'lwf'], ['ptlwf', 'pt'], ['tds', 'tds']])
+    assert.ok(new RegExp(`id: '${id}'[^\\n]*reg\\('${kind}'\\)`).test(page), `${id} renders the ${kind} register`)
+  assert.ok(/<NpsReport fy=\{fy\} \/>/.test(page), 'NPS keeps its report')
+})

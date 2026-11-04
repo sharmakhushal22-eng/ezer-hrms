@@ -35,6 +35,7 @@ import Appraisal from '@/components/payroll/Appraisal'
 import LockUnlock from '@/components/payroll/LockUnlock'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
 import NpsReport from '@/components/payroll/NpsReport'
+import StatutoryComponentReport from '@/components/payroll/StatutoryComponentReport'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
 // The design system. This file owns C, S and F already, so the tokens are
@@ -318,7 +319,7 @@ function subsForTab(tab: string, ctx: { companyId: string; fy: string; month: nu
     case 'attendance': return attendanceSubs(ctx.companyId, ctx.fy, ctx.month)
     case 'employees': return employeeSubs(ctx.companyId)
     case 'run': return runSubs(ctx.companyId, ctx.fy, ctx.month)
-    case 'statutory': return statutorySubs(ctx.fy)
+    case 'statutory': return statutorySubs(ctx.companyId, ctx.fy, ctx.month)
     case 'benefits': return benefitsSubs()
     case 'offcycle': return offcycleSubs()
     case 'reports': return reportsSubs()
@@ -388,21 +389,28 @@ function runSubs(companyId: string, fy: string, month: number): SubTab[] {
   ]
 }
 
-function statutorySubs(fy: string): SubTab[] {
+function statutorySubs(companyId: string, fy: string, month: number): SubTab[] {
+  // Each statutory opens on its employee-wise register (lib/payroll/statutory-report): every
+  // component it is worked from and every figure it produces, from the month Run Payroll froze.
+  const reg = (kind: 'pf' | 'esic' | 'pt' | 'lwf' | 'tds') => <StatutoryComponentReport key={kind} kind={kind} companyId={companyId} fy={fy} month={month} />
   return [
-    { id: 'pf', label: 'PF / EPF + VPF', icon: '', built: true, href: '/dashboard/ess', desc: 'EPF @12% of capped wage is computed in the engine; VPF opt-in is available in the employee ESS portal.' },
-    { id: 'esic', label: 'ESIC', icon: '', built: true, desc: '0.75% employee / 3.25% employer, auto-applied for gross ≤ ₹21,000 during Calculate. Challan export is planned.' },
-    // Same components the Configuration menu shows — one screen each, not copies:
-    // two LWF or PT screens would eventually disagree, and whichever one HR happened to
-    // open would decide what they believed.
-    { id: 'lwf', label: 'LWF', icon: '', built: true, render: () => <LwfConfig /> },
-    { id: 'ptlwf', label: 'Professional Tax', icon: '', built: true, render: () => <PtConfig /> },
+    { id: 'pf', label: 'PF / EPF + VPF', icon: '', built: true, render: () => reg('pf') },
+    { id: 'esic', label: 'ESIC', icon: '', built: true, render: () => reg('esic') },
+    // LWF and PT keep their slab screens under the register. They are the same components
+    // the Configuration menu shows — one screen each, not copies: two LWF or PT screens would
+    // eventually disagree, and whichever one HR happened to open would decide what they believed.
+    { id: 'lwf', label: 'LWF', icon: '', built: true, render: () => <>{reg('lwf')}<SlabsHead title="LWF rates by state" /><LwfConfig /></> },
+    { id: 'ptlwf', label: 'Professional Tax', icon: '', built: true, render: () => <>{reg('pt')}<SlabsHead title="PT slabs by state" /><PtConfig /></> },
     // Enrolment itself happens in ESS; this is the report side — who is in, who is not.
     { id: 'nps', label: 'NPS', icon: '', built: true, render: () => <NpsReport fy={fy} /> },
-    { id: 'tds', label: 'TDS Calculation', icon: '', built: true, desc: 'Monthly TDS from each employee’s investment declaration feeds directly into the payroll run.' },
+    { id: 'tds', label: 'TDS Calculation', icon: '', built: true, render: () => reg('tds') },
     { id: 'form16', label: 'Form 16 / 24Q', icon: '', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },
     { id: 'perq', label: 'Perquisite Tax', icon: '', built: true, render: () => <PerquisiteStatutoryPanel fy={fy} /> },
   ]
+}
+
+function SlabsHead({ title }: { title: string }) {
+  return <div style={{ fontSize: TF.lead, fontWeight: W.bold, color: C.navy, margin: `${SP.xl}px 0 ${SP.md}px`, paddingTop: SP.lg, borderTop: `1px solid ${C.border}` }}>{title}</div>
 }
 
 function benefitsSubs(): SubTab[] {
