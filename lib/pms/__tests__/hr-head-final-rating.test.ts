@@ -356,3 +356,30 @@ test('both new selects survive 211 not having run', () => {
   assert.match(PAGE, /if \(pub\.error\) pub = await askPub\(PUB_BASE\)/,
     'the rating select has no retry')
 })
+
+test('settling refreshes one row, without closing the card', () => {
+  // load() flips `loading` and the tab block sits behind `!loading`, so a
+  // full reload unmounts the publish workspace — closing the open card and
+  // throwing away an appreciation remark typed before settling. Observed in
+  // the browser: text entered, rating settled, text gone.
+  //
+  // Refetched rather than patched from the intent, because the database
+  // decided the result: the trigger could have refused, and
+  // chain_final_rating is only populated on an override.
+  const fn = PAGE.slice(PAGE.indexOf('const settleFinal = useCallback'),
+                        PAGE.indexOf('WRITING AN APPRAISAL THE CHAIN NEVER PICKED UP'))
+  assert.ok(fn.length > 400, 'settleFinal moved')
+  assert.match(fn, /const fresh = await supabase\.from\('pms_overall_rating'\)/,
+    'the settled row is never read back')
+  assert.match(fn, /setPubRows\(rows =>/, 'the refreshed row never reaches the screen')
+  // The ONLY load() left is the fallback for a row that came back missing.
+  // Comments stripped first: the paragraph above this code explains the
+  // trap by NAMING load(), and counting that occurrence made the test fail
+  // against correct code.
+  const code = fn.split('\n').filter(l => !l.trim().startsWith('*')
+    && !l.trim().startsWith('//') && !l.trim().startsWith('/*')).join('\n')
+  assert.equal([...code.matchAll(/\bload\(\)/g)].length, 1,
+    'settling still reloads the page and closes the card')
+  assert.match(fn, /if \(!got\) \{ load\(\); return \}/,
+    'a row that cannot be read back leaves the screen stale')
+})

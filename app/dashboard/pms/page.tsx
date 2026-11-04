@@ -1058,7 +1058,46 @@ export default function PmsPage() {
       .eq('employee_id', employeeId).eq('period_id', periodId)
     setSettling(null)
     if (error) { setCommitNote(`That could not be saved: ${error.message}`); return }
-    load()
+
+    /**
+     * ONE ROW REFETCHED, NOT THE WHOLE PAGE.
+     *
+     * load() flips `loading` and the tab block sits behind `!loading`, so a
+     * full reload unmounts the publish workspace — closing the open card
+     * and throwing away an appreciation remark typed before settling.
+     * Observed: text entered, rating settled, text gone.
+     *
+     * Refetched rather than patched from `intent`, because the database is
+     * what decided the result: the trigger could have refused, and
+     * chain_final_rating is only populated on an override. Reading the row
+     * back is the only way the screen and the row agree.
+     */
+    const fresh = await supabase.from('pms_overall_rating')
+      .select('final_rating, final_rating_code, chain_final_rating, hr_direct,'
+            + ' hr_final_confirmed_at, hr_final_confirmed_by,'
+            + ' hr_management_discussed, hr_final_reason, workflow_status')
+      .eq('employee_id', employeeId).eq('period_id', periodId).limit(1)
+    // The same `as unknown as` the other PMS selects use: columns added by
+    // 211 and 212 are not in the generated types, so the row collapses to
+    // GenericStringError without it.
+    const got = ((fresh.data ?? []) as unknown as Record<string, unknown>[])[0]
+    if (!got) { load(); return }
+    setPubRows(rows => (rows ?? []).map(r =>
+      r.employeeId === employeeId && r.periodId === periodId
+        ? { ...r,
+            finalRating: got.final_rating == null ? null : Number(got.final_rating),
+            finalRatingCode: (got.final_rating_code as string) ?? r.finalRatingCode,
+            hrDirect: got.hr_direct === true,
+            hrFinal: {
+              final_rating: got.final_rating == null ? null : Number(got.final_rating),
+              chain_final_rating: got.chain_final_rating == null
+                ? null : Number(got.chain_final_rating),
+              hr_final_confirmed_at: (got.hr_final_confirmed_at as string) ?? null,
+              hr_final_confirmed_by: (got.hr_final_confirmed_by as string) ?? null,
+              hr_management_discussed: got.hr_management_discussed === true,
+              hr_final_reason: (got.hr_final_reason as string) ?? null,
+            } }
+        : r))
   }, [myHrRole, pubRows, bandList, grant.employeeId, load])
 
   /**
