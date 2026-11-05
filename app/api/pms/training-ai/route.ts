@@ -30,20 +30,72 @@ import { anonymise, worthAsking, rankCatalogue, catalogueSuggestions,
          buildPrompt, parseSuggestions,
          type RatingContext, type CatalogueRow, type Suggestion } from '@/lib/pms/trainingAi'
 
-const GEMINI = 'gemini-2.5-flash'
+/**
+ * A LIST, BECAUSE ONE NAME ROTS AND THE OTHER IS BUSY.
+ *
+ * Both failures were MEASURED against this key, not guessed:
+ *
+ *   gemini-2.5-flash  404 "no longer available to new users". The three
+ *                     older routes in app/api/recruitment still name it
+ *                     and will fail the same way.
+ *   gemini-flash-latest, and the 3.8-flash the 404 message itself
+ *                     recommended: 503 "experiencing high demand", and
+ *                     3.8 is not even in this key's model list.
+ *   gemini-3.5-flash  answered.
+ *
+ * So the route tries a short ordered list and takes the first that
+ * answers. A pinned version breaks on retirement; a single alias breaks
+ * on a busy afternoon. Ordered newest-known-good first, with a lite
+ * model last because a smaller model suggesting something is better than
+ * no suggestion at all.
+ */
+const GEMINI_MODELS = ['gemini-3.5-flash', 'gemini-flash-latest',
+                       'gemini-3.1-flash-lite'] as const
 const CLAUDE = 'claude-sonnet-4-20250514'
 
 const bad = (error: string, message: string, status = 400) =>
   NextResponse.json({ error, message }, { status })
 
-/** Ask whichever model is configured. Returns the text, or null. */
-async function ask(prompt: string): Promise<{ text: string; model: string } | null> {
+/**
+ * Why nothing came back, when nothing came back.
+ *
+ * A TRANSIENT OUTAGE IS NOT A CONFIGURATION ERROR, and telling somebody to
+ * set a key they have already set is how a five-minute wait turns into an
+ * afternoon. Gemini answered 503 "experiencing high demand" during
+ * testing; that has to read as "try again", not as "you have no key".
+ */
+export type AskFailure = 'NO_KEY' | 'UNAVAILABLE'
+
+/**
+ * HOW LONG A RATER WILL WAIT, and it is not five minutes.
+ *
+ * MEASURED: an overloaded Gemini held the connection for 300 seconds
+ * before undici gave up. With no deadline of our own the button would
+ * have spun for that long in the middle of somebody's appraisal, for a
+ * suggestion they did not have to have. Twenty seconds is past the point
+ * where a useful answer was coming.
+ */
+const DEADLINE_MS = 20_000
+
+const withDeadline = async (url: string, init: RequestInit) => {
+  const ctrl = new AbortController()
+  const t = setTimeout(() => ctrl.abort(), DEADLINE_MS)
+  try { return await fetch(url, { ...init, signal: ctrl.signal }) }
+  catch { return null }
+  finally { clearTimeout(t) }
+}
+
+/** Ask whichever model is configured. Returns the text, or why not. */
+async function ask(prompt: string):
+  Promise<{ text: string; model: string } | { failed: AskFailure }> {
+  let tried = false
   const google = process.env.GOOGLE_GENERATIVE_AI_API_KEY
-  if (google) {
-    const r = await fetch(
-      `https://generativelanguage.googleapis.com/v1beta/models/${GEMINI}:generateContent`,
+  for (const model of (google ? GEMINI_MODELS : [])) {
+    tried = true
+    const r = await withDeadline(
+      `https://generativelanguage.googleapis.com/v1beta/models/${model}:generateContent`,
       { method: 'POST',
-        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': google },
+        headers: { 'Content-Type': 'application/json', 'x-goog-api-key': google! },
         body: JSON.stringify({
           contents: [{ role: 'user', parts: [{ text: prompt }] }],
           generationConfig: {
@@ -56,34 +108,39 @@ async function ask(prompt: string): Promise<{ text: string; model: string } | nu
             thinkingConfig: { thinkingBudget: 0 },
           },
         }) })
-    if (r.ok) {
+    if (r?.ok) {
       const j = await r.json().catch(() => null) as
         { candidates?: { content?: { parts?: { text?: string }[] } }[] } | null
       const text = j?.candidates?.[0]?.content?.parts?.map(p => p.text ?? '').join('') ?? ''
-      if (text.trim()) return { text, model: GEMINI }
+      if (text.trim()) return { text, model }
     } else {
-      console.error('[pms] gemini refused:', r.status, (await r.text()).slice(0, 300))
+      // Logged per model, so a retirement shows up as a 404 on one name
+      // rather than as "the AI is down".
+      console.error(`[pms] ${model} unavailable:`,
+        r ? `${r.status} ${(await r.text()).slice(0, 200)}` : 'timed out')
     }
   }
 
   const anthropic = process.env.ANTHROPIC_API_KEY
   if (anthropic) {
-    const r = await fetch('https://api.anthropic.com/v1/messages', {
+    tried = true
+    const r = await withDeadline('https://api.anthropic.com/v1/messages', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json', 'x-api-key': anthropic,
                  'anthropic-version': '2023-06-01' },
       body: JSON.stringify({ model: CLAUDE, max_tokens: 1024,
         messages: [{ role: 'user', content: prompt }] }) })
-    if (r.ok) {
+    if (r?.ok) {
       const j = await r.json().catch(() => null) as
         { content?: { text?: string }[] } | null
       const text = (j?.content ?? []).map(c => c.text ?? '').join('')
       if (text.trim()) return { text, model: CLAUDE }
     } else {
-      console.error('[pms] claude refused:', r.status, (await r.text()).slice(0, 300))
+      console.error('[pms] claude unavailable:',
+        r ? `${r.status} ${(await r.text()).slice(0, 200)}` : 'timed out')
     }
   }
-  return null
+  return { failed: tried ? 'UNAVAILABLE' : 'NO_KEY' }
 }
 
 export async function POST(req: NextRequest) {
@@ -121,12 +178,20 @@ export async function POST(req: NextRequest) {
   const fromCatalogue = catalogueSuggestions(ranked)
 
   // ── the model fills the gaps ───────────────────────────────────────────
-  const answer = await ask(buildPrompt(safe, fromCatalogue.map(s => s.trainingName)))
+  const asked = await ask(buildPrompt(safe, fromCatalogue.map(s => s.trainingName)))
+  const answer = 'text' in asked ? asked : null
   if (!answer && !fromCatalogue.length) {
-    return bad('NO_MODEL',
-      'No AI key is configured, and the training catalogue is empty, so '
-      + 'there is nothing to suggest from. Add courses to the catalogue, or '
-      + 'set GOOGLE_GENERATIVE_AI_API_KEY or ANTHROPIC_API_KEY.', 503)
+    // The two are different problems with different fixes, and saying the
+    // wrong one sends somebody to the wrong place.
+    return 'failed' in asked && asked.failed === 'UNAVAILABLE'
+      ? bad('MODEL_BUSY',
+          'The AI is busy or unreachable just now, and the training '
+          + 'catalogue is empty so there is nothing else to suggest from. '
+          + 'Try again in a minute \u2014 your own suggestion works either way.', 503)
+      : bad('NO_MODEL',
+          'No AI key is configured, and the training catalogue is empty, so '
+          + 'there is nothing to suggest from. Add courses to the catalogue, '
+          + 'or set GOOGLE_GENERATIVE_AI_API_KEY or ANTHROPIC_API_KEY.', 503)
   }
   const fromModel = answer ? parseSuggestions(answer.text) : []
 

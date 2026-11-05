@@ -377,8 +377,9 @@ test('it tries whichever key is present, and says so when neither is', () => {
 test('an empty catalogue plus no key is a refusal, not a silent empty bin', () => {
   // The state this ships in, if nobody sets a key: the screen has to say
   // why rather than look broken.
-  const fn = ROUTE.slice(ROUTE.indexOf('const answer = await ask('),
+  const fn = ROUTE.slice(ROUTE.indexOf('const asked = await ask('),
                          ROUTE.indexOf('const fromModel'))
+  assert.ok(fn.length > 50, 'the ask branch moved')
   assert.match(fn, /!answer && !fromCatalogue\.length/,
     'no key and no catalogue returns an empty bin with no explanation')
 })
@@ -386,7 +387,7 @@ test('an empty catalogue plus no key is a refusal, not a silent empty bin', () =
 test('the catalogue is retrieved before the model is asked', () => {
   // "Catalogue first, model fills the gaps" — the owner's choice. The
   // matched courses are also fed to the prompt so it does not repeat them.
-  assert.ok(ROUTE.indexOf("from('pms_training_catalogue')") < ROUTE.indexOf('const answer = await ask('),
+  assert.ok(ROUTE.indexOf("from('pms_training_catalogue')") < ROUTE.indexOf('const asked = await ask('),
     'the model is asked before the catalogue is consulted')
   assert.match(ROUTE, /buildPrompt\(safe, fromCatalogue\.map\(s => s\.trainingName\)\)/)
 })
@@ -520,4 +521,66 @@ test('no key, no bin — and the block still works', () => {
                         PERF.indexOf('const dismissSuggestion'))
   assert.match(fn, /setAiNote\(j\?\.message \?\?/,
     'the route\'s explanation is replaced with a vaguer one')
+})
+
+// ── what live testing against the real model taught ─────────────────────
+
+test('the model name is the one the API will still answer', () => {
+  // gemini-2.5-flash returns 404 for a new key: "no longer available to
+  // new users ... use models/gemini-3.8-flash". Found by calling it.
+  // A LIST, not a name. Both failure modes were measured against the real
+  // key: 2.5-flash is retired (404) and flash-latest was busy (503), so a
+  // single pinned name or a single alias each break on a different day.
+  const m = ROUTE.match(/const GEMINI_MODELS = \[([^\]]*)\]/)
+  assert.ok(m, 'the model list is gone')
+  const models = [...m![1].matchAll(/'([^']+)'/g)].map(x => x[1])
+  assert.ok(models.length >= 2, 'one model name is one retirement from broken')
+  assert.equal(models[0], 'gemini-3.5-flash',
+    'the model that actually answered is not tried first')
+  assert.ok(!models.includes('gemini-3.8-flash'),
+    'the route names a model that is not in this key\'s list')
+  // COMMENTS STRIPPED. The comment above the constant explains the 404 by
+  // naming the dead model, which is the point of it — and tripped this
+  // assertion when it searched the whole file.
+  const code = ROUTE.replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ')
+  assert.ok(!/gemini-2\.5-flash/.test(code), 'the retired model is still called')
+})
+
+test('a busy model is not reported as a missing key', () => {
+  // Telling somebody to set a key they have already set is how a
+  // five-minute wait becomes an afternoon. Gemini answered 503
+  // "experiencing high demand" during testing.
+  assert.match(ROUTE, /MODEL_BUSY/)
+  assert.match(ROUTE, /asked\.failed === 'UNAVAILABLE'/,
+    'the two failures share one message')
+  assert.match(ROUTE, /tried \? 'UNAVAILABLE' : 'NO_KEY'/,
+    'a key that was tried and failed reads as absent')
+  // And the busy message must not tell them to configure anything.
+  const busy = ROUTE.slice(ROUTE.indexOf("bad('MODEL_BUSY'"), ROUTE.indexOf("bad('NO_MODEL'"))
+  assert.ok(!/API_KEY/.test(busy), 'the busy message sends them to the env file')
+})
+
+test('the call has a deadline, so the button cannot spin for ever', () => {
+  // MEASURED: an overloaded Gemini held the connection 300 seconds before
+  // undici gave up. The rater does not have to have this suggestion.
+  assert.match(ROUTE, /const DEADLINE_MS = 20_000/)
+  assert.match(ROUTE, /new AbortController\(\)/)
+  assert.match(ROUTE, /signal: ctrl\.signal/)
+  // AND THE TIMER IS ARMED. A controller that is never aborted is a
+  // controller that does nothing — a mutation deleting just the
+  // setTimeout left all three assertions above passing.
+  assert.match(ROUTE, /setTimeout\(\(\) => ctrl\.abort\(\), DEADLINE_MS\)/,
+    'the abort is never scheduled, so the deadline never fires')
+  assert.match(ROUTE, /clearTimeout\(t\)/, 'the timer leaks on a fast response')
+  // Both providers go through it.
+  assert.equal([...ROUTE.matchAll(/await withDeadline\(/g)].length, 2,
+    'one of the providers can still hang')
+  // Every model in the list goes through the same deadline, so a busy one
+  // cannot eat the budget meant for the next.
+  assert.match(ROUTE, /for \(const model of \(google \? GEMINI_MODELS : \[\]\)\)/,
+    'the models are not tried in turn')
+  // withDeadline itself must call fetch — the rule is that NOTHING ELSE
+  // does, so the count is one rather than zero.
+  assert.equal([...ROUTE.matchAll(/await fetch\(/g)].length, 1,
+    'a raw fetch with no deadline remains')
 })
