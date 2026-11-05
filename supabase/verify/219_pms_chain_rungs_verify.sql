@@ -24,18 +24,22 @@ BEGIN;
 -- ── 0. both migrations are in ────────────────────────────────────────────
 SELECT CASE WHEN count(*) = 1 THEN 'PASS' ELSE 'FAIL — 218 not applied' END
          AS pms_chain_exists
-  FROM information_schema.tables WHERE table_name = 'pms_chain';
+  FROM information_schema.tables
+ WHERE table_schema = 'public' AND table_name = 'pms_chain';
 
 SELECT CASE WHEN count(*) = 1 THEN 'PASS'
             ELSE 'FAIL — pms_policies.chain_id missing' END AS policy_points_at_a_chain
   FROM information_schema.columns
- WHERE table_name = 'pms_policies' AND column_name = 'chain_id';
+ WHERE table_schema = 'public'
+   AND table_name = 'pms_policies' AND column_name = 'chain_id';
 
-SELECT CASE WHEN pg_get_constraintdef(oid) LIKE '%cardinality%' THEN 'PASS'
+SELECT CASE WHEN d LIKE '%cardinality%' THEN 'PASS'
+            WHEN d IS NULL THEN 'FAIL — pms_chain_has_rungs does not exist'
             ELSE 'FAIL — 219 not applied; the empty-chain CHECK is still inert' END
-         AS has_rungs_uses_cardinality,
-       pg_get_constraintdef(oid) AS definition
-  FROM pg_constraint WHERE conname = 'pms_chain_has_rungs';
+         AS has_rungs_uses_cardinality, d AS definition
+  FROM (SELECT (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                 WHERE conrelid = 'pms_chain'::regclass
+                   AND conname = 'pms_chain_has_rungs') AS d) q;
 
 -- ── 1. AN EMPTY CHAIN IS ACTUALLY REFUSED ────────────────────────────────
 --
@@ -92,7 +96,7 @@ SELECT CASE WHEN count(*) = 5 THEN 'PASS'
          AS every_rung_has_a_real_column,
        string_agg(column_name, ', ' ORDER BY column_name) AS found
   FROM information_schema.columns
- WHERE table_name = 'employees'
+ WHERE table_schema = 'public' AND table_name = 'employees'
    AND column_name IN ('l1_manager_id','l2_manager_id','hod_id',
                        'site_hr_id','regional_head_id');
 
@@ -101,23 +105,25 @@ SELECT CASE WHEN count(*) = 0 THEN 'PASS'
             ELSE 'FAIL — rm_l1_id/rm_l2_id exist after all; check which is canonical' END
          AS the_old_names_are_not_real
   FROM information_schema.columns
- WHERE table_name = 'employees' AND column_name IN ('rm_l1_id','rm_l2_id');
+ WHERE table_schema = 'public' AND table_name = 'employees'
+   AND column_name IN ('rm_l1_id','rm_l2_id');
 
 -- And the COMMENT names the real ones, so chainBuilder.ts can keep reading it.
 SELECT CASE WHEN d LIKE '%l1_manager_id%' AND d LIKE '%l2_manager_id%'
                  AND d NOT LIKE '%rm_l1_id%' AND d NOT LIKE '%rm_l2_id%'
             THEN 'PASS' ELSE 'FAIL — the COMMENT still names columns that do not exist' END
          AS comment_names_real_columns
-  FROM (SELECT col_description('pms_chain'::regclass,
-                 (SELECT ordinal_position FROM information_schema.columns
-                   WHERE table_name = 'pms_chain' AND column_name = 'rungs')::int) AS d) x;
+  FROM (SELECT col_description(a.attrelid, a.attnum) AS d
+          FROM pg_attribute a
+         WHERE a.attrelid = 'pms_chain'::regclass
+           AND a.attname = 'rungs') x;
 
 -- ── 4. the coverage the builder shows, measured here ─────────────────────
 --
 -- Printed rather than asserted: these are facts about the data, not about the
 -- schema, and they move. REGIONAL_HEAD at 0 is the number that matters — a
 -- chain naming it is skipped for everybody.
-SELECT 'HOD' AS rung, count(hod_id) AS have, count(*) AS of FROM employees
+SELECT 'HOD' AS rung, count(hod_id) AS have, count(*) AS out_of FROM employees
  WHERE date_of_leaving IS NULL
 UNION ALL SELECT 'RM_L1', count(l1_manager_id), count(*) FROM employees WHERE date_of_leaving IS NULL
 UNION ALL SELECT 'RM_L2', count(l2_manager_id), count(*) FROM employees WHERE date_of_leaving IS NULL
@@ -135,20 +141,33 @@ SELECT conname,
 
 -- Nothing that was allowed before may have been dropped: a CHECK is recreated
 -- whole, so widening it is also the moment a value silently disappears.
-SELECT CASE WHEN pg_get_constraintdef(oid) LIKE '%HR_HEAD%' THEN 'PASS'
+SELECT CASE WHEN d LIKE '%HR_HEAD%' THEN 'PASS'
+            WHEN d IS NULL THEN 'FAIL — the rater_role CHECK is gone entirely'
             ELSE 'FAIL — HR_HEAD lost its place as a rater (214)' END
          AS hr_head_can_still_rate
-  FROM pg_constraint WHERE conname = 'pms_reviews_rater_role_allowed';
+  FROM (SELECT (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                 WHERE conrelid = 'pms_reviews'::regclass
+                   AND conname = 'pms_reviews_rater_role_allowed') AS d) q;
 
-SELECT CASE WHEN pg_get_constraintdef(oid) LIKE '%chain_stage IS NULL%' THEN 'PASS'
+SELECT CASE WHEN d LIKE '%chain_stage IS NULL%' THEN 'PASS'
+            WHEN d IS NULL THEN 'FAIL — the chain_stage CHECK is gone entirely'
             ELSE 'FAIL — chain_stage is no longer nullable; "not submitted" '
                  'and "with the employee" collapse' END AS chain_stage_still_nullable
-  FROM pg_constraint WHERE conname = 'pms_overall_rating_chain_stage_allowed';
+  FROM (SELECT (SELECT pg_get_constraintdef(oid) FROM pg_constraint
+                 WHERE conrelid = 'pms_overall_rating'::regclass
+                   AND conname = 'pms_overall_rating_chain_stage_allowed') AS d) q;
 
 -- ── 6. deleting a chain does not take its policies with it ───────────────
-SELECT CASE WHEN confdeltype = 'n' THEN 'PASS'
-            ELSE 'FAIL — chain_id is not ON DELETE SET NULL (' || confdeltype || ')' END
-         AS deleting_a_chain_spares_the_policy
+-- confdeltype is "char" — Postgres's internal single-byte type, NOT text.
+-- `'...' || confdeltype` is ambiguous ("operator is not unique: unknown ||
+-- "char"") because an untyped literal cannot pick an operator against it.
+-- Both uses are cast explicitly. pg_get_constraintdef is printed alongside
+-- so a failure says what the rule actually is, not just its one-letter code.
+SELECT CASE WHEN confdeltype::text = 'n' THEN 'PASS'
+            ELSE 'FAIL — chain_id is not ON DELETE SET NULL ('
+                 || confdeltype::text || ')' END
+         AS deleting_a_chain_spares_the_policy,
+       pg_get_constraintdef(oid) AS definition
   FROM pg_constraint
  WHERE conrelid = 'pms_policies'::regclass AND contype = 'f'
    AND confrelid = 'pms_chain'::regclass;
