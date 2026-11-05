@@ -637,3 +637,86 @@ test('the dismissal survives 216 not having run', () => {
   const fb = fn.slice(fn.indexOf('stamped.error'))
   assert.match(fb, /status: 'DISMISSED'/)
 })
+
+// ── the catalogue admin screen ──────────────────────────────────────────
+
+const EDITOR = read('components/pms/AdminEditor.tsx')
+const ADMIN_ROUTE = read('app/api/pms/admin/route.ts')
+
+test('the catalogue has its own tab in Setup & Controls', () => {
+  assert.match(EDITOR, /\['courses',\s*'Training catalogue'\]/)
+  assert.match(EDITOR, /<CataloguePanel catalogue=\{snap\.catalogue \?\? \[\]\}/,
+    'the panel is never rendered')
+  // Setup & Controls is admin-only, which is where course configuration
+  // belongs — HR does not configure the module.
+  assert.match(ADMIN_ROUTE, /case 'catalogue_upsert'/)
+  assert.ok(!/HR_ACTIONS[\s\S]{0,120}catalogue/.test(ADMIN_ROUTE),
+    'catalogue editing was handed to HR along with the rating upload')
+})
+
+test('a course with no skill cannot be saved', () => {
+  // Retrieval scores the skill three times higher than the title, so a
+  // row without one is a course the engine can never surface — present in
+  // the catalogue and invisible in practice.
+  const panel = EDITOR.slice(EDITOR.indexOf('function CataloguePanel'),
+                             EDITOR.indexOf('// ══ 3. RATING SCALE'))
+  assert.ok(panel.length > 800, 'the panel is gone')
+  assert.match(panel, /disabled=\{!s\(editing\.course_name\)\.trim\(\) \|\| !s\(editing\.skill\)\.trim\(\)/,
+    'the save button allows a course with no skill')
+  // And the server refuses too, because a disabled button is a courtesy.
+  const act = ADMIN_ROUTE.slice(ADMIN_ROUTE.indexOf("case 'catalogue_upsert'"),
+                                ADMIN_ROUTE.indexOf("case 'catalogue_set_active'"))
+  assert.match(act, /!String\(fields\.skill \?\? ''\)\.trim\(\)/,
+    'the route accepts a course the suggestion can never match')
+})
+
+test('a course is retired, never deleted', () => {
+  // A suggestion already in somebody's bin points at the row.
+  const act = ADMIN_ROUTE.slice(ADMIN_ROUTE.indexOf("case 'catalogue_set_active'"),
+                                ADMIN_ROUTE.indexOf("// ── Per-employee KRA approvals"))
+  assert.match(act, /\.update\(\{ is_active: body\.is_active === true \}\)/)
+  assert.ok(!/\.delete\(\)/.test(act), 'a course can be deleted out from under a suggestion')
+  const panel = EDITOR.slice(EDITOR.indexOf('function CataloguePanel'),
+                             EDITOR.indexOf('// ══ 3. RATING SCALE'))
+  assert.match(panel, /Retire/)
+  assert.ok(!/Delete/.test(panel))
+})
+
+test('group scope is a deliberate choice, not a missing company', () => {
+  // null company_id means "every company", so it is only honoured for
+  // somebody who actually works across them.
+  const act = ADMIN_ROUTE.slice(ADMIN_ROUTE.indexOf("case 'catalogue_upsert'"),
+                                ADMIN_ROUTE.indexOf("case 'catalogue_set_active'"))
+  assert.match(act, /const wantsGroup = body\.company_id === null/)
+  assert.match(act, /wantsGroup && g\.grant\.crossCompany/,
+    'a single-company admin can publish a course to the whole group')
+  assert.match(act, /if \(!company && !wantsGroup\) return bad/)
+  // company_id is not in the patchable column list.
+  const cols = ADMIN_ROUTE.match(/const CATALOGUE_COLS = \[([\s\S]*?)\] as const/)
+  assert.ok(cols, 'the column allowlist is gone')
+  assert.ok(!cols![1].includes('company_id'),
+    'company_id can be patched by whatever the browser sends')
+})
+
+test('the empty catalogue explains itself', () => {
+  // The state it ships in. A blank table reads as broken; the sentence
+  // says what it means for the manager downstream.
+  const panel = EDITOR.slice(EDITOR.indexOf('function CataloguePanel'),
+                             EDITOR.indexOf('// ══ 3. RATING SCALE'))
+  assert.match(panel, /\{!catalogue\.length && \(/)
+  // Whitespace normalised: JSX prose wraps, so a sentence written across
+  // three lines is one string to a reader and three to a regex.
+  const flat = panel.replace(/\s+/g, ' ')
+  assert.match(flat, /every suggestion a manager sees is a <b>skill area<\/b>/)
+  assert.match(flat, /not allowed to name a course/)
+})
+
+test('a missing catalogue table does not break Setup & Controls', () => {
+  // 215 may not have run, and the rest of that screen has nothing to do
+  // with courses.
+  assert.match(ADMIN_ROUTE, /if \(catalogue\.error\) console\.error/,
+    'an unreadable catalogue is fatal to the whole editor')
+  const fatal = ADMIN_ROUTE.match(/const firstError = \[([^\]]*)\]/)
+  assert.ok(fatal && !fatal[1].includes('catalogue'),
+    'the catalogue read can fail the whole GET')
+})

@@ -94,6 +94,17 @@ const KRA_COLS = [
   'suggested_target', 'category', 'suggested_weightage', 'is_active',
 ] as const
 
+/**
+ * THE COURSE CATALOGUE (215). company_id is NOT here: a row either belongs
+ * to one company or to the whole group, and which it is gets decided on
+ * insert from the grant, exactly as a KRA does — not patched later by
+ * whatever the browser happened to send.
+ */
+const CATALOGUE_COLS = [
+  'course_name', 'provider', 'skill', 'category', 'level', 'url',
+  'duration_hours', 'notes', 'is_active',
+] as const
+
 const SCALE_COLS = [
   'policy_id', 'rating_value', 'rating_code', 'rating_label',
   'score_from', 'score_to', 'min_comment_chars',
@@ -159,7 +170,7 @@ export async function GET(req: NextRequest) {
   const g = await gate(req)
   if ('error' in g) return g.error
 
-  const [policies, kras, scale, periods, companies, people] = await Promise.all([
+  const [policies, kras, scale, periods, companies, people, catalogue] = await Promise.all([
     sb.from('pms_policies').select('*').order('policy_name'),
     sb.from('pms_kra_master').select('*').order('kra_title').limit(500),
     sb.from('pms_rating_scale').select('*').order('sort_order'),
@@ -179,11 +190,17 @@ export async function GET(req: NextRequest) {
     // still renders and the HR Head field simply has nobody to offer.
     sb.from('employees').select('id,emp_code,full_name,company_id')
       .is('date_of_leaving', null).order('emp_code').limit(5000),
+    // 215. Non-fatal too, and for a sharper reason than the others: this
+    // table may not exist yet on a database where 215 has not run, and the
+    // rest of Setup & Controls has nothing to do with it.
+    sb.from('pms_training_catalogue').select('*')
+      .order('course_name').limit(1000),
   ])
   const firstError = [policies, kras, scale, periods].find(r => r.error)?.error
   if (firstError) return bad(firstError.message, 500)
   if (companies.error) console.error('[pms] could not read company names:', companies.error)
   if (people.error) console.error('[pms] could not read the employee list:', people.error)
+  if (catalogue.error) console.error('[pms] training catalogue unreadable:', catalogue.error)
 
   return NextResponse.json({
     policies: policies.data ?? [],
@@ -192,6 +209,7 @@ export async function GET(req: NextRequest) {
     periods:  periods.data ?? [],
     companies: companies.data ?? [],
     people: people.data ?? [],
+    catalogue: catalogue.data ?? [],
     // The UI hides attribution-only actions when there is no employee behind
     // the session, rather than letting the button fail on click.
     actor: { employeeId: g.actor.employeeId, name: g.actor.name, legacy: g.actor.legacy },
@@ -248,6 +266,56 @@ export async function POST(req: NextRequest) {
       const id = str('id')
       if (!id) return bad('Which KRA?')
       const r = await sb.from('pms_kra_master')
+        .update({ is_active: body.is_active === true }).eq('id', id).select().single()
+      return r.error ? bad(r.error.message) : okay(r.data)
+    }
+
+    // ── the training catalogue (215) ───────────────────────────────────
+    //
+    // The corpus the AI suggestion retrieves from. Until it has rows every
+    // suggestion is a skill area, because the model is not allowed to name
+    // a course it cannot vouch for.
+    case 'catalogue_upsert': {
+      const id = str('id')
+      const fields = pick(body, CATALOGUE_COLS)
+      if (!id && !fields.course_name) return bad('A course needs a name.')
+      // THE SKILL IS NOT OPTIONAL. Retrieval scores it three times higher
+      // than the title, so a row without one is a course the suggestion
+      // engine can never find — present in the catalogue and invisible in
+      // practice, which is worse than absent.
+      if (!id && !String(fields.skill ?? '').trim()) {
+        return bad('Say what this course teaches, in the words a manager '
+                 + 'would use in a review. It is what the suggestion '
+                 + 'matches on \u2014 a course with no skill is one the AI '
+                 + 'can never surface.')
+      }
+      if (id) {
+        const r = await sb.from('pms_training_catalogue')
+          .update(fields).eq('id', id).select().single()
+        return r.error ? bad(r.error.message) : okay(r.data)
+      }
+      /**
+       * NULL COMPANY MEANS THE WHOLE GROUP, and that is a deliberate
+       * choice rather than a missing value — so it is only honoured when
+       * the person actually works across companies. For everybody else
+       * companyFilter pins it to theirs.
+       */
+      const wantsGroup = body.company_id === null
+      const company = wantsGroup && g.grant.crossCompany
+        ? null : companyFilter(g.grant, str('company_id'))
+      if (!company && !wantsGroup) return bad('Which company is this course for?')
+      const r = await sb.from('pms_training_catalogue')
+        .insert({ ...fields, company_id: company }).select().single()
+      return r.error ? bad(r.error.message) : okay(r.data)
+    }
+
+    // Retired, not deleted: a suggestion already in somebody's bin points
+    // at this row, and removing it would leave them holding a reference to
+    // a course nobody can look up.
+    case 'catalogue_set_active': {
+      const id = str('id')
+      if (!id) return bad('Which course?')
+      const r = await sb.from('pms_training_catalogue')
         .update({ is_active: body.is_active === true }).eq('id', id).select().single()
       return r.error ? bad(r.error.message) : okay(r.data)
     }

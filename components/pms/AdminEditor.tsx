@@ -413,6 +413,199 @@ function KraPanel({ kras, companyId, reload }: {
   )
 }
 
+// ══ 3b. TRAINING CATALOGUE ════════════════════════════════════════════════
+
+const BLANK_COURSE: Row = {
+  course_name: '', provider: '', skill: '', category: 'TECHNICAL',
+  level: 'INTERMEDIATE', url: '', duration_hours: null, notes: '', is_active: true,
+}
+
+const COURSE_CATEGORIES = ['TECHNICAL', 'BEHAVIOURAL', 'LEADERSHIP',
+                           'DOMAIN', 'COMPLIANCE', 'OTHER'] as const
+const COURSE_LEVELS = ['FOUNDATION', 'INTERMEDIATE', 'ADVANCED'] as const
+
+/**
+ * THE COURSES THE AI SUGGESTION RETRIEVES FROM (215).
+ *
+ * Empty until somebody fills it, and the screen says so rather than
+ * showing a blank table: while it is empty every suggestion a rater sees
+ * is a skill area, because the model is not allowed to name a course it
+ * cannot vouch for.
+ *
+ * ── WHY "WHAT IT TEACHES" IS THE FIELD THAT MATTERS ────────────────────
+ *
+ * Retrieval scores the skill three times higher than the course title. A
+ * row with a polished name and no skill is a course the engine can never
+ * surface — present in the catalogue and invisible in practice, which is
+ * worse than absent. The form says so, and refuses to save without it.
+ */
+function CataloguePanel({ catalogue, companyId, reload }: {
+  catalogue: Row[]; companyId: string | null; reload: () => Promise<void>
+}) {
+  const [editing, setEditing] = useState<Row | null>(null)
+  const [q, setQ] = useState('')
+  const [group, setGroup] = useState(false)
+  const { busy, error, saved, run } = useSaver(reload)
+  const set = (k: string, v: unknown) => setEditing(d => d ? { ...d, [k]: v } : d)
+
+  const shown = catalogue.filter(c => {
+    const t = q.trim().toLowerCase()
+    if (!t) return true
+    return [c.course_name, c.skill, c.provider].some(v => s(v).toLowerCase().includes(t))
+  })
+  const active = catalogue.filter(c => c.is_active).length
+
+  return (
+    <Card title="Training catalogue"
+          sub="The courses this organisation can actually send somebody on. The AI suggestion matches against these before it proposes anything of its own.">
+      {!catalogue.length && (
+        <Note tone="warn">
+          The catalogue is empty. Until it has courses, every suggestion a
+          manager sees is a <b>skill area</b> rather than something they can
+          book — the model is deliberately not allowed to name a course,
+          because an invented one is indistinguishable from a real one once
+          it reaches HR.
+        </Note>
+      )}
+
+      <div className="btnrow">
+        <button className="btn" onClick={() => setEditing({ ...BLANK_COURSE })}>Add a course</button>
+        {catalogue.length > 0 && (
+          <span className="k" style={{ alignSelf: 'center' }}>
+            {active} active of {catalogue.length}
+          </span>
+        )}
+      </div>
+
+      {editing && (
+        <>
+          <div className="divider" />
+          <div className="grid g2">
+            <Field label="Course name" hint="What it is called on the invoice">
+              <input value={s(editing.course_name)}
+                     onChange={e => set('course_name', e.target.value)} />
+            </Field>
+            <Field label="Provider" hint="Internal L&amp;D, or whoever runs it">
+              <input value={s(editing.provider)}
+                     onChange={e => set('provider', e.target.value)} />
+            </Field>
+          </div>
+
+          <Field label="What it teaches"
+                 hint="The words a manager would use in a review — “stock accuracy cycle counting variance”. This is what the suggestion matches on, and it counts for three times the course name.">
+            <input value={s(editing.skill)} onChange={e => set('skill', e.target.value)} />
+          </Field>
+
+          <div className="grid g4">
+            <Field label="Kind">
+              <select value={s(editing.category)} onChange={e => set('category', e.target.value)}>
+                {COURSE_CATEGORIES.map(c => (
+                  <option key={c} value={c}>{c.toLowerCase()}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Level">
+              <select value={s(editing.level)} onChange={e => set('level', e.target.value)}>
+                {COURSE_LEVELS.map(c => (
+                  <option key={c} value={c}>{c.toLowerCase()}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Hours" hint="Blank if it varies">
+              <input type="number" value={editing.duration_hours === null ? '' : n(editing.duration_hours)}
+                     onChange={e => set('duration_hours',
+                       e.target.value === '' ? null : Number(e.target.value))} />
+            </Field>
+            <Field label="Link" hint="Where to book it">
+              <input value={s(editing.url)} onChange={e => set('url', e.target.value)} />
+            </Field>
+          </div>
+
+          {!editing.id && (
+            <label className="chk" style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                                            margin: '8px 0', lineHeight: 1.6 }}>
+              <input type="checkbox" checked={group}
+                     onChange={e => setGroup(e.target.checked)} />
+              <span>
+                Available to <b>every company</b> in the group, not just this one.
+                <span className="k"> Leave this off for a course only one company runs.</span>
+              </span>
+            </label>
+          )}
+
+          <SaveRow busy={busy} error={error} saved={saved}
+                   label={editing.id ? 'Save course' : 'Add course'}
+                   disabled={!s(editing.course_name).trim() || !s(editing.skill).trim()
+                             || (!editing.id && !group && !companyId)}
+                   onSave={async () => {
+                     const okDone = await run(
+                       () => pmsAdmin('catalogue_upsert',
+                         { ...editing, company_id: group ? null : companyId }),
+                       editing.id ? 'Course saved.' : 'Course added.')
+                     if (okDone) { setEditing(null); setGroup(false) }
+                   }} />
+          {!s(editing.skill).trim() && s(editing.course_name).trim() && (
+            <Note tone="warn">
+              Without “what it teaches”, nothing will ever match this course.
+            </Note>
+          )}
+        </>
+      )}
+
+      {catalogue.length > 0 && (
+        <>
+          <div className="divider" />
+          <Field label="Find a course">
+            <input value={q} placeholder="name, provider, or what it teaches"
+                   onChange={e => setQ(e.target.value)} />
+          </Field>
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Course</th><th>What it teaches</th><th>Provider</th>
+                    <th>Kind</th><th>Scope</th><th>Status</th><th /></tr>
+              </thead>
+              <tbody>
+                {!shown.length && (
+                  <tr><td colSpan={7} className="k">Nothing matches that.</td></tr>
+                )}
+                {shown.map(c => (
+                  <tr key={s(c.id)}>
+                    <td>{s(c.course_name)}</td>
+                    <td className="k">{s(c.skill)}</td>
+                    <td className="k">{s(c.provider) || '-'}</td>
+                    <td>{s(c.category).toLowerCase()}</td>
+                    <td className="k">{c.company_id ? 'this company' : 'whole group'}</td>
+                    <td>
+                      <span className={`pill ${c.is_active ? 'p-green' : 'p-grey'}`}>
+                        {c.is_active ? 'active' : 'retired'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="btnrow">
+                        <button className="btn ghost" onClick={() => setEditing({ ...c })}>Edit</button>
+                        {/* Retired, never deleted: a suggestion already in a
+                            manager's bin points at this row. */}
+                        <button className="btn ghost"
+                                onClick={() => run(
+                                  () => pmsAdmin('catalogue_set_active',
+                                    { id: c.id, is_active: !c.is_active }),
+                                  c.is_active ? 'Course retired.' : 'Course back in use.')}>
+                          {c.is_active ? 'Retire' : 'Bring back'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
 // ══ 3. RATING SCALE ═══════════════════════════════════════════════════════
 function ScalePanel({ scale, companyId, reload }: {
   scale: Row[]; companyId: string | null; reload: () => Promise<void>
@@ -752,7 +945,7 @@ function FinalisePanel({ periods, canAttribute, reload }: {
 export default function AdminEditor() {
   const [snap, setSnap] = useState<PmsAdminSnapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [section, setSection] = useState<'policy' | 'kra' | 'scale' | 'cycle' | 'finalise'>('policy')
+  const [section, setSection] = useState<'policy' | 'kra' | 'scale' | 'courses' | 'cycle' | 'finalise'>('policy')
 
   const reload = useCallback(async () => {
     const r = await loadPmsAdmin()
@@ -776,6 +969,7 @@ export default function AdminEditor() {
     ['policy',   'Policy rules'],
     ['kra',      'KRA library'],
     ['scale',    'Rating scale'],
+    ['courses',  'Training catalogue'],
     ['cycle',    'Cycle control'],
     ['finalise', 'Finalise'],
   ] as const
@@ -792,6 +986,8 @@ export default function AdminEditor() {
                                               people={snap.people ?? []} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
+      {section === 'courses'  && <CataloguePanel catalogue={snap.catalogue ?? []}
+                                                 companyId={companyId} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
       {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
     </>
