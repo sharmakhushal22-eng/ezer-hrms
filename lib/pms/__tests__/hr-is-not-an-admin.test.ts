@@ -62,12 +62,14 @@ test('the gate reads the action, and the body is parsed before it', () => {
   // The gate depends on WHICH action is asked for, so the body has to be
   // read first. Parsing JSON has no side effects; an unparseable body gives
   // an empty action, which matches no case and is refused as admin-only.
-  assert.match(ROUTE, /async function gate\(req: NextRequest, action\?: string\)/)
+  // 217 added a third argument: the period, because who may commit an
+  // upload is now a policy question and the policy is per company.
+  assert.match(ROUTE, /async function gate\(req: NextRequest, action\?: string, periodId\?: string \| null\)/)
   const post = ROUTE.slice(ROUTE.indexOf('export async function POST'),
                            ROUTE.indexOf('switch (action)'))
-  assert.ok(post.indexOf('await req.json()') < post.indexOf('await gate(req, action)'),
+  assert.ok(post.indexOf('await req.json()') < post.indexOf('await gate(req, action'),
     'the gate runs before the action it depends on is known')
-  assert.match(post, /await gate\(req, action\)/)
+  assert.match(post, /await gate\(req, action,/)
 })
 
 test('the upload is NOT gated on the screen key', () => {
@@ -76,11 +78,21 @@ test('the upload is NOT gated on the screen key', () => {
   // is exactly how Publish Results became reachable by every line manager
   // when it borrowed it. Gating a bulk override on it would let any line
   // manager rewrite the whole period's final ratings.
-  const g = ROUTE.slice(ROUTE.indexOf('async function gate('),
+  // 217 moved the role reading into uploadAllowed, which the gate calls.
+  const g = ROUTE.slice(ROUTE.indexOf('async function uploadAllowed('),
                         ROUTE.indexOf('// ─── GET'))
   assert.ok(!/canSeeScreen/.test(g), 'the bulk override is gated on a screen key')
-  assert.match(g, /isHrRole\(pmsRoleOf\(grant\.roles, grant\.isSuperAdmin\)\)/,
+  assert.match(g, /pmsRoleOf\(grant\.roles, grant\.isSuperAdmin\)/,
     'the gate does not reuse the reading the publish path already uses')
+  // EVERY path through uploadAllowed checks the role. Asserting that
+  // isHrRole merely APPEARS let a mutation through that returned true when
+  // no period was given — the fallback is the path a caller controls.
+  assert.match(g, /if \(!periodId\) return isHrRole\(role\)/,
+    'an upload with no period named skips the role check entirely')
+  assert.match(g, /if \(r\.error \|\| !r\.data\) return isHrRole\(role\)/,
+    'an unreadable policy skips the role check')
+  // And the policy only NARROWS — it cannot hand the upload to a line manager.
+  assert.match(g, /authorityOf\(role, authorityFromRow\(pol\)\)\.upload/)
 })
 
 test('GET stays admin-only', () => {

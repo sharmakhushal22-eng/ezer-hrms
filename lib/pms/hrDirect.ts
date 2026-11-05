@@ -36,9 +36,20 @@ import { DEFAULT_RULES } from './cycle.ts'
 import type { Rules } from './cycle.ts'
 import type { Role } from './hierarchy.ts'
 
-/** The same role that settles a final rating, for the same reason. */
-export function canActDirect(role: Role): boolean {
-  return role === 'HR_HEAD'
+/**
+ * The same role that settles a final rating, for the same reason — and now
+ * a policy switch beside it (217).
+ *
+ * The policy only NARROWS. Turning hr_head_can_direct on does not let an RM
+ * build an appraisal outside the chain: the question that setting answers
+ * is "may the HR Head", not "who may". Defaults to allowed when the policy
+ * cannot be read, so a missing row does not remove a power mid-cycle.
+ */
+export function canActDirect(
+  role: Role,
+  policy?: { hrHeadCanDirect?: boolean | null } | null,
+): boolean {
+  return role === 'HR_HEAD' && (policy?.hrHeadCanDirect ?? true) !== false
 }
 
 /** A reason shorter than this is not an account of an exception. */

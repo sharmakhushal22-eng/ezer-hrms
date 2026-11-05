@@ -67,8 +67,20 @@ export function checkFinal(
   intent: FinalIntent,
   chainRating: number | null,
   scale: number[] = [1, 2, 3, 4, 5],
+  /**
+   * 217. Whether this policy lets the HR Head REPLACE the chain's number.
+   * Defaults true: a policy that cannot be read must not quietly remove a
+   * power the module had yesterday.
+   */
+  mayOverride = true,
 ): FinalCheck {
   const faults: string[] = []
+
+  if (intent.choice === 'REPLACE' && !mayOverride) {
+    faults.push('This policy lets you settle the rating but not change it. '
+              + 'Keep the rating the chain settled, or ask an administrator '
+              + 'to allow overrides.')
+  }
 
   if (intent.choice === 'KEEP' && chainRating === null) {
     faults.push('There is no rating from the chain to keep. The chain has '

@@ -413,6 +413,158 @@ function KraPanel({ kras, companyId, reload }: {
   )
 }
 
+// ══ 3c. HR HEAD AUTHORITY ═════════════════════════════════════════════════
+
+/**
+ * WHAT THE HR HEAD MAY DO, in one place.
+ *
+ * Requested: whether the HR Head can finalise a rating, override the HOD's,
+ * and the rest, should all be flexible and changeable from here.
+ *
+ * Most of it already was — hr_head_final_rating, post_final_owner,
+ * publish_scope and hr_head_id are policy columns and have been. They were
+ * spread across two tabs, which is most of why it did not feel
+ * configurable. Only the override, the direct appraisal and the upload
+ * needed new columns (217).
+ *
+ * ── PER POLICY, WHICH MEANS PER COMPANY ────────────────────────────────
+ *
+ * Three companies, three policies, three different answers if they want
+ * them. The selector is the first thing on the screen for the reason the
+ * publish workspace narrows by company: every policy here is called
+ * "Standard Quarterly", and changing the wrong company's rules is not a
+ * mistake you notice.
+ *
+ * ── THE HR HEAD CANNOT REACH THIS SCREEN ───────────────────────────────
+ *
+ * Setup & Controls requires full Performance management, which the HR Head
+ * role does not have. That is the only version of this that means
+ * anything: a person who can grant themselves a power is not limited by it.
+ */
+function AuthorityPanel({ policies, companies, reload }: {
+  policies: Row[]; companies: Row[]; reload: () => Promise<void>
+}) {
+  const [id, setId] = useState<string>('')
+  const [draft, setDraft] = useState<Row>({})
+  const { busy, error, saved, run } = useSaver(reload)
+  const current = useMemo(() => policies.find(p => s(p.id) === id), [policies, id])
+  const coName = (cid: unknown) =>
+    s(companies.find(c => s(c.id) === s(cid))?.company_name) || 'Unknown company'
+
+  useEffect(() => {
+    if (!id && policies.length) setId(s(policies[0].id))
+  }, [policies, id])
+  useEffect(() => { setDraft(current ? { ...current } : {}) }, [current])
+
+  const set = (k: string, v: unknown) => setDraft(d => ({ ...d, [k]: v }))
+  // UNSET READS AS ON, exactly as the engine reads it: a policy written
+  // before 217 has no value in these columns and the module behaves as it
+  // always did. A screen that showed them as off would be describing a
+  // state the code disagrees with.
+  const yes = (k: string) => draft[k] !== false
+
+  const Toggle = ({ col, title, when, unless }: {
+    col: string; title: string; when: string; unless: string
+  }) => (
+    <div className="askrow" style={{ marginBottom: 8 }}>
+      <label className="chk" style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <input type="checkbox" checked={yes(col)}
+               onChange={e => set(col, e.target.checked)} />
+        <span>
+          <b>{title}</b>
+          <div className="k" style={{ marginTop: 3, lineHeight: 1.6 }}>
+            {yes(col) ? when : unless}
+          </div>
+        </span>
+      </label>
+    </div>
+  )
+
+  if (!policies.length) {
+    return <Card title="HR Head authority" sub="What the HR Head may do in this cycle.">
+      <Note tone="warn">No policy exists yet, so there is nothing to configure.</Note>
+    </Card>
+  }
+
+  return (
+    <Card title="HR Head authority"
+          sub="What the HR Head may do, per policy. Switching something off stops new use of it — ratings already settled stay settled.">
+      <Field label="Policy"
+             hint="Every company has its own, and they can differ.">
+        <select value={id} onChange={e => setId(e.target.value)}>
+          {policies.map(p => (
+            <option key={s(p.id)} value={s(p.id)}>
+              {coName(p.company_id)} — {s(p.policy_name) || 'Policy'}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>Settling the final rating</div>
+      <Toggle col="hr_head_final_rating"
+              title="The HR Head settles the final rating before anything is published"
+              when="Nothing publishes until they confirm the rating and record that it was discussed with management."
+              unless="The chain’s rating stands and results publish without a separate confirmation." />
+      {yes('hr_head_final_rating') && (
+        <Toggle col="hr_head_can_override"
+                title="…and may replace the rating the chain settled"
+                when="They can keep the chain’s number or set a different one, with a written reason."
+                unless="They confirm the chain’s rating as it is. The number itself is the chain’s." />
+      )}
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>Outside the chain</div>
+      <Toggle col="hr_head_can_direct"
+              title="The HR Head can build an appraisal for somebody the chain never started"
+              when="KRAs, a rating for each and a final rating, for a transfer or a role the routing missed. Recorded as an exception with their name and reason."
+              unless="Everybody goes through the chain. Someone the cycle missed ends the period with no appraisal." />
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>Rating uploads</div>
+      <Field label="Who may commit a bulk or single rating upload"
+             hint="A rating upload replaces what the chain decided, so this is the widest power on the screen.">
+        <select value={s(draft.rating_upload_by) || 'HR_ANY'}
+                onChange={e => set('rating_upload_by', e.target.value)}>
+          <option value="HR_ANY">HR Manager, HR Head or Admin</option>
+          <option value="HR_HEAD">The HR Head only</option>
+          <option value="NOBODY">Nobody — the chain is the only route</option>
+        </select>
+      </Field>
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>After the rating is settled</div>
+      <Field label="Who writes the feedback and publishes"
+             hint="Already on the Policy tab; here too because it is part of the same question.">
+        <select value={s(draft.post_final_owner) || 'HR'}
+                onChange={e => set('post_final_owner', e.target.value)}>
+          <option value="HR">HR</option>
+          <option value="FINALISER">Whoever finalised the rating</option>
+        </select>
+      </Field>
+      <Field label="Publishing scope"
+             hint="Whether this company’s results can be released alongside other companies’.">
+        <select value={s(draft.publish_scope) || 'COMPANY'}
+                onChange={e => set('publish_scope', e.target.value)}>
+          <option value="COMPANY">One company at a time</option>
+          <option value="ALL">May be published together with other opted-in companies</option>
+        </select>
+      </Field>
+
+      <SaveRow busy={busy} error={error} saved={saved} label="Save authority"
+               disabled={!id}
+               onSave={() => run(() => pmsAdmin('policy_update', { ...draft, id }),
+                                 'Authority saved.')} />
+
+      <Note tone="warn">
+        These settings are not visible to the HR Head: Setup &amp; Controls needs
+        full access to Performance, which that role does not have. A power
+        somebody can grant themselves is not a limit on them.
+      </Note>
+    </Card>
+  )
+}
+
 // ══ 3b. TRAINING CATALOGUE ════════════════════════════════════════════════
 
 const BLANK_COURSE: Row = {
@@ -945,7 +1097,7 @@ function FinalisePanel({ periods, canAttribute, reload }: {
 export default function AdminEditor() {
   const [snap, setSnap] = useState<PmsAdminSnapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [section, setSection] = useState<'policy' | 'kra' | 'scale' | 'courses' | 'cycle' | 'finalise'>('policy')
+  const [section, setSection] = useState<'policy' | 'kra' | 'scale' | 'courses' | 'authority' | 'cycle' | 'finalise'>('policy')
 
   const reload = useCallback(async () => {
     const r = await loadPmsAdmin()
@@ -970,6 +1122,7 @@ export default function AdminEditor() {
     ['kra',      'KRA library'],
     ['scale',    'Rating scale'],
     ['courses',  'Training catalogue'],
+    ['authority','HR Head authority'],
     ['cycle',    'Cycle control'],
     ['finalise', 'Finalise'],
   ] as const
@@ -988,6 +1141,8 @@ export default function AdminEditor() {
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
       {section === 'courses'  && <CataloguePanel catalogue={snap.catalogue ?? []}
                                                  companyId={companyId} reload={reload} />}
+      {section === 'authority' && <AuthorityPanel policies={snap.policies}
+                                                  companies={snap.companies} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
       {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
     </>

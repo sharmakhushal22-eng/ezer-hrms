@@ -30,6 +30,7 @@ import { rmsServiceClient as sb, grantForRequest, actorFromRequest } from '@/lib
 import { companyFilter } from '@/lib/rms/resolve'
 import { canManage } from '@/lib/rms/resolve'
 import { isHrRole, pmsRoleOf } from '@/lib/pms/postFinal'
+import { authorityOf, authorityFromRow } from '@/lib/pms/authority'
 
 export const dynamic = 'force-dynamic'
 
@@ -55,6 +56,13 @@ const POLICY_COLS = [
   // — which is the right default for a table that decides how everybody is
   // rated, but it does mean the list has to be kept up.
   'carry_forward_kras',
+  // 211 and 217. What the HR Head may do, which until now was spread
+  // between two tabs and four files — see lib/pms/authority.ts. Listed
+  // here because the same rule applies: a policy column is inert until a
+  // caller is allowed to write it.
+  // post_final_owner and publish_scope are already listed below.
+  'hr_head_final_rating', 'hr_head_can_override', 'hr_head_can_direct',
+  'rating_upload_by',
   // 205. Same reason again: WHO the HR Head is, so the HOD's published-results
   // banner can name a person instead of saying "HR". Not a permission —
   // post_final_owner and §2's matrix still decide who may act.
@@ -150,11 +158,33 @@ const HR_ACTIONS = new Set(['upload_commit'])
  * drift into disagreeing about who counts as HR, and it maps an unknown role
  * to EMPLOYEE rather than to anything privileged.
  */
-async function gate(req: NextRequest, action?: string) {
+/**
+ * 217: WHO MAY COMMIT A RATING UPLOAD IS A POLICY QUESTION NOW.
+ *
+ * Read per period, because the policy is per company and an HR Head spans
+ * three of them. Unreadable, or a period this request does not name, falls
+ * back to the behaviour before 217 — a permissions lookup that fails shut
+ * would close the route on a database hiccup, and the people it closes it
+ * on cannot fix it.
+ */
+async function uploadAllowed(grant: Awaited<ReturnType<typeof grantForRequest>>,
+                             periodId: string | null): Promise<boolean> {
+  const role = pmsRoleOf(grant.roles, grant.isSuperAdmin)
+  if (!periodId) return isHrRole(role)
+  const r = await sb.from('pms_periods')
+    .select('pms_policies!inner(hr_head_final_rating, hr_head_can_override,'
+          + ' hr_head_can_direct, rating_upload_by)')
+    .eq('id', periodId).limit(1).maybeSingle()
+  if (r.error || !r.data) return isHrRole(role)
+  const pol = (r.data as unknown as { pms_policies?: Record<string, unknown> }).pms_policies
+  return authorityOf(role, authorityFromRow(pol)).upload
+}
+
+async function gate(req: NextRequest, action?: string, periodId?: string | null) {
   const grant = await grantForRequest(req)
   const manages = canManage(grant, 'Performance')
   const hrMay = !!action && HR_ACTIONS.has(action)
-             && isHrRole(pmsRoleOf(grant.roles, grant.isSuperAdmin))
+             && await uploadAllowed(grant, periodId ?? null)
   if (!manages && !hrMay) {
     return { error: bad(action && HR_ACTIONS.has(action)
       ? 'A bulk rating upload is HR\'s to commit. This account is not an HR '
@@ -225,7 +255,10 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const action = String(body.action ?? '')
 
-  const g = await gate(req, action)
+  // The period is read from the body for the gate, because 217 makes the
+  // answer depend on which company's policy the upload lands in.
+  const g = await gate(req, action,
+    typeof body.period_id === 'string' ? body.period_id : null)
   if ('error' in g) return g.error
   const { actor } = g
 
