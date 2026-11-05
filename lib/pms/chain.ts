@@ -35,7 +35,7 @@ import { CHAIN_STEPS, type Chain, type Role } from './hierarchy.ts'
  * and only one of them is somebody's fault.
  */
 export const STAGES = [
-  'EMPLOYEE', 'RM_L1', 'RM_L2', 'HOD', 'HR', 'DONE',
+  'EMPLOYEE', 'RM_L1', 'RM_L2', 'HOD', 'SITE_HR', 'REGIONAL_HEAD', 'HR', 'DONE',
 ] as const
 export type Stage = typeof STAGES[number]
 
@@ -44,6 +44,8 @@ export const STAGE_LABEL: Record<Stage, string> = {
   RM_L1:    'With RM L1',
   RM_L2:    'With RM L2',
   HOD:      'With the HOD',
+  SITE_HR:  'With the site HR',
+  REGIONAL_HEAD: 'With the regional head',
   HR:       'With HR to publish',
   DONE:     'Published',
 }
@@ -61,6 +63,8 @@ export const STAGE_SHORT: Record<Stage, string> = {
   RM_L1:    'RM L1',
   RM_L2:    'RM L2',
   HOD:      'HOD',
+  SITE_HR:  'Site HR',
+  REGIONAL_HEAD: 'Regional',
   HR:       'HR',
   DONE:     'Done',
 }
@@ -71,13 +75,35 @@ export const STAGE_SHORT: Record<Stage, string> = {
  * The employee is not a rung: they are where it starts and where a first
  * rejection sends it, not somebody who approves their own appraisal.
  */
-export function rungs(chain: Chain): Stage[] {
-  const raters = CHAIN_STEPS[chain].filter(r => r !== 'EMPLOYEE') as Stage[]
-  return [...raters, 'HR']
+/**
+ * The rungs an appraisal travels, in order.
+ *
+ * TAKES A CUSTOM CHAIN AS WELL AS A PRESET (218). An administrator can now
+ * compose any order from the relationships on the employee record, so this
+ * accepts the composed list directly — every caller downstream already
+ * works on whatever array this returns, which is why the custom chain is a
+ * change here and almost nowhere else.
+ *
+ * HR IS APPENDED, NOT ASSUMED. A composed chain that already names HR must
+ * not get it twice: the duplicate would park an appraisal on a rung it had
+ * just left. A chain that omits it still gets it, because somebody has to
+ * publish and no administrator should be able to compose a chain whose
+ * results can never come out.
+ */
+export function rungs(chain: Chain | readonly Stage[] | null | undefined): Stage[] {
+  const steps: Stage[] = Array.isArray(chain)
+    ? (chain as Stage[]).filter(r => r !== 'EMPLOYEE')
+    : (CHAIN_STEPS[(chain as Chain) ?? 'SELF_RM1_RM2_HOD'] ?? CHAIN_STEPS.SELF_RM1_RM2_HOD)
+        .filter(r => r !== 'EMPLOYEE') as Stage[]
+  // Deduplicated in order: a composed chain is somebody's typing, and the
+  // same person twice in a row is a loop rather than two approvals.
+  const seen = new Set<Stage>()
+  const out = steps.filter(r => !seen.has(r) && seen.add(r) !== undefined && r !== 'DONE')
+  return out.includes('HR') ? out : [...out, 'HR']
 }
 
 /** Where a fresh submission lands. */
-export function firstRung(chain: Chain): Stage {
+export function firstRung(chain: Chain | readonly Stage[]): Stage {
   return rungs(chain)[0]
 }
 
@@ -98,11 +124,16 @@ export function firstRung(chain: Chain): Stage {
  */
 export function heldBy(m: {
   rmL1Id?: string | null; rmL2Id?: string | null; hodId?: string | null
+  /** 218. site_hr_id is set for 397 of 401 employees; regional_head_id for
+   *  none of them, which is why a chain naming it steps straight over. */
+  siteHrId?: string | null; regionalHeadId?: string | null
 }): (s: Stage) => boolean {
   return s => s === 'HR' ? true
             : s === 'RM_L1' ? !!m.rmL1Id
             : s === 'RM_L2' ? !!m.rmL2Id
             : s === 'HOD' ? !!m.hodId
+            : s === 'SITE_HR' ? !!m.siteHrId
+            : s === 'REGIONAL_HEAD' ? !!m.regionalHeadId
             : false
 }
 
@@ -124,7 +155,7 @@ const ALL_HELD = () => true
  * Guessing "the next one along" would hand it to a HOD nobody appointed.
  */
 export function nextRung(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
 ): Stage | null {
   const r = rungs(chain)
   const i = r.indexOf(stage)
@@ -146,7 +177,7 @@ export function nextRung(
  * employee is left waiting on a correction that can never be made.
  */
 export function prevRung(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
 ): Stage | null {
   const r = rungs(chain)
   const i = r.indexOf(stage)
