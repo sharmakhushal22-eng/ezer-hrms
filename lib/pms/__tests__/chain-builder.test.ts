@@ -159,11 +159,27 @@ test('the verify script tests the empty chain by trying to insert one', () => {
   // test that could have caught it is one where Postgres refuses the INSERT
   // — so the verify script must actually attempt an empty array, not merely
   // mention the constraint.
-  assert.match(VERIFY, /INSERT INTO pms_chain[\s\S]{0,200}ARRAY\[\]::text\[\]/,
+  assert.match(VERIFY, /INSERT INTO public\.pms_chain[\s\S]{0,200}ARRAY\[\]::text\[\]/,
     'the verify script does not try to insert an empty chain')
-  assert.match(VERIFY, /EXCEPTION WHEN check_violation/,
-    'the verify script does not expect the insert to be refused')
   assert.match(VERIFY, /ROLLBACK/, 'the verify script would leave its fixtures behind')
+
+  // EACH handler, matched to its check — not "check_violation appears
+  // somewhere". A mutation widening check 4's handler to `others` survived
+  // an earlier version of this, because checks 5 and 6 still said
+  // check_violation. It matters: `others` would report PASS for a unique
+  // violation or a missing table, so a constraint that is not there at all
+  // would read as one that works.
+  const handlers = new Map(
+    [...VERIFY_CODE.matchAll(/EXCEPTION WHEN (\w+) THEN\s*\n\s*RETURN QUERY SELECT (\d+)/g)]
+      .map(m => [Number(m[2]), m[1]]))
+  for (const seq of [4, 5, 6]) {
+    assert.equal(handlers.get(seq), 'check_violation',
+      `check ${seq} expects a refusal, so only a CHECK violation may pass it`)
+  }
+  // Check 7 is the opposite: every offerable rung must insert, so ANY error
+  // is a failure, not just a CHECK violation.
+  assert.equal(handlers.get(7), 'others',
+    'check 7 would report PASS on an error that is not a CHECK violation')
 })
 
 test('the verify script reports every check in ONE result set', () => {
@@ -176,11 +192,12 @@ test('the verify script reports every check in ONE result set', () => {
   // exists. A verify script whose output you cannot read is worse than
   // none: it looks like it passed.
   //
-  // Every check therefore writes a row and one final SELECT returns them.
-  assert.match(VERIFY, /CREATE TEMP TABLE _verify \(/,
-    'the checks have nowhere to collect their results')
-  assert.match(VERIFY, /SELECT seq, check_name, result, detail FROM _verify ORDER BY seq;/,
+  // Every check is therefore a branch of one UNION ALL.
+  assert.match(VERIFY, /\) AS v \(seq, check_name, result, detail\)\s*\nORDER BY v\.seq;/,
     'there is no single statement returning all the checks')
+  const branches = [...VERIFY.matchAll(/^  UNION ALL$/gm)]
+  assert.ok(branches.length >= 10,
+    `only ${branches.length} checks are unioned into the one result`)
 
   // Exactly one statement may return rows, or the editor hides the rest.
   //
@@ -209,8 +226,30 @@ test('the verify script reports every check in ONE result set', () => {
   // in this module has failed a test that reads source.
   assert.ok(!/RAISE NOTICE/.test(VERIFY_CODE),
     'a check reports through RAISE NOTICE, which the SQL editor swallows')
-  assert.match(VERIFY, /INSERT INTO _verify VALUES \(4, 'an empty chain is refused', 'PASS'/,
-    'the empty-chain result is not recorded as a row')
+  assert.match(VERIFY_CODE, /RETURN QUERY SELECT 4, 'an empty chain is refused'::text,\s*\n\s*'PASS'::text/,
+    'the empty-chain result is not returned as a row')
+})
+
+test('the verify script creates nothing that outlives it', () => {
+  // ── LEARNED FROM THE SQL EDITOR'S OWN WARNING ──────────────────────────
+  //
+  // Collecting the checks in a TEMP table raised "this query creates a table
+  // without enabling Row Level Security". That was a false positive — a temp
+  // table is session-private and this one never commits — but a script that
+  // makes you dismiss a security prompt on every run is training you to
+  // dismiss security prompts. The behavioural checks live in a pg_temp
+  // function instead, which is not a table and is gone at ROLLBACK.
+  assert.ok(!/CREATE\s+(TEMP\s+|TEMPORARY\s+)?TABLE/i.test(VERIFY_CODE),
+    'the script creates a table, and the editor will warn about RLS')
+  assert.match(VERIFY_CODE, /CREATE FUNCTION pg_temp\./,
+    'the behavioural checks are not in a session-local function')
+  // pg_temp, not public: a function left in public would outlive the run.
+  assert.ok(!/CREATE (OR REPLACE )?FUNCTION (public\.|[a-z_]+\s*\()/i.test(VERIFY_CODE),
+    'a function is created outside pg_temp and would persist')
+  // And the whole thing is undone either way.
+  assert.match(VERIFY_CODE, /^BEGIN;/m, 'the fixtures are not in a transaction')
+  assert.match(VERIFY_CODE, /^ROLLBACK;/m, 'the fixtures are never rolled back')
+  assert.ok(!/^COMMIT;/m.test(VERIFY_CODE), 'the script commits its fixtures')
 })
 
 test('the verify script distinguishes a missing constraint from a wrong one', () => {
@@ -218,9 +257,21 @@ test('the verify script distinguishes a missing constraint from a wrong one', ()
   // constraint is absent, and a check that prints nothing reads as a pass —
   // the same ambiguity 218 shipped behind. Scalar subqueries yield NULL so
   // the CASE can report it.
-  const nulls = [...VERIFY.matchAll(/WHEN d IS NULL THEN 'FAIL/g)]
-  assert.ok(nulls.length >= 5,
-    `only ${nulls.length} checks distinguish "absent" from "wrong"`)
+  // EVERY such check, not "at least five". A >= 5 threshold passed while one
+  // of the six had its NULL case deleted — a count with slack is a count
+  // that does not notice the thing going missing.
+  // Counted by the ALIAS, not by `) AS d) q<n>` — one of the six spells it
+  // across lines and that pattern missed it, giving 5 and a false failure.
+  const lookups = [...VERIFY_CODE.matchAll(/\bAS d\b/g)]
+  const nulls = [...VERIFY_CODE.matchAll(/WHEN d IS NULL THEN 'FAIL/g)]
+  assert.ok(lookups.length >= 6, `only ${lookups.length} constraint lookups found`)
+  assert.equal(nulls.length, lookups.length,
+    `${lookups.length} checks read a constraint but only ${nulls.length} say so `
+    + 'when it is absent — the rest would report a missing constraint as wrong, '
+    + 'or not at all')
+  // The FK check reads confdeltype rather than a definition, so it has its own.
+  assert.match(VERIFY_CODE, /WHEN t IS NULL THEN 'FAIL — no FK from pms_policies/,
+    'a missing foreign key is not distinguished from a wrong one')
   assert.ok(!/UNION ALL SELECT NULL/.test(VERIFY),
     'a UNION ALL with LIMIT has no guaranteed row order — the NULL could win')
 })
