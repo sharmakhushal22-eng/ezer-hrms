@@ -194,8 +194,9 @@ export function firstRung(chain: Chain | readonly Stage[]): Stage {
  */
 export function heldBy(m: {
   rmL1Id?: string | null; rmL2Id?: string | null; hodId?: string | null
-  /** 218. site_hr_id is set for 397 of 401 employees; regional_head_id for
-   *  none of them, which is why a chain naming it steps straight over. */
+  /** 218. Measured 2026-11-05: site_hr_id is set for 395 of 398 active
+   *  employees; regional_head_id for none of them, which is why a chain
+   *  naming it steps straight over. */
   siteHrId?: string | null; regionalHeadId?: string | null
 }): (s: Stage) => boolean {
   return s => s === 'HR' ? true

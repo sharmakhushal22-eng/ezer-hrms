@@ -21,11 +21,12 @@
 //
 // ── COVERAGE IS A WARNING, NOT A REFUSAL ─────────────────────────────────
 //
-// regional_head_id is populated for 0 of 401 employees today. A chain naming
-// it is not broken — chain.ts steps over a rung nobody occupies, which is how
-// RM L2 already works for about half the company — so refusing it would be
-// wrong. But choosing it blind is how somebody builds a chain that silently
-// does nothing, so the number goes next to the choice.
+// regional_head_id is populated for 0 of 398 active employees (measured
+// 2026-11-05). A chain naming it is not broken — chain.ts steps over a rung
+// nobody occupies, which is how RM L2 already works for the 137 people who
+// have none — so refusing it would be wrong. But choosing it blind is how
+// somebody builds a chain that silently does nothing, so the number goes
+// next to the choice, read live rather than written here.
 
 import type { Stage } from './chain.ts'
 
@@ -47,9 +48,16 @@ export interface RungChoice {
  * publisher and then wonder why the engine put them back.
  */
 export const RUNG_CHOICES: readonly RungChoice[] = [
-  { stage: 'RM_L1', label: 'Reporting manager (L1)', column: 'rm_l1_id',
+  // THE COLUMN NAMES ARE l1_manager_id AND l2_manager_id, not rm_l1_id and
+  // rm_l2_id. 218's COMMENT said the latter, this file was written from that
+  // COMMENT, and the test compared the two — so they agreed and were both
+  // wrong, and the coverage read asked for columns that do not exist. Probing
+  // the live schema is what found it; 219 corrects the COMMENT and
+  // 219_pms_chain_rungs_verify.sql asks information_schema rather than the
+  // COMMENT. Two sources agreeing is not evidence when one is a copy.
+  { stage: 'RM_L1', label: 'Reporting manager (L1)', column: 'l1_manager_id',
     hint: 'The employee’s direct manager.' },
-  { stage: 'RM_L2', label: 'Reporting manager (L2)', column: 'rm_l2_id',
+  { stage: 'RM_L2', label: 'Reporting manager (L2)', column: 'l2_manager_id',
     hint: 'Skipped automatically where L1 and L2 are the same person.' },
   { stage: 'HOD', label: 'Head of department', column: 'hod_id',
     hint: 'Set for everybody, so this rung never skips.' },

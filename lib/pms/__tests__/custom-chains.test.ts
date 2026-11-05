@@ -17,10 +17,10 @@
 //    null means approval_chain, so every policy that has not been touched
 //    must behave exactly as it did.
 //
-// 2. AN EMPTY RUNG IS STEPPED OVER, NOT BLOCKED ON. RM L2 is absent for
-//    about half the company today and the chain already handles it; a
-//    composed chain naming REGIONAL_HEAD — populated for nobody — must
-//    behave the same way rather than stranding every appraisal.
+// 2. AN EMPTY RUNG IS STEPPED OVER, NOT BLOCKED ON. RM L2 is absent for 137
+//    of 398 active employees and the chain already handles it; a composed
+//    chain naming REGIONAL_HEAD — populated for nobody — must behave the
+//    same way rather than stranding every appraisal.
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
@@ -105,8 +105,8 @@ test('the first rung is where a fresh submission lands', () => {
 
 const HELD_ALL = heldBy({ rmL1Id: 'a', rmL2Id: 'b', hodId: 'c',
                           siteHrId: 'd', regionalHeadId: 'e' })
-// The real shape of this database: no regional head anywhere, and RM L2
-// missing for about half the company.
+// The real shape of this database, measured 2026-11-05: no regional head
+// anywhere, and RM L2 missing for 137 of 398 active employees.
 const TYPICAL = heldBy({ rmL1Id: 'a', hodId: 'c', siteHrId: 'd' })
 
 test('heldBy knows the two rungs 218 adds', () => {
@@ -120,8 +120,8 @@ test('heldBy knows the two rungs 218 adds', () => {
 })
 
 test('a chain naming a rung nobody occupies steps straight over it', () => {
-  // regional_head_id is set for 0 of 401 employees. A chain using it must
-  // behave like RM L2 does today for half the company: skipped, not stuck.
+  // regional_head_id is set for 0 of 398 active employees. A chain using it
+  // must behave like RM L2 does for the 137 with none: skipped, not stuck.
   const chain: Stage[] = ['RM_L1', 'REGIONAL_HEAD', 'HOD']
   assert.equal(nextRung(chain, 'RM_L1', TYPICAL), 'HOD',
     'the appraisal stranded on a rung with nobody on it')

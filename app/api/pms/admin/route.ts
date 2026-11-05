@@ -203,11 +203,12 @@ async function uploadAllowed(grant: Awaited<ReturnType<typeof grantForRequest>>,
  * The chain builder shows this against each choice, because a rung nobody
  * occupies is skipped rather than refused — so picking one blind is how
  * somebody builds a chain that silently does less than it looks like it does.
- * regional_head_id is set for none of 401 employees today; rm_l2_id for about
- * half, deliberately, where L1 and L2 are the same person.
+ * Measured 2026-11-05, 398 active employees: hod_id 398, l1_manager_id 395,
+ * site_hr_id 395, l2_manager_id 261 — deliberately absent where L1 and L2 are
+ * the same person — and regional_head_id 0.
  *
  * COUNTS, NOT ROWS. `head: true` with an exact count asks Postgres for the
- * number and transfers no rows, so this is six cheap reads rather than 401
+ * number and transfers no rows, so this is six cheap reads rather than 398
  * employees' relationship columns crossing the wire to be counted in JS.
  *
  * NON-FATAL, and chainWarnings treats an absent count as "say nothing" rather
@@ -227,7 +228,21 @@ async function rungCoverage(): Promise<Record<string, { have: number; of: number
   }
   const out: Record<string, { have: number; of: number }> = {}
   each.forEach((r, i) => {
-    if (r.error || r.count == null) return  // that one rung simply says nothing
+    if (r.error || r.count == null) {
+      /**
+       * A FAILED RUNG IS LOGGED, NOT ONLY SKIPPED.
+       *
+       * Silence here hid a real bug for a whole commit: RUNG_CHOICES named
+       * rm_l1_id and rm_l2_id, which do not exist on employees, so both reads
+       * failed and the builder showed no coverage for the two rungs most of
+       * the company actually uses. "This rung says nothing" and "this rung
+       * cannot be read" look identical on screen, and only one of them is
+       * somebody's mistake.
+       */
+      console.error(`[pms] rung coverage failed for ${cols[i][0]} `
+                  + `(employees.${cols[i][1]}):`, r.error)
+      return
+    }
     out[cols[i][0]] = { have: r.count, of: total.count! }
   })
   return out

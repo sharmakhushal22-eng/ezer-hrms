@@ -15,7 +15,7 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { readFileSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { chainFault, normaliseRungs, chainWarnings, chainSummary, usedBy,
          RUNG_CHOICES, STORABLE_RUNGS, MAX_CHAIN_NAME } from '../chainBuilder.ts'
@@ -23,6 +23,10 @@ import { rungs as engineRungs, type Stage } from '../chain.ts'
 
 const SQL = readFileSync(
   join(process.cwd(), 'supabase/migrations/218_pms_custom_chains.sql'), 'utf8')
+/** 219 corrects two things 218 got wrong — see the tests at the end. */
+const SQL219 = readFileSync(
+  join(process.cwd(),
+       'supabase/migrations/219_pms_chain_rungs_really_checked.sql'), 'utf8')
 
 const ok = (r: string[]) => ({ name: 'A chain', rungs: r })
 
@@ -44,25 +48,138 @@ test('every offerable rung is one 218 will store', () => {
   }
 })
 
-test('every offerable rung names the column 218 says resolves it', () => {
+test('every offerable rung names the column 219 says resolves it', () => {
   // A rung with no column is a job title: nothing can say who it is for a
   // given employee, which is the whole reason the menu is not free text.
   //
-  // Checked against the migration's own COMMENT rather than against the
-  // shape of the string. "rm_l1_id" matching /_id$/ proves nothing; matching
-  // what 218 documents as the resolving column proves the menu and the
-  // schema have not drifted.
-  const doc = SQL.slice(SQL.indexOf('COMMENT ON COLUMN pms_chain.rungs'))
+  // ── THIS TEST ALONE IS NOT ENOUGH, AND THAT IS THE POINT ───────────────
+  //
+  // It compares this file against a migration's COMMENT. When 218 shipped,
+  // both said rm_l1_id and rm_l2_id — columns that do not exist on employees
+  // — and this test passed, because this file had been WRITTEN FROM that
+  // COMMENT. Two sources agreeing is not evidence when one is a copy.
+  //
+  // What found it was probing the live schema; what prevents it recurring is
+  // 219_pms_chain_rungs_verify.sql, which asks information_schema. This test
+  // keeps the two in-repo copies from drifting, which is all it can do, and
+  // the test below pins the names against code that is not a copy of either.
+  const doc = SQL219.slice(SQL219.indexOf('COMMENT ON COLUMN pms_chain.rungs'))
   for (const c of RUNG_CHOICES) {
     assert.ok(c.label && c.hint, `${c.stage} has no label or hint`)
     assert.ok(doc.includes(c.column),
-      `218 does not document ${c.column} as resolving a rung`)
+      `219 does not document ${c.column} as resolving a rung`)
     // And documented AGAINST THIS STAGE, not merely mentioned somewhere.
     assert.match(doc.replace(/'\s*\n\s*'/g, ''), new RegExp(`${c.stage} ${c.column}`),
-      `218 maps ${c.stage} to something other than ${c.column}`)
+      `219 maps ${c.stage} to something other than ${c.column}`)
   }
   const cols = RUNG_CHOICES.map(c => c.column)
   assert.equal(new Set(cols).size, cols.length, 'two rungs share a column')
+})
+
+/**
+ * Every file that names an employees column WITHOUT being a copy of the
+ * chain builder: the product code that queried the reporting line long
+ * before any of this, and every migration except the two chain ones.
+ *
+ * 218 and 219 are excluded DELIBERATELY. Including them is what let the
+ * first version of this test pass while a column name was invented in both
+ * the builder and the migration at once — a corpus that contains the file
+ * under test is not an independent source, it is the same claim twice.
+ */
+const INDEPENDENT = [
+  'lib/ess-scope.ts', 'lib/supabase-ess.ts', 'lib/attendance/reports.ts',
+].map(p => readFileSync(join(process.cwd(), p), 'utf8')).join('\n')
+  + readdirSync(join(process.cwd(), 'supabase/migrations'))
+      .filter(f => !/^21[89]_/.test(f))
+      .map(f => readFileSync(join(process.cwd(), 'supabase/migrations', f), 'utf8'))
+      .join('\n')
+
+test('the reporting-line columns match what the product already reads', () => {
+  // lib/ess-scope.ts queries employees by l1_manager_id and predates all of
+  // this, so it cannot be a copy of the chain builder or of a COMMENT
+  // written for it. When RUNG_CHOICES said rm_l1_id, this would have failed.
+  assert.ok(INDEPENDENT.includes('l1_manager_id'),
+    'the independent source no longer reads the reporting line; find another')
+  for (const [stage, col] of [['RM_L1', 'l1_manager_id'],
+                              ['RM_L2', 'l2_manager_id'],
+                              ['HOD', 'hod_id']] as const) {
+    assert.ok(RUNG_CHOICES.some(c => c.stage === stage && c.column === col),
+      `${stage} does not resolve through the column the rest of the product uses`)
+    assert.ok(INDEPENDENT.includes(col),
+      `employees.${col} is named nowhere outside the chain builder`)
+  }
+})
+
+test('the two columns nothing in this repo can vouch for are verified in SQL', () => {
+  // ── A GAP, NAMED RATHER THAN PAPERED OVER ──────────────────────────────
+  //
+  // site_hr_id and regional_head_id appear in NO migration and nowhere else
+  // in the product. They were added to employees outside this folder, so
+  // there is no independent in-repo source for them and no unit test here
+  // can prove they exist — the honest answer is that only the database can.
+  //
+  // MEASURED on the live database 2026-11-05: both exist; site_hr_id is set
+  // for 395 of 398 active employees, regional_head_id for 0.
+  //
+  // What keeps them honest from here is the verify script, which asks
+  // information_schema. So what this test can check is that the script
+  // actually asks about every rung on the menu — including these two.
+  const verify = readFileSync(join(process.cwd(),
+    'supabase/verify/219_pms_chain_rungs_verify.sql'), 'utf8')
+  const list = verify.match(/column_name IN \(([^)]*'regional_head_id'[^)]*)\)/)
+  assert.ok(list, 'the verify script no longer checks the rung columns')
+  const checked = [...list[1].matchAll(/'([^']+)'/g)].map(m => m[1])
+  assert.deepEqual(checked.slice().sort(), RUNG_CHOICES.map(c => c.column).slice().sort(),
+    'the verify script and the menu disagree about which columns to check')
+  for (const c of RUNG_CHOICES) {
+    if (INDEPENDENT.includes(c.column)) continue
+    assert.ok(checked.includes(c.column),
+      `nothing in this repo can vouch for employees.${c.column} and the `
+      + 'verify script does not check it either')
+  }
+
+  // ── THE LIMIT, STATED ──────────────────────────────────────────────────
+  //
+  // Renaming site_hr_id consistently in the builder, in 219 and here would
+  // pass every test in this file. Mutation testing confirmed it: that
+  // mutation survives, and no assertion written in this repo can kill it,
+  // because the only thing that knows the real column name is the database.
+  //
+  // So the test is "the script that asks still asks", and the script has to
+  // be RUN. It is not decoration.
+})
+
+test('the verify script tests the empty chain by trying to insert one', () => {
+  // 218's defect was a CHECK that read correctly and did nothing. The only
+  // test that could have caught it is one where Postgres refuses the INSERT
+  // — so the verify script must actually attempt an empty array, not merely
+  // mention the constraint.
+  const verify = readFileSync(join(process.cwd(),
+    'supabase/verify/219_pms_chain_rungs_verify.sql'), 'utf8')
+  assert.match(verify, /INSERT INTO pms_chain[\s\S]{0,200}ARRAY\[\]::text\[\]/,
+    'the verify script does not try to insert an empty chain')
+  assert.match(verify, /EXCEPTION WHEN check_violation/,
+    'the verify script does not expect the insert to be refused')
+  assert.match(verify, /ROLLBACK/, 'the verify script would leave its fixtures behind')
+})
+
+test('218 is left alone and 219 is the correction', () => {
+  // 218 is applied on the live database, so its text is history. Editing a
+  // migration that has run means the file and the database disagree, and the
+  // next person reads the file.
+  assert.match(SQL, /rm_l1_id/,
+    '218 was edited after being applied; corrections belong in a new migration')
+  assert.match(SQL219, /cardinality\(rungs\) >= 1/,
+    '219 does not fix the empty-chain CHECK')
+  assert.ok(!SQL219.includes('rm_l1_id,') && !SQL219.includes('RM_L2 rm_l2_id'),
+    '219 still documents the columns that do not exist')
+})
+
+test('219 replaces the CHECK rather than adding a second one', () => {
+  // Two constraints with the same intent and different definitions is how a
+  // later reader concludes the stricter one is dead.
+  assert.match(SQL219, /DROP CONSTRAINT IF EXISTS pms_chain_has_rungs/)
+  assert.match(SQL219, /ADD CONSTRAINT pms_chain_has_rungs CHECK \(cardinality\(rungs\) >= 1\)/)
 })
 
 test('the two fixed ends are not on the menu', () => {

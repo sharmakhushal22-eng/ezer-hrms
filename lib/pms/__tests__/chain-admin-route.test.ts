@@ -249,8 +249,24 @@ test('an unreadable count says nothing rather than zero', () => {
   const body = fn.slice(0, fn.indexOf('\n}'))
   assert.match(body, /if \(total\.error \|\| total\.count == null\)[\s\S]{0,120}return null/,
     'a failed total is not reported as unknown')
-  assert.match(body, /if \(r\.error \|\| r\.count == null\) return/,
+  assert.match(body, /if \(r\.error \|\| r\.count == null\) \{[\s\S]{0,400}?return\n/,
     'a failed per-rung count lands in the result as a number')
+})
+
+test('a failed per-rung count is logged, not only skipped', () => {
+  // SILENCE HERE HID A REAL BUG FOR A WHOLE COMMIT. RUNG_CHOICES named
+  // rm_l1_id and rm_l2_id, which are not columns on employees, so both reads
+  // failed and the builder showed no coverage for the two rungs most of the
+  // company uses — the one number the builder exists to put in front of an
+  // administrator. "This rung says nothing" and "this rung cannot be read"
+  // look identical on screen, and only one of them is somebody's mistake.
+  const fn = ROUTE.slice(ROUTE.indexOf('async function rungCoverage'))
+  const body = fn.slice(0, fn.indexOf('\n}'))
+  assert.match(body, /console\.error\(`\[pms\] rung coverage failed for \$\{cols\[i\]\[0\]\} `/,
+    'a failed per-rung coverage read is silent')
+  // And it names the COLUMN, since "RM_L1 failed" does not tell you why.
+  assert.match(body, /employees\.\$\{cols\[i\]\[1\]\}/,
+    'the log does not say which column could not be read')
 })
 
 // ── the gate is unchanged ────────────────────────────────────────────────
