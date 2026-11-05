@@ -421,3 +421,103 @@ test('the call is attributed to a real person', () => {
     'the shared dashboard login can generate suggestions anonymously')
   assert.match(ROUTE, /generated_by: actor\.employeeId/)
 })
+
+// ── the bin on the rating panel ──────────────────────────────────────────
+
+const MGR = read('components/pms/ManagerTabs.tsx')
+const PERF = read('components/ess/Performance.tsx')
+
+test('drag is the shortcut, never the only way', () => {
+  // Drag-only makes the feature unreachable on a trackpad, a touchscreen,
+  // or with a screen reader — which between them is most people. The
+  // button is how it works; the drag is a nicety on top.
+  const bin = MGR.slice(MGR.indexOf('function SuggestionBin'),
+                        MGR.indexOf('function TrainingBlock'))
+  assert.ok(bin.length > 400, 'the bin is gone')
+  assert.match(bin, /Add to my list/, 'there is no way to take a suggestion without dragging')
+  assert.match(bin, /onClick=\{\(\) => onTake\?\.\(s\)\}/)
+  assert.match(bin, /draggable=\{!!onTake\}/)
+  // Both paths end in the same function, or they will drift.
+  const block = MGR.slice(MGR.indexOf('function TrainingBlock'),
+                          MGR.indexOf('WHAT THE SCORE INVITES'))
+  assert.match(block, /onTake=\{take\}/)
+  assert.match(block, /take\(JSON\.parse\(raw\) as AiSuggestion\)/,
+    'the drop path does not reuse the same take()')
+})
+
+test('a catalogue suggestion and a skill area do not look alike', () => {
+  // The badge is load-bearing: the second must not borrow the authority of
+  // the first. One is a course somebody chose; the other is a direction.
+  const bin = MGR.slice(MGR.indexOf('function SuggestionBin'),
+                        MGR.indexOf('function TrainingBlock'))
+  assert.match(bin, /in your catalogue/)
+  assert.match(bin, /skill area/)
+  assert.match(bin, /s\.source === 'CATALOGUE' \? 'cat' : 'skill'/,
+    'both sources render with the same badge')
+  const css = read('components/pms/pms.css')
+  assert.match(css, /\.aibadge\.cat/)
+  assert.match(css, /\.aibadge\.skill/)
+})
+
+test('taking a suggestion fills a blank row rather than appending one', () => {
+  // Appending unconditionally leaves an empty row above the thing just
+  // added, every first time.
+  const block = MGR.slice(MGR.indexOf('function TrainingBlock'),
+                          MGR.indexOf('WHAT THE SCORE INVITES'))
+  assert.match(block, /const blank = rows\.findIndex/)
+  assert.match(block, /blank >= 0\s*\n?\s*\? rows\.map/)
+  // And the same thing twice is not added twice.
+  assert.match(block, /if \(rows\.some\(r => \(r\.trainingName \?\? ''\)\.trim\(\)\.toLowerCase\(\)/,
+    'the same suggestion can be added twice')
+})
+
+test('the rationale becomes an editable starting point, not a verdict', () => {
+  // It lands in the rater's own details field, which they edit or delete.
+  // A machine's sentence reaching HR unread is the thing to avoid.
+  const block = MGR.slice(MGR.indexOf('function TrainingBlock'),
+                          MGR.indexOf('WHAT THE SCORE INVITES'))
+  assert.match(block, /details: s\.rationale \?\? ''/)
+})
+
+test('the panel sends what is on screen, and the server strips it', () => {
+  const fn = PERF.slice(PERF.indexOf('const askForTraining'),
+                        PERF.indexOf('const dismissSuggestion'))
+  assert.ok(fn.length > 400, 'askForTraining is gone')
+  assert.match(fn, /kras: \(kraLines \?\? \[\]\)\.map/, 'the KRAs are not sent')
+  assert.match(fn, /comment: l\.goalId \? kraRate\[l\.goalId\]\?\.comment/,
+    'this rater\'s own comments are not sent')
+  assert.match(fn, /overallRemark: overall/)
+  // The score must come from the SAME function the approval path uses.
+  assert.match(fn, /compareRatings\(/,
+    'the score shown and the score sent are computed differently')
+})
+
+test('a dismissal sticks in the database, not just the screen', () => {
+  // Somebody who rejected a suggestion made a decision. Pressing Suggest
+  // again must not hand it back.
+  const fn = PERF.slice(PERF.indexOf('const dismissSuggestion'),
+                        PERF.indexOf('const rateAndApprove'))
+  assert.match(fn, /status: 'DISMISSED'/)
+  assert.match(fn, /\.eq\('id', sug\.id\)/, 'the dismissal is not pinned to one row')
+})
+
+test('the bin is held per employee', () => {
+  // Switching between reportees must not show one person's suggestions
+  // under another's name.
+  assert.match(PERF, /const \[aiBin, setAiBin\] = useState<Record<string, AiSuggestion\[\]>>/)
+  assert.match(PERF, /suggestions: aiBin\[m\.employeeId\] \?\? null/)
+})
+
+test('no key, no bin — and the block still works', () => {
+  // The suggestion is an accelerator, never a dependency. A missing key
+  // must not take the training block with it.
+  const block = MGR.slice(MGR.indexOf('function TrainingBlock'),
+                          MGR.indexOf('WHAT THE SCORE INVITES'))
+  assert.match(block, /\{ai && \(/, 'the bin renders unconditionally')
+  assert.match(block, /ai\?: \{/, 'the ai prop is required rather than optional')
+  // And the route's own sentence is what the rater sees.
+  const fn = PERF.slice(PERF.indexOf('const askForTraining'),
+                        PERF.indexOf('const dismissSuggestion'))
+  assert.match(fn, /setAiNote\(j\?\.message \?\?/,
+    'the route\'s explanation is replaced with a vaguer one')
+})

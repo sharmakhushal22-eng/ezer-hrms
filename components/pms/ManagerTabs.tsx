@@ -41,6 +41,7 @@ import { checkTrainingBlock, TRAINING_CATEGORIES, TRAINING_CATEGORY_LABEL,
          RECOGNITION_KINDS, RECOGNITION_LABEL,
          type TrainingCategory, type ScoreInvites, type PipIntent,
          type RecognitionIntent, type RecognitionKind } from '@/lib/pms/training'
+import { type BinSuggestion as AiSuggestion } from '@/lib/pms/trainingAi'
 import { humanDate } from '@/lib/pms/cycle'
 import { DEFAULT_RULES, type Rules } from '@/lib/pms/cycle'
 
@@ -978,13 +979,144 @@ export const EMPTY_TRAINING: TrainingDraft = {
  * so the name is free text — and a free-text field with no examples fills
  * up with "training needed". The placeholder changes with the category.
  */
-function TrainingBlock({ rows, onChange }: {
+/**
+ * THE AI SUGGESTION BIN.
+ *
+ * Requested: the AI reads the ratings and remarks, its suggestions land in
+ * a bin, and the rater drags one into their own training recommendations.
+ *
+ * ── DRAG IS THE SHORTCUT, NOT THE MECHANISM ────────────────────────────
+ *
+ * Every suggestion also has an "Add" button, and it is not a fallback bolted
+ * on afterwards — it is how the feature works for anybody on a trackpad, a
+ * touchscreen, or a keyboard, which between them are most people. Drag-only
+ * would make the whole feature unreachable for somebody using a screen
+ * reader, and "drag the card" is the kind of instruction that reads as
+ * delightful in a demo and as a wall on a Tuesday afternoon.
+ *
+ * ── WHAT A SUGGESTION IS ALLOWED TO CLAIM ──────────────────────────────
+ *
+ * The badge is not decoration. A CATALOGUE suggestion is a course this
+ * organisation owns — it has a provider and somebody chose it. A SKILL
+ * suggestion came from the model and names a direction, never a product.
+ * Showing them identically would let the second borrow the authority of
+ * the first, which is the whole thing this design is trying to avoid.
+ */
+function SuggestionBin({ suggestions, busy, note, onGenerate, onTake, onDismiss }: {
+  suggestions: AiSuggestion[] | null
+  busy?: boolean
+  note?: string | null
+  onGenerate?: () => void
+  onTake?: (s: AiSuggestion) => void
+  onDismiss?: (s: AiSuggestion) => void
+}) {
+  const live = (suggestions ?? []).filter(s => s.status !== 'DISMISSED')
+
+  return (
+    <div className="aibin">
+      <div className="aihead">
+        <div>
+          <div className="lbl" style={{ marginBottom: 2 }}>Suggested for you</div>
+          <div className="k" style={{ lineHeight: 1.6 }}>
+            Read from the ratings and the words you have written. Nothing is
+            sent with their name on it.
+          </div>
+        </div>
+        <button className="btn ghost sm" type="button"
+                disabled={busy || !onGenerate} onClick={onGenerate}>
+          {busy ? 'Reading the appraisal…'
+                : live.length ? 'Suggest again' : '✨ Suggest training'}
+        </button>
+      </div>
+
+      {note && <div className="k ainote">{note}</div>}
+
+      {!live.length && !busy && !note && (
+        <div className="k ainote">
+          Nothing suggested yet. Rate a few objectives and say what you have
+          seen, then ask — the more you have written, the better this gets.
+        </div>
+      )}
+
+      {live.length > 0 && (
+        <div className="aicards">
+          {live.map(s => (
+            <div key={s.id ?? s.trainingName} className="aicard"
+                 draggable={!!onTake}
+                 onDragStart={e => {
+                   e.dataTransfer.setData('text/plain', s.trainingName)
+                   e.dataTransfer.setData('application/x-pms-suggestion',
+                     JSON.stringify(s))
+                   e.dataTransfer.effectAllowed = 'copy'
+                 }}>
+              <div className="aitop">
+                <span className={`aibadge ${s.source === 'CATALOGUE' ? 'cat' : 'skill'}`}>
+                  {s.source === 'CATALOGUE' ? 'in your catalogue' : 'skill area'}
+                </span>
+                <span className="k">{TRAINING_CATEGORY_LABEL[s.category as TrainingCategory] ?? s.category}</span>
+              </div>
+              <div className="ainame">{s.trainingName}</div>
+              {s.rationale && <div className="k airat">{s.rationale}</div>}
+              <div className="btnrow" style={{ marginTop: 6 }}>
+                <button className="btn sm" type="button" disabled={!onTake}
+                        onClick={() => onTake?.(s)}>Add to my list</button>
+                <button className="btn ghost sm" type="button" disabled={!onDismiss}
+                        onClick={() => onDismiss?.(s)}>Not this</button>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+      {live.length > 0 && (
+        <div className="k ainote">
+          Drag a card into the list below, or use <b>Add to my list</b> — they
+          do the same thing. Nothing is recorded until you approve.
+        </div>
+      )}
+    </div>
+  )
+}
+
+function TrainingBlock({ rows, onChange, ai }: {
   rows: TrainingDraft[]
   onChange: (next: TrainingDraft[]) => void
+  /** The bin, when this rater can use it. Absent leaves the block as it was. */
+  ai?: {
+    suggestions: AiSuggestion[] | null
+    busy?: boolean
+    note?: string | null
+    onGenerate?: () => void
+    onDismiss?: (s: AiSuggestion) => void
+  }
 }) {
   const set = (i: number, patch: Partial<TrainingDraft>) =>
     onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
   const faults = checkTrainingBlock(rows)
+  const [over, setOver] = useState(false)
+
+  /**
+   * TAKING A SUGGESTION FILLS THE FIRST EMPTY ROW, or adds one.
+   *
+   * Appending unconditionally would leave a blank row above the thing just
+   * added whenever the block was untouched — which is every first use.
+   */
+  const take = (s: AiSuggestion) => {
+    if (rows.some(r => (r.trainingName ?? '').trim().toLowerCase()
+                       === s.trainingName.toLowerCase())) return
+    const blank = rows.findIndex(r => !(r.trainingName ?? '').trim()
+                                   && !(r.details ?? '').trim())
+    const filled: TrainingDraft = {
+      trainingName: s.trainingName,
+      category: s.category,
+      // The model's reason becomes the starting detail, which the rater
+      // edits or deletes. Their recommendation, in their words, with a
+      // head start — not a machine's sentence sent to HR unread.
+      details: s.rationale ?? '',
+    }
+    onChange(blank >= 0
+      ? rows.map((r, i) => i === blank ? filled : r)
+      : [...rows, filled])
+  }
 
   return (
     <div className="step1on1" style={{ background: 'var(--ez-surface)' }}>
@@ -995,6 +1127,25 @@ function TrainingBlock({ rows, onChange }: {
         suggesting one does not commit a budget.
       </div>
 
+      {ai && (
+        <SuggestionBin suggestions={ai.suggestions} busy={ai.busy} note={ai.note}
+                       onGenerate={ai.onGenerate} onTake={take}
+                       onDismiss={ai.onDismiss} />
+      )}
+
+
+      {/* THE DROP TARGET IS THE LIST ITSELF, which is where somebody
+          dragging a card is already aiming. A separate "drop here" strip
+          would be one more thing to hit and one more thing to explain. */}
+      <div className={over ? 'aidrop over' : 'aidrop'}
+           onDragOver={e => { if (ai) { e.preventDefault(); setOver(true) } }}
+           onDragLeave={() => setOver(false)}
+           onDrop={e => {
+             e.preventDefault(); setOver(false)
+             const raw = e.dataTransfer.getData('application/x-pms-suggestion')
+             if (!raw) return
+             try { take(JSON.parse(raw) as AiSuggestion) } catch { /* not ours */ }
+           }}>
       {rows.map((r, i) => (
         <div key={i} className="grid g3" style={{ gap: 8, marginBottom: 8, alignItems: 'start' }}>
           <div className="fld" style={{ margin: 0 }}>
@@ -1020,6 +1171,7 @@ function TrainingBlock({ rows, onChange }: {
           </div>
         </div>
       ))}
+      </div>
 
       <div className="btnrow" style={{ marginTop: 4 }}>
         <button className="btn ghost sm" type="button"
@@ -1215,7 +1367,7 @@ export function KraDetail({ member, lines, loading, onClose,
                             confirmed, onConfirm, alreadyConfirmed,
                             finalises, finalRating, onFinalRating,
                             overallComment, onOverallComment,
-                            training, onTraining,
+                            training, onTraining, trainingAi,
                             pip, onPip, recognition, onRecognition, today,
                             onApprove, saving }: {
   member: TeamMember
@@ -1255,6 +1407,18 @@ export function KraDetail({ member, lines, loading, onClose,
    */
   overallComment?: string
   onOverallComment?: (s: string) => void
+  /**
+   * THE AI BIN, when the caller can reach the route. Absent leaves the
+   * training block exactly as it was — the suggestion is an accelerator,
+   * never a dependency, and a missing key must not take the block with it.
+   */
+  trainingAi?: {
+    suggestions: AiSuggestion[] | null
+    busy?: boolean
+    note?: string | null
+    onGenerate?: () => void
+    onDismiss?: (s: AiSuggestion) => void
+  }
   /**
    * TRAINING THIS RATER SUGGESTS, optional and offered at every band.
    *
@@ -1740,7 +1904,8 @@ export function KraDetail({ member, lines, loading, onClose,
 
           {onTraining && (
             <div style={{ marginTop: 14 }}>
-              <TrainingBlock rows={training ?? []} onChange={onTraining} />
+              <TrainingBlock rows={training ?? []} onChange={onTraining}
+                             ai={trainingAi} />
             </div>
           )}
 

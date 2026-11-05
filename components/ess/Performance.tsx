@@ -63,6 +63,8 @@ import { bandsFromScale, compareRatings,
 import { stageStates, currentStage, settled, STAGES, DEFAULT_RULES,
          type Progress, type StageKey, type Rules } from '@/lib/pms/cycle'
 import { DEFAULT_FLAG_RULES, type Flag, type FlagRules } from '@/lib/pms/employment'
+import { type BinSuggestion as AiSuggestion } from '@/lib/pms/trainingAi'
+import { authHeaders } from '@/lib/auth-headers'
 
 const MISSING_TABLE = 'PGRST205'
 
@@ -1477,6 +1479,16 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   /** The rater's training suggestions for whoever is open in the panel.
    *  Cleared with the rest of the draft when the panel closes. */
   const [training, setTraining] = useState<TrainingDraft[]>([{ ...EMPTY_TRAINING }])
+  /**
+   * THE AI SUGGESTION BIN for the person open in the panel.
+   *
+   * Keyed by employee so switching between reportees cannot show one
+   * person's suggestions under another's name — the bin is read fresh each
+   * time the panel opens, and held per id rather than as a single list.
+   */
+  const [aiBin, setAiBin] = useState<Record<string, AiSuggestion[]>>({})
+  const [aiBusy, setAiBusy] = useState(false)
+  const [aiNote, setAiNote] = useState<string | null>(null)
   const emptyPip = (): PipIntent => {
     const w = defaultPipWindow(localToday())
     return { wanted: false, reason: '', proposedStart: w.start, proposedEnd: w.end }
@@ -1857,6 +1869,86 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    * it: a rating recorded against an appraisal that did not move is a number
    * the employee cannot see and the chain will not use.
    */
+  /**
+   * ASK FOR SUGGESTIONS for the person in the panel.
+   *
+   * The context is assembled from what is ON SCREEN — the KRAs, this
+   * rater's own scores and comments, their overall remark, and whatever
+   * they have written in the PIP or recognition box. That is the whole
+   * point: the suggestion reads the appraisal being written, not a stored
+   * one from last week.
+   *
+   * The employee's NAME IS SENT and stripped on the server. It would be
+   * tidier to omit it here, and it would also mean the guarantee lived in
+   * whichever caller remembered it. One place to check beats three.
+   */
+  const askForTraining = async (m: TeamMember) => {
+    if (!period) return
+    setAiBusy(true); setAiNote(null)
+    try {
+      const res = await fetch('/api/pms/training-ai', {
+        method: 'POST',
+        headers: { ...(await authHeaders()), 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          periodId: period.id, employeeId: m.employeeId, companyId,
+          context: {
+            employeeName: m.name, employeeCode: m.code,
+            // THE SAME compareRatings the approval path uses, so the
+            // score the model is told about is the score the panel shows.
+            // Deriving it a second way is how two numbers for one appraisal
+            // start appearing on one screen.
+            overallRating: compareRatings((kraLines ?? [])
+              .filter(l => l.goalId).map(l => ({
+                goalId: l.goalId!, title: l.title ?? '',
+                weightage: Number(l.weightage) || 0,
+                self: l.selfRating ?? null,
+                mine: kraRate[l.goalId!]?.rating ?? null,
+                comment: kraRate[l.goalId!]?.comment ?? null,
+              }))).myScore,
+            scaleMax: bands.length ? Math.max(...bands.map(b => b.value)) : 5,
+            overallRemark: overall,
+            kras: (kraLines ?? []).map(l => ({
+              title: l.title, weightage: l.weightage,
+              rating: l.goalId ? kraRate[l.goalId]?.rating ?? null : null,
+              comment: l.goalId ? kraRate[l.goalId]?.comment ?? null : null,
+            })),
+            recognitionNote: recog.wanted ? recog.note : null,
+            pipReason: pip.wanted ? pip.reason : null,
+          },
+        }),
+      })
+      const j = await res.json().catch(() => null) as
+        { suggestions?: AiSuggestion[]; message?: string; error?: string } | null
+      if (!res.ok) {
+        // The route explains itself — a missing key, an empty catalogue.
+        // Passing its sentence through beats inventing a vaguer one.
+        setAiNote(j?.message ?? 'Suggestions are unavailable just now.')
+        return
+      }
+      const got = j?.suggestions ?? []
+      setAiBin(b => ({ ...b, [m.employeeId]: got }))
+      if (!got.length) setAiNote(j?.message ?? 'Nothing came back this time.')
+    } catch {
+      setAiNote('Could not reach the server for suggestions.')
+    } finally {
+      setAiBusy(false)
+    }
+  }
+
+  /**
+   * THROWING ONE AWAY STICKS. Dismissed in the bin and dismissed in the
+   * database, so pressing Suggest again does not hand it back — somebody
+   * who rejected a suggestion has made a decision, not skipped a step.
+   */
+  const dismissSuggestion = async (m: TeamMember, sug: AiSuggestion) => {
+    setAiBin(b => ({ ...b,
+      [m.employeeId]: (b[m.employeeId] ?? []).filter(x => x.id !== sug.id) }))
+    if (!sug.id) return
+    const { error } = await supabase.from('pms_training_suggestion')
+      .update({ status: 'DISMISSED' }).eq('id', sug.id)
+    if (error) logFail('dismissing a suggestion', error)
+  }
+
   const rateAndApprove = async (id: string, finalRating?: number) => {
     const myRung = chainRoleFor(id)
     if (!myRung) {
@@ -2200,6 +2292,12 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                                   onOverallComment={setOverall}
                                                   training={training}
                                                   onTraining={setTraining}
+                                                  trainingAi={{
+                                                    suggestions: aiBin[m.employeeId] ?? null,
+                                                    busy: aiBusy, note: aiNote,
+                                                    onGenerate: () => askForTraining(m),
+                                                    onDismiss: sg => dismissSuggestion(m, sg),
+                                                  }}
                                                   pip={pip}
                                                   onPip={p => setPip(x => ({ ...x, ...p }))}
                                                   recognition={recog}

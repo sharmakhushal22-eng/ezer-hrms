@@ -311,3 +311,12 @@ export function catalogueSuggestions(
              + (r.row.provider ? ` · ${r.row.provider}` : ''),
   }))
 }
+
+/**
+ * A suggestion as the BIN holds it: the engine's shape plus the row's own
+ * id and status, which only exist once it has been stored.
+ */
+export interface BinSuggestion extends Suggestion {
+  id?: string
+  status?: 'BIN' | 'TAKEN' | 'DISMISSED'
+}

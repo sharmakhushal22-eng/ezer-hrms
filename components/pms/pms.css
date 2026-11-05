@@ -1022,3 +1022,97 @@
    * side by side squeeze the name to a couple of characters. */
   .askhead { flex-direction: column; }
 }
+
+/* ── the AI suggestion bin ───────────────────────────────────────────────
+ *
+ * Cards rather than a list, because each one carries three things a rater
+ * has to weigh together — what it is, where it came from, and why it was
+ * suggested — and a row of text makes the "why" look like an afterthought.
+ *
+ * Every colour is a token. A hex here would be white at midnight. */
+.aibin {
+  border: 1px dashed var(--ez-brand-edge);
+  border-radius: 10px;
+  background: var(--ez-brand-tint);
+  padding: 10px 12px;
+  margin-bottom: 12px;
+}
+
+.aihead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ainote { margin-top: 8px; line-height: 1.6; }
+
+.aicards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.aicard {
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+  background: var(--ez-surface);
+  padding: 9px 10px;
+  /* The grab cursor is the only hint that dragging is possible; the Add
+   * button is what makes it usable without one. */
+  cursor: grab;
+}
+.aicard:active { cursor: grabbing; }
+
+.aitop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* THE BADGE IS LOad-BEARING. "In your catalogue" is a course somebody
+ * chose; "skill area" came from a model and names a direction, never a
+ * product. They must not look alike. */
+.aibadge {
+  font-size: 10px;
+  font-weight: 600;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+  border-radius: 99px;
+  padding: 2px 7px;
+  white-space: nowrap;
+}
+.aibadge.cat {
+  background: color-mix(in oklab, var(--ez-positive) 18%, var(--ez-surface));
+  color: var(--ez-ink);
+  box-shadow: inset 0 0 0 1px var(--ez-positive-edge);
+}
+.aibadge.skill {
+  background: color-mix(in oklab, var(--ez-info) 16%, var(--ez-surface));
+  color: var(--ez-ink);
+  box-shadow: inset 0 0 0 1px var(--ez-info-edge);
+}
+
+.ainame { font-weight: 600; line-height: 1.4; }
+.airat { margin-top: 3px; line-height: 1.55; }
+
+/* The list below, as a drop target. Only visible while something is over
+ * it — a permanently dashed box reads as an empty state. */
+.aidrop {
+  border: 1px dashed transparent;
+  border-radius: 10px;
+  padding: 2px;
+  transition: background .12s var(--ez-ease, ease), border-color .12s;
+}
+.aidrop.over {
+  border-color: var(--ez-brand);
+  background: var(--ez-brand-tint);
+}
+
+@media (max-width: 560px) {
+  .aihead { flex-direction: column; }
+  .aicards { grid-template-columns: 1fr; }
+}
