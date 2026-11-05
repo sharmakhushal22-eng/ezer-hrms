@@ -20,6 +20,8 @@
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadPmsAdmin, pmsAdmin, type PmsAdminSnapshot } from '@/lib/pms/adminClient'
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL } from '@/lib/pms/hierarchy'
+import { RUNG_CHOICES, chainFault, chainWarnings, chainSummary, usedBy,
+         MAX_CHAIN_NAME } from '@/lib/pms/chainBuilder'
 
 type Row = Record<string, unknown>
 const s = (v: unknown) => (v === null || v === undefined) ? '' : String(v)
@@ -125,8 +127,11 @@ function useSaver(reload: () => Promise<void>) {
 }
 
 // ══ 1. POLICIES ═══════════════════════════════════════════════════════════
-function PolicyPanel({ policies, companies, people, reload }: {
-  policies: Row[]; companies: Row[]; people: Row[]; reload: () => Promise<void>
+function PolicyPanel({ policies, companies, people, chains, reload }: {
+  policies: Row[]; companies: Row[]; people: Row[]
+  /** 218. The built chains a policy may point at instead of a preset. */
+  chains: Row[]
+  reload: () => Promise<void>
 }) {
   const [id, setId] = useState<string>('')
   const [draft, setDraft] = useState<Row>({})
@@ -207,8 +212,16 @@ function PolicyPanel({ policies, companies, people, reload }: {
             {KRA_AUTHORS.map(k => <option key={k} value={k}>{KRA_AUTHOR_LABEL[k]}</option>)}
           </select>
         </Field>
-        <Field label="Approval chain" hint="Who rates, in order">
+        {/* 218. THE CUSTOM CHAIN WINS WHEN ONE IS SET, so the preset below is
+            disabled rather than hidden while it is — hiding it would leave an
+            administrator unable to see what the policy falls back to, and
+            leaving it live would offer two controls where only one decides. */}
+        <Field label="Approval chain"
+               hint={s(draft.chain_id)
+                 ? 'A built chain is selected below, and that is what runs.'
+                 : 'Who rates, in order'}>
           <select value={s(draft.approval_chain) || 'SELF_RM1_RM2_HOD'}
+                  disabled={!!s(draft.chain_id)}
                   onChange={e => set('approval_chain', e.target.value)}>
             {CHAINS.map(c => <option key={c} value={c}>{CHAIN_LABEL[c]}</option>)}
             {/* The schema also permits SELF_RM1_RM2_HOD_MD and §6.2's example
@@ -222,6 +235,20 @@ function PolicyPanel({ policies, companies, people, reload }: {
                 Self → RM L1 → RM L2 → HOD → MD (set in the database; not supported yet)
               </option>
             )}
+          </select>
+        </Field>
+        <Field label="Or a chain you built"
+               hint="Overrides the preset. Built in Approval chains.">
+          <select value={s(draft.chain_id)}
+                  onChange={e => set('chain_id', e.target.value || null)}>
+            <option value="">Use the preset above</option>
+            {chains.filter(c => c.is_active || s(c.id) === s(draft.chain_id))
+                   .map(c => (
+              <option key={s(c.id)} value={s(c.id)}>
+                {s(c.name)} — {chainSummary(c.rungs as string[] | null)}
+                {!c.is_active ? ' (retired)' : ''}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Rating scale" hint="§13.2 recommends the 5-point scale">
@@ -758,6 +785,317 @@ function CataloguePanel({ catalogue, companyId, reload }: {
   )
 }
 
+// ══ 2b. THE CHAIN BUILDER (218) ═══════════════════════════════════════════
+//
+// Requested: the chain should be fully customisable and editable — change the
+// KRA and approval chains, build a completely new one, all from the admin side.
+//
+// ── WHAT THIS SCREEN HAS TO MAKE OBVIOUS ─────────────────────────────────
+//
+// Three things, and getting any of them wrong leaves somebody confidently
+// mistaken about how their company is being appraised:
+//
+//   THE TWO ENDS ARE FIXED. The self rating starts every chain and HR ends
+//   it. They are drawn, dimmed, in the track — not offered as removable
+//   rungs — because a chain that looks like it has no publisher is one
+//   somebody will try to build.
+//
+//   AN EMPTY RUNG IS SKIPPED, NOT BLOCKED ON. Nobody has a regional head
+//   assigned. A chain naming one still works and simply does less than it
+//   appears to, so the coverage count sits against the choice rather than in
+//   a footnote — the number is the warning.
+//
+//   AN EDIT DOES NOT REACH APPRAISALS ALREADY RUNNING. chain_shape freezes
+//   per appraisal at submission. Said on the screen because the opposite is
+//   the natural assumption and the consequence of assuming wrongly is an
+//   administrator "fixing" a live cycle.
+
+/** Reordering by drag, with the keyboard as the equal path and not a fallback. */
+function RungRow({ rung, idx, count, cover, onMove, onRemove }: {
+  rung: string; idx: number; count: number
+  cover?: { have: number; of: number }
+  onMove: (from: number, to: number) => void
+  onRemove: () => void
+}) {
+  const [over, setOver] = useState(false)
+  const choice = RUNG_CHOICES.find(c => c.stage === rung)
+  const empty = cover && cover.of > 0 && cover.have === 0
+  const partial = cover && cover.of > 0 && cover.have > 0 && cover.have < cover.of
+
+  return (
+    <div className={`rung${over ? ' over' : ''}`}
+         draggable
+         onDragStart={e => {
+           e.dataTransfer.setData('application/x-pms-rung', String(idx))
+           e.dataTransfer.effectAllowed = 'move'
+         }}
+         onDragOver={e => { e.preventDefault(); setOver(true) }}
+         onDragLeave={() => setOver(false)}
+         onDrop={e => {
+           e.preventDefault(); setOver(false)
+           const from = Number(e.dataTransfer.getData('application/x-pms-rung'))
+           if (Number.isInteger(from) && from !== idx) onMove(from, idx)
+         }}>
+      <span className="rung-no">{idx + 1}</span>
+      <span className="rung-grip" aria-hidden>⠿</span>
+      <span className="rung-name">
+        {choice?.label ?? rung}
+        {empty && <span className="pill p-amber">skipped for everybody</span>}
+        {partial && (
+          <span className="pill p-grey">
+            skipped for {cover!.of - cover!.have} of {cover!.of}
+          </span>
+        )}
+      </span>
+      {/* The keyboard path. A drag handle alone makes ordering — the only
+          thing this screen is for — reachable by exactly one input method. */}
+      <div className="btnrow">
+        <button className="btn ghost" disabled={idx === 0}
+                aria-label={`Move ${choice?.label ?? rung} earlier`}
+                onClick={() => onMove(idx, idx - 1)}>↑</button>
+        <button className="btn ghost" disabled={idx === count - 1}
+                aria-label={`Move ${choice?.label ?? rung} later`}
+                onClick={() => onMove(idx, idx + 1)}>↓</button>
+        <button className="btn ghost"
+                aria-label={`Remove ${choice?.label ?? rung}`}
+                onClick={onRemove}>Remove</button>
+      </div>
+    </div>
+  )
+}
+
+const BLANK_CHAIN: Row = { name: '', rungs: [], notes: '', is_active: true }
+
+function ChainPanel({ chains, policies, coverage, companyId, reload }: {
+  chains: Row[]; policies: Row[]
+  coverage: Record<string, { have: number; of: number }> | null
+  companyId: string | null; reload: () => Promise<void>
+}) {
+  const [editing, setEditing] = useState<Row | null>(null)
+  const [group, setGroup] = useState(false)
+  const { busy, error, saved, run } = useSaver(reload)
+
+  const draft = (editing?.rungs as string[] | undefined) ?? []
+  const setRungs = (next: string[]) => setEditing(d => d ? { ...d, rungs: next } : d)
+  const set = (k: string, v: unknown) => setEditing(d => d ? { ...d, [k]: v } : d)
+
+  const move = (from: number, to: number) => {
+    const next = [...draft]
+    const [r] = next.splice(from, 1)
+    next.splice(Math.max(0, Math.min(next.length, to)), 0, r)
+    setRungs(next)
+  }
+
+  // The same refusal the route will give, computed as they type so the Save
+  // button can explain itself before it is pressed rather than after.
+  const fault = editing
+    ? chainFault({ name: s(editing.name), rungs: draft })
+    : null
+  const warnings = editing ? chainWarnings(draft, coverage) : []
+  const unused = RUNG_CHOICES.filter(c => !draft.includes(c.stage))
+
+  return (
+    <Card title="Approval chains"
+          sub="Who an appraisal travels through, in what order. Build as many as you need and point each policy at one.">
+      {!chains.length && (
+        <Note tone="warn">
+          No chains yet, so every policy is using one of the three built-in
+          presets. Nothing changes until you build a chain <i>and</i> select it
+          on a policy — see <b>Policy rules</b>.
+        </Note>
+      )}
+
+      <div className="btnrow">
+        <button className="btn" onClick={() => setEditing({ ...BLANK_CHAIN, rungs: [] })}>
+          Build a chain
+        </button>
+        {chains.length > 0 && (
+          <span className="k" style={{ alignSelf: 'center' }}>
+            {chains.filter(c => c.is_active).length} active of {chains.length}
+          </span>
+        )}
+      </div>
+
+      {editing && (
+        <>
+          <div className="divider" />
+          <Field label="Name this chain"
+                 hint="What you will pick on a policy — “Plant staff, via site HR”">
+            <input value={s(editing.name)} maxLength={MAX_CHAIN_NAME}
+                   onChange={e => set('name', e.target.value)} />
+          </Field>
+
+          {/* ── the track ────────────────────────────────────────────────── */}
+          <div className="k" style={{ margin: '10px 0 6px' }}>
+            The order an appraisal travels. Drag to reorder, or use the arrows.
+          </div>
+          <div className="chaintrack">
+            <div className="rung fixed">
+              <span className="rung-no">·</span>
+              <span className="rung-name">
+                The employee rates themselves
+                <span className="pill p-grey">always first</span>
+              </span>
+            </div>
+
+            {!draft.length && (
+              <div className="rung empty">
+                <span className="rung-name k">
+                  No approvers yet. Add one below — without any, a submission
+                  would go straight to publishing.
+                </span>
+              </div>
+            )}
+
+            {draft.map((r, i) => (
+              <RungRow key={r} rung={r} idx={i} count={draft.length}
+                       cover={coverage?.[r]} onMove={move}
+                       onRemove={() => setRungs(draft.filter(x => x !== r))} />
+            ))}
+
+            <div className="rung fixed">
+              <span className="rung-no">·</span>
+              <span className="rung-name">
+                HR settles the final rating and publishes
+                <span className="pill p-grey">always last</span>
+              </span>
+            </div>
+          </div>
+
+          {/* ── what is left to add ──────────────────────────────────────── */}
+          {unused.length > 0 && (
+            <>
+              <div className="k" style={{ margin: '12px 0 6px' }}>Add a rung</div>
+              <div className="btnrow wrap">
+                {unused.map(c => {
+                  const cov = coverage?.[c.stage]
+                  return (
+                    <button key={c.stage} className="btn ghost"
+                            title={c.hint}
+                            onClick={() => setRungs([...draft, c.stage])}>
+                      + {c.label}
+                      {cov && cov.of > 0 && (
+                        <span className="k"> · {cov.have} of {cov.of} have one</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          <Field label="Notes" hint="Why this chain exists, for whoever reads it next">
+            <input value={s(editing.notes)} onChange={e => set('notes', e.target.value)} />
+          </Field>
+
+          {!editing.id && (
+            <label className="chk" style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                                            margin: '8px 0', lineHeight: 1.6 }}>
+              <input type="checkbox" checked={group}
+                     onChange={e => setGroup(e.target.checked)} />
+              <span>
+                Available to <b>every company</b> in the group, not just this one.
+                <span className="k"> Leave this off for a chain only one company runs.</span>
+              </span>
+            </label>
+          )}
+
+          {warnings.map((w, i) => <Note key={i} tone="warn">{w}</Note>)}
+
+          {/* The consequence of an edit, said where the edit happens. */}
+          {editing.id && usedBy(s(editing.id), policies as never).length > 0 && (
+            <Note tone="warn">
+              <b>{usedBy(s(editing.id), policies as never).join(', ')}</b>{' '}
+              {usedBy(s(editing.id), policies as never).length === 1 ? 'uses' : 'use'}{' '}
+              this chain. Appraisals already under way keep the chain they
+              started on — the shape is frozen when an employee submits — so
+              this applies to appraisals that start after you save.
+            </Note>
+          )}
+
+          <SaveRow busy={busy} error={error} saved={saved}
+                   label={editing.id ? 'Save chain' : 'Create chain'}
+                   disabled={!!fault || (!editing.id && !group && !companyId)}
+                   onSave={async () => {
+                     const okDone = await run(
+                       () => pmsAdmin('chain_upsert',
+                         { ...editing, company_id: group ? null : companyId }),
+                       editing.id ? 'Chain saved.' : 'Chain created.')
+                     if (okDone) { setEditing(null); setGroup(false) }
+                   }} />
+          {/* Why the button is off, rather than a disabled button and silence. */}
+          {fault && <Note tone="warn">{fault}</Note>}
+          <div className="k" style={{ marginTop: 6 }}>
+            Will run as: <b>{chainSummary(draft)}</b>
+          </div>
+        </>
+      )}
+
+      {chains.length > 0 && (
+        <>
+          <div className="divider" />
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Chain</th><th>Runs as</th><th>Used by</th>
+                    <th>Scope</th><th>Status</th><th /></tr>
+              </thead>
+              <tbody>
+                {chains.map(c => {
+                  const users = usedBy(s(c.id), policies as never)
+                  return (
+                    <tr key={s(c.id)}>
+                      <td>
+                        {s(c.name)}
+                        {!!s(c.notes) && <div className="k">{s(c.notes)}</div>}
+                      </td>
+                      <td className="k">{chainSummary(c.rungs as string[] | null)}</td>
+                      <td className="k">
+                        {users.length ? users.join(', ') : 'no policy yet'}
+                      </td>
+                      <td className="k">{c.company_id ? 'this company' : 'whole group'}</td>
+                      <td>
+                        <span className={`pill ${c.is_active ? 'p-green' : 'p-grey'}`}>
+                          {c.is_active ? 'active' : 'retired'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="btnrow">
+                          <button className="btn ghost"
+                                  onClick={() => setEditing({
+                                    ...c,
+                                    // The two fixed ends are drawn separately, so
+                                    // the editable list is the approvers only.
+                                    rungs: ((c.rungs as string[] | null) ?? [])
+                                      .filter(r => r !== 'EMPLOYEE' && r !== 'HR'),
+                                  })}>Edit</button>
+                          {/* Retired, never deleted: a policy may point at this
+                              row and every appraisal that ran it recorded the
+                              shape. The route refuses while it is in use. */}
+                          <button className="btn ghost"
+                                  title={users.length && c.is_active
+                                    ? `${users.join(', ')} still use this chain`
+                                    : undefined}
+                                  onClick={() => run(
+                                    () => pmsAdmin('chain_set_active',
+                                      { id: c.id, is_active: !c.is_active }),
+                                    c.is_active ? 'Chain retired.' : 'Chain back in use.')}>
+                            {c.is_active ? 'Retire' : 'Bring back'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
 // ══ 3. RATING SCALE ═══════════════════════════════════════════════════════
 function ScalePanel({ scale, companyId, reload }: {
   scale: Row[]; companyId: string | null; reload: () => Promise<void>
@@ -1097,7 +1435,7 @@ function FinalisePanel({ periods, canAttribute, reload }: {
 export default function AdminEditor() {
   const [snap, setSnap] = useState<PmsAdminSnapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [section, setSection] = useState<'policy' | 'kra' | 'scale' | 'courses' | 'authority' | 'cycle' | 'finalise'>('policy')
+  const [section, setSection] = useState<'policy' | 'kra' | 'chains' | 'scale' | 'courses' | 'authority' | 'cycle' | 'finalise'>('policy')
 
   const reload = useCallback(async () => {
     const r = await loadPmsAdmin()
@@ -1120,6 +1458,7 @@ export default function AdminEditor() {
   const TABS = [
     ['policy',   'Policy rules'],
     ['kra',      'KRA library'],
+    ['chains',   'Approval chains'],
     ['scale',    'Rating scale'],
     ['courses',  'Training catalogue'],
     ['authority','HR Head authority'],
@@ -1136,8 +1475,12 @@ export default function AdminEditor() {
       </div>
 
       {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies}
-                                              people={snap.people ?? []} reload={reload} />}
+                                              people={snap.people ?? []}
+                                              chains={snap.chains ?? []} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
+      {section === 'chains'   && <ChainPanel chains={snap.chains ?? []} policies={snap.policies}
+                                             coverage={snap.coverage ?? null}
+                                             companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
       {section === 'courses'  && <CataloguePanel catalogue={snap.catalogue ?? []}
                                                  companyId={companyId} reload={reload} />}
