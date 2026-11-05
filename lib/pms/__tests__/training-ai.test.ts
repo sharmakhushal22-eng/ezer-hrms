@@ -584,3 +584,56 @@ test('the call has a deadline, so the button cannot spin for ever', () => {
   assert.equal([...ROUTE.matchAll(/await fetch\(/g)].length, 1,
     'a raw fetch with no deadline remains')
 })
+
+test('the route answers in ONE shape, whichever path produced it', () => {
+  // THE BUG THE CARDS SHOWED. Stored rows are snake_case and freshly built
+  // ones are not, so returning back.data raw meant the screen read
+  // trainingName off a row that only had training_name — every card
+  // rendered with a blank title, badge and rationale intact, looking for
+  // all the world like a styling problem.
+  //
+  // And it only happened on the path that WORKS: a failed re-read fell
+  // back to `all`, which was already the right shape, so the bug hid
+  // exactly when persistence broke.
+  assert.match(ROUTE, /const fromRows = \(back\.data \?\? \[\]\)\.map/,
+    'the stored rows are returned without being mapped')
+  assert.match(ROUTE, /trainingName: String\(row\.training_name \?\? ''\)/)
+  assert.match(ROUTE, /suggestions: back\.error \? all : fromRows/,
+    'the two paths still return different shapes')
+  // No snake_case key may escape in the payload.
+  const ret = ROUTE.slice(ROUTE.indexOf('const fromRows'), ROUTE.length)
+  for (const k of ['training_name:', 'catalogue_id:']) {
+    assert.ok(!ret.includes(k), `${k} is returned to the screen`)
+  }
+})
+
+// ── 216: a dismissal has an author ──────────────────────────────────────
+
+test('a dismissal records who and when', () => {
+  // THE GAP THAT BIT. Ten suggestions were in the table during testing;
+  // five read DISMISSED and only one had been dismissed by hand. Nothing
+  // on the row could say what did the rest — the column held a verdict
+  // with no author and no clock. The cause is still unexplained, which is
+  // precisely the argument for recording it.
+  const SQL216 = read('supabase/migrations/216_pms_a_dismissal_has_an_author.sql')
+  assert.match(SQL216, /ADD COLUMN IF NOT EXISTS status_by uuid REFERENCES employees\(id\)/)
+  assert.match(SQL216, /ADD COLUMN IF NOT EXISTS status_at timestamptz/)
+  const body = SQL216.replace(/^\s*--.*$/gm, ' ').replace(/'[^']*'/g, "''")
+  for (const f of [/^\s*UPDATE\s+\w/mi, /\bDELETE\s+FROM\b/i, /\bDROP\b/i]) {
+    assert.ok(!f.test(body), `216 matches ${f}`)
+  }
+})
+
+test('the dismissal survives 216 not having run', () => {
+  // The dismissal matters more than its attribution: a missing column
+  // must not lose the decision itself.
+  const fn = PERF.slice(PERF.indexOf('const dismissSuggestion'),
+                        PERF.indexOf('const rateAndApprove'))
+  assert.match(fn, /status_by: employeeId/)
+  assert.match(fn, /status_at: new Date\(\)\.toISOString\(\)/)
+  assert.match(fn, /stamped\.error\s*\n?\s*\? await supabase/,
+    'there is no fallback for a database without 216')
+  // The fallback must still write the status.
+  const fb = fn.slice(fn.indexOf('stamped.error'))
+  assert.match(fb, /status: 'DISMISSED'/)
+})

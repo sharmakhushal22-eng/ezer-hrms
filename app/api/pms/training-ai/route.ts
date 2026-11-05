@@ -231,8 +231,34 @@ export async function POST(req: NextRequest) {
     .select('id, source, catalogue_id, training_name, skill, category, rationale, status')
     .eq('period_id', periodId).eq('employee_id', employeeId)
     .eq('generated_by', actor.employeeId).neq('status', 'DISMISSED')
+
+  /**
+   * ONE SHAPE OUT, WHICHEVER PATH GOT HERE.
+   *
+   * The stored rows are snake_case and the freshly built ones are not, so
+   * returning `back.data` raw meant the screen read trainingName off a row
+   * that only had training_name — and every card rendered with a blank
+   * title, badge and rationale intact. It looked like a styling bug.
+   *
+   * Worse, it only happened on the path that WORKS: a failed re-read fell
+   * back to `all`, which was already the right shape, so the bug hid
+   * whenever persistence broke. Found by looking at the cards.
+   */
+  const fromRows = (back.data ?? []).map(r => {
+    const row = r as unknown as Record<string, unknown>
+    return {
+      id: String(row.id),
+      source: row.source === 'CATALOGUE' ? 'CATALOGUE' : 'MODEL',
+      catalogueId: (row.catalogue_id as string) ?? null,
+      trainingName: String(row.training_name ?? ''),
+      skill: (row.skill as string) ?? null,
+      category: row.category,
+      rationale: (row.rationale as string) ?? null,
+      status: row.status,
+    }
+  })
   return NextResponse.json({
-    suggestions: back.error ? all : (back.data ?? []),
+    suggestions: back.error ? all : fromRows,
     persisted: !saved.error && !back.error,
     model: answer?.model ?? null,
     catalogueSize: catalogue.length,

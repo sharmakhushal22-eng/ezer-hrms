@@ -1944,8 +1944,18 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     setAiBin(b => ({ ...b,
       [m.employeeId]: (b[m.employeeId] ?? []).filter(x => x.id !== sug.id) }))
     if (!sug.id) return
-    const { error } = await supabase.from('pms_training_suggestion')
-      .update({ status: 'DISMISSED' }).eq('id', sug.id)
+    // 216: WHO AND WHEN. Five rows read DISMISSED during testing when one
+    // had been dismissed by hand, and nothing on the row could say what
+    // did it. Tolerant of 216 not having run — the dismissal matters more
+    // than its attribution, so a missing column must not lose it.
+    const stamped = await supabase.from('pms_training_suggestion')
+      .update({ status: 'DISMISSED', status_by: employeeId,
+                status_at: new Date().toISOString() })
+      .eq('id', sug.id)
+    const { error } = stamped.error
+      ? await supabase.from('pms_training_suggestion')
+          .update({ status: 'DISMISSED' }).eq('id', sug.id)
+      : stamped
     if (error) logFail('dismissing a suggestion', error)
   }
 
