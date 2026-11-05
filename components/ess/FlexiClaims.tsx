@@ -6,11 +6,12 @@
 // and "+ Add another bill" appends a fresh frame, so a month's bills go in together.
 import { useState, useEffect, useRef, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
-import { loadEntitlements, loadWindow, ComponentLimit, NO_INVOICE, ACCEPTED_TYPES, FY } from '@/lib/flexi/claims'
+import { loadEntitlements, ComponentLimit, NO_INVOICE, ACCEPTED_TYPES, FY } from '@/lib/flexi/claims'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK, E, R } from '@/lib/ui'
 import PayStyles from '@/components/ess/payroll/PayStyles'
+import { windowOpenAt, windowDaysLeft, nextOpening, closingDay } from '@/lib/flexi/window'
 
 const V = {
   navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
@@ -183,7 +184,6 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   const [regime, setRegime] = useState<'old' | 'new'>('old')
   const [slabLabel, setSlabLabel] = useState<string | null>(null)
   const [limits, setLimits] = useState<ComponentLimit[]>([])
-  const [win, setWin] = useState<any>(null)
   const [frames, setFrames] = useState<Frame[]>([blankFrame()])
   const [submitting, setSubmitting] = useState(false)
   const [reqComp, setReqComp] = useState<string | null>(null)
@@ -197,10 +197,6 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
     setStatus('loading')
     const ent = await loadEntitlements(employeeId)
     setCompanyId(ent.companyId); setRegime(ent.regime); setSlabLabel(ent.slabLabel); setLimits(ent.limits)
-    if (ent.companyId) {
-      const now = new Date()
-      setWin(await loadWindow(ent.companyId, now.getFullYear(), now.getMonth() + 1))
-    }
     // Employee's own submitted claims — powers the per-component History drawer.
     fetch(`/api/flexi/claims?employee_id=${employeeId}`).then(r => r.json()).then(r => setClaimHist(r.claims || [])).catch(() => setClaimHist([]))
     setStatus(ent.limits.length ? 'ready' : 'nopolicy')
@@ -222,10 +218,18 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   const addFrame = () => setFrames(p => [...p, blankFrame()])
   const removeFrame = (id: string) => setFrames(p => p.length > 1 ? p.filter(f => f.id !== id) : p)
 
-  const isOpen = win?.status === 'OPEN'
+  // The window runs the 1st–20th of every month on its own (lib/flexi/window). The uploader is
+  // always on screen; it is locked after the 20th, and when nothing is left on any component
+  // that takes a bill.
+  const now = new Date()
+  const windowOpen = windowOpenAt(now)
+  const hasBalance = billTypeOptions.length > 0
+  const canSubmit = windowOpen && hasBalance
+  const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
   async function submitAll() {
-    if (!isOpen) return showToast('Submission window is closed')
+    if (!windowOpen) return showToast(`Bills can be submitted from the 1st to the 20th. The window opens on ${dayLabel(nextOpening(new Date()))}`)
+    if (!hasBalance) return showToast('Your balance is ₹0 on every component, so no more bills can be submitted')
     // Validate every frame the employee actually started.
     const active = frames.filter(f => f.code || f.amount || f.files.length)
     if (!active.length) return showToast('Add at least one bill')
@@ -242,7 +246,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
     const fails: string[] = []
     for (const f of active) {
       const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
-        action: 'SUBMIT', window_id: win.id, employee_id: employeeId, company_id: companyId,
+        action: 'SUBMIT', employee_id: employeeId, company_id: companyId,
         component_code: f.code, claim_amount: Number(f.amount), bill_date: f.billDate || null,
         bill_no: f.billNo || null, agency_name: f.vendor || null, vendor_desc: f.vendor || null,
       }) }).then(r => r.json()).catch(e => ({ error: e.message }))
@@ -273,16 +277,6 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   const activeCount = frames.filter(f => f.code && f.amount && f.files.length).length
 
   if (status === 'loading') return <div className="ezp ezp-muted" style={{ padding: 20 }}>Loading flexi claims…</div>
-  if (status === 'nopolicy') return (
-    <div className="ezp">
-      <PayStyles />
-      <div className="ezp-panel">
-        <div className="ezp-head"><h3>Flexi Reimbursement</h3></div>
-        <div className="ezp-empty">No claimable flexi components are configured for your company &amp; salary band yet. Once HR sets up the flexi policy slabs, your entitlements &amp; bill submission will appear here.</div>
-      </div>
-    </div>
-  )
-
   return (
     <div className="ezp">
       <PayStyles />
@@ -293,12 +287,16 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
         </div>
       </div>
 
-      {/* Window banner */}
-      {win ? (
-        <div className={`ezp-note ${isOpen ? 'is-ok' : 'is-bad'}`}>
-          {isOpen ? <>Window open · submit bills by <b>{new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</b> · {Math.max(0, Math.ceil((new Date(win.closes_at).getTime() - Date.now()) / 86400000))} days left</> : 'Window closed · bills cannot be submitted right now'}
-        </div>
-      ) : <div className="ezp-note is-warn">No submission window is open for this month yet. Contact HR / Payroll.</div>}
+      {/* The window (1st–20th) and whether anything is left to claim */}
+      <div className={`ezp-note ${canSubmit ? 'is-ok' : windowOpen ? 'is-warn' : 'is-bad'}`}>
+        {!windowOpen
+          ? <>Window closed · bills can be submitted from the 1st to the 20th of every month. It opens again on <b>{dayLabel(nextOpening(now))}</b>.</>
+          : hasBalance
+            ? <>Window open · submit bills by <b>{dayLabel(closingDay(now))}</b> · {windowDaysLeft(now)} day{windowDaysLeft(now) === 1 ? '' : 's'} left</>
+            : limits.length
+              ? <>Window open till <b>{dayLabel(closingDay(now))}</b>, but your balance is ₹0 on every component that takes a bill, so no more bills can be submitted. Ask Payroll for a limit increase on a component below if you need more.</>
+              : <>Window open till <b>{dayLabel(closingDay(now))}</b>, but you have no claimable flexi components yet: file your Flexi &amp; TDS declaration, or ask HR to set up the flexi policy for your band.</>}
+      </div>
 
       {/* Summary */}
       <section className="ezp-hero">
@@ -312,10 +310,12 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
       </section>
 
       {/* ── Bill uploader ─────────────────────────────────────────────── */}
-      {isOpen && billTypeOptions.length > 0 && (
+      {(
         <div className="ezp-panel">
-          <div className="ezp-head"><h3>Upload your bills</h3></div>
+          <div className="ezp-head"><h3>Upload your bills</h3>{!canSubmit && <span className="ezp-chip is-bad" style={{ marginLeft: 'auto' }}>{!windowOpen ? 'Opens on the 1st' : 'Balance ₹0'}</span>}</div>
           <p className="ezp-sub">Pick a bill type, enter the amount, attach photos or files. Add as many bills as you like.</p>
+          {/* A disabled fieldset locks every input, picker and button inside it at once. */}
+          <fieldset disabled={!canSubmit} style={{ border: 0, padding: 0, margin: 0, minWidth: 0, opacity: canSubmit ? 1 : 0.55 }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
             {frames.map((f, i) => (
               <BillFrame
@@ -348,11 +348,13 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
               </button>
             </div>
           </div>
+          </fieldset>
         </div>
       )}
 
       {/* ── Your entitlements (limits + history) ──────────────────────── */}
       <div className="ezp-head" style={{ margin: '4px 0 10px' }}><h3>Your entitlements</h3></div>
+      {!limits.length && <div className="ezp-panel"><div className="ezp-empty">No claimable flexi components are configured for your company &amp; salary band yet.</div></div>}
       {limits.map(lim => {
         const noInv = NO_INVOICE.includes(lim.code)
         const remaining = lim.annual_limit - lim.approved - lim.pending

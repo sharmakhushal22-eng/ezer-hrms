@@ -1,13 +1,14 @@
 'use client'
 // app/dashboard/flexi-claims/page.tsx — Flexi Claims admin console.
-// Three tabs: Approvals (review/bulk approve bills) · Window (open/close cycle) ·
+// Three tabs: Approvals (review/bulk approve bills) · Window (1st–20th, automatic) ·
 // Limits (per-employee overrides + employee limit-increase requests).
 // Real company / department / location data from the DB.
 import { useState, useEffect, useMemo, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { scopedCompanies, defaultCompanyId, canSeeScreen } from '@/lib/rms/resolve'
-import { COMP_NAMES, NO_INVOICE, ACCEPTED_TYPES, loadEntitlements, loadWindow, type ComponentLimit } from '@/lib/flexi/claims'
+import { COMP_NAMES, NO_INVOICE, ACCEPTED_TYPES, loadEntitlements, type ComponentLimit } from '@/lib/flexi/claims'
+import { windowOpenAt, nextOpening, closingDay } from '@/lib/flexi/window'
 import { useRef } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -264,103 +265,25 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
   )
 }
 
-// Calendar day-range picker for the current month — pick opening day, then closing day.
-function MonthCalendar({ openDay, closeDay, onChange }: { openDay: number; closeDay: number; onChange: (o: number, c: number) => void }) {
-  const now = new Date()
-  const year = now.getFullYear(), month = now.getMonth()
-  const daysInMonth = new Date(year, month + 1, 0).getDate()
-  const firstWeekday = new Date(year, month, 1).getDay()   // 0 = Sun
-  const [anchor, setAnchor] = useState<number | null>(null)
-  const pick = (d: number) => {
-    if (anchor === null) { setAnchor(d); onChange(d, d) }
-    else { onChange(Math.min(anchor, d), Math.max(anchor, d)); setAnchor(null) }
-  }
-  const cells: (number | null)[] = [...Array(firstWeekday).fill(null), ...Array.from({ length: daysInMonth }, (_, i) => i + 1)]
-  const WD = ['Su', 'Mo', 'Tu', 'We', 'Th', 'Fr', 'Sa']
-  return (
-    <div>
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(7,1fr)', gap: 4 }}>
-        {WD.map((w, i) => <div key={i} style={{ textAlign: 'center', fontSize: 10, fontWeight: 700, color: C.muted, padding: '2px 0' }}>{w}</div>)}
-        {cells.map((d, i) => {
-          if (d === null) return <div key={i} />
-          const edge = d === openDay || d === closeDay
-          const inRange = d > openDay && d < closeDay
-          const label = d === openDay ? 'Opens' : d === closeDay ? 'Closes' : ''
-          return (
-            <button key={i} onClick={() => pick(d)} title={label ? `${label} on day ${d}` : `Day ${d}`}
-              style={{
-                aspectRatio: '1', border: `1px solid ${edge ? C.purple : inRange ? TK.brandEdge : C.border}`, borderRadius: 10, cursor: 'pointer', fontFamily: 'inherit',
-                fontSize: 13, fontWeight: edge ? 700 : 500, padding: 0, position: 'relative',
-                background: edge ? C.purple : inRange ? C.purpleBg: TK.surface, color: edge ? TK.surface : inRange ? C.purpleDark : C.navy,
-              }}>
-              {d}
-              {label && <span style={{ position: 'absolute', bottom: 1, left: 0, right: 0, fontSize: 7, fontWeight: 700, letterSpacing: '.02em' }}>{label.toUpperCase()}</span>}
-            </button>
-          )
-        })}
-      </div>
-      <div style={{ display: 'flex', alignItems: 'center', gap: 14, marginTop: 8, fontSize: 11, color: C.muted, flexWrap: 'wrap' }}>
-        <span><b style={{ color: C.purple }}>Opens</b> Day {openDay}</span>
-        <span><b style={{ color: C.purple }}>Closes</b> Day {closeDay}</span>
-        <span style={{ marginLeft: 'auto', fontStyle: 'italic' }}>Click the opening day, then the closing day.</span>
-      </div>
-    </div>
-  )
-}
-
 // ─────────────────────────────────────────────────────────────
 // WINDOW TAB
 // ─────────────────────────────────────────────────────────────
-function WindowTab({ companyId, notify }: { companyId: string; notify: (m: string) => void }) {
+function WindowTab({ companyId }: { companyId: string; notify: (m: string) => void }) {
+  // The claim window runs the 1st–20th of every month on its own (lib/flexi/window): there is
+  // nothing to open, close or schedule. This tab says so, and whether it is open today.
   const NOW = new Date()
-  const [win, setWin] = useState<any>(null)
-  const [openDay, setOpenDay] = useState(1)
-  const [closeDay, setCloseDay] = useState(20)
-  const [saving, setSaving] = useState(false)
-
-  const load = useCallback(async () => {
-    if (!companyId) return
-    const { data } = await supabase.from('flexi_windows').select('*').eq('company_id', companyId).eq('year', NOW.getFullYear()).eq('month', NOW.getMonth() + 1).maybeSingle()
-    if (data) { setWin(data); setOpenDay(data.open_day); setCloseDay(data.close_day) } else setWin(null)
-  }, [companyId])
-  useEffect(() => { load() }, [load])
-
-  async function save() {
-    setSaving(true)
-    if (win) {
-      await supabase.from('flexi_windows').update({ open_day: openDay, close_day: closeDay }).eq('id', win.id)
-    } else {
-      const opens = new Date(NOW.getFullYear(), NOW.getMonth(), openDay)
-      const closes = new Date(NOW.getFullYear(), NOW.getMonth(), closeDay, 23, 59, 59)
-      await supabase.from('flexi_windows').insert({ company_id: companyId, fy: FY, month: NOW.getMonth() + 1, year: NOW.getFullYear(), open_day: openDay, close_day: closeDay, status: 'OPEN', opens_at: opens.toISOString(), closes_at: closes.toISOString() })
-    }
-    setSaving(false); notify('Window config saved'); load()
-  }
-  async function toggle() {
-    if (!win) return
-    const open = win.status === 'OPEN'
-    await post({ action: 'TOGGLE_WINDOW', window_id: win.id, new_status: open ? 'MANUAL_CLOSED' : 'OPEN' })
-    notify(open ? 'Window closed' : 'Window re-opened'); load()
-  }
-  const isOpen = win?.status === 'OPEN'
+  const open = windowOpenAt(NOW)
+  const day = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
   const row: React.CSSProperties = { display: 'flex', alignItems: 'center', gap: 8, padding: '8px 0', borderBottom: `1px solid ${C.border}` }
-
   return (
     <div style={{ maxWidth: 620 }}>
       <div style={S.card}>
-        <div style={{ fontSize: 12, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Submission window: {NOW.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</div>
-        <div style={row}><span style={{ flex: 1, color: C.muted }}>Current status</span>{win ? <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 99, background: isOpen ? C.greenBg : C.redBg, color: isOpen ? C.green : C.red, fontWeight: 600 }}>{isOpen ? 'Open' : 'Closed'}</span> : <span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 99, background: C.amberBg, color: C.amber, fontWeight: 600 }}>Not created</span>}</div>
-        <div style={row}><span style={{ flex: 1, color: C.muted }}>Window period</span><span>Day {openDay} → Day {closeDay} each month</span></div>
-        <div style={{ margin: '12px 0' }}>
-          <label style={{ ...S.label, marginBottom: 8 }}>Select window on the calendar: {NOW.toLocaleDateString('en-IN', { month: 'long', year: 'numeric' })}</label>
-          <MonthCalendar openDay={openDay} closeDay={closeDay} onChange={(o, c) => { setOpenDay(o); setCloseDay(c) }} />
+        <div style={{ fontSize: 12, fontWeight: 600, color: C.purple, textTransform: 'uppercase', letterSpacing: '.05em', marginBottom: 10 }}>Submission window</div>
+        <div style={row}><span style={{ flex: 1, color: C.muted }}>Every month</span><span>1st → 20th, automatically</span></div>
+        <div style={row}><span style={{ flex: 1, color: C.muted }}>Today</span><span style={{ fontSize: 11, padding: '2px 10px', borderRadius: 99, background: open ? C.greenBg : C.redBg, color: open ? C.green : C.red, fontWeight: 600 }}>{open ? `Open till ${day(closingDay(NOW))}` : `Closed · opens ${day(nextOpening(NOW))}`}</span></div>
+        <div style={{ marginTop: 12, background: C.purpleBg, borderRadius: 10, padding: '9px 12px', fontSize: 11, color: C.purpleDark, lineHeight: 1.6 }}>
+          Employees can upload bills from the 1st to the 20th of every month; from the 21st the uploader stays on their screen but locked. Inside the window a bill is refused only when the employee has no balance left on that component. {NO_INVOICE.join(' & ')} are auto-claimed (no bill needed) and auto-approved.
         </div>
-        <div style={{ display: 'flex', gap: 8 }}>
-          <button style={S.pri} disabled={saving} onClick={save}>{saving ? 'Saving…' : 'Save config'}</button>
-          {win && <button style={{ ...S.sec, color: isOpen ? C.red : C.green, borderColor: isOpen ? TK.criticalTint : TK.positiveTint }} onClick={toggle}>{isOpen ? 'Close window now' : 'Re-open window'}</button>}
-        </div>
-        {win && <div style={{ marginTop: 10, fontSize: 11, color: C.muted }}>Active window: {new Date(win.opens_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short' })} – {new Date(win.closes_at).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}</div>}
-        <div style={{ marginTop: 12, background: C.purpleBg, borderRadius: 10, padding: '9px 12px', fontSize: 11, color: C.purpleDark }}>Employees can submit bills only while the window is <b>Open</b>. {NO_INVOICE.join(' & ')} are auto-claimed (no bill needed) and auto-approved.</div>
       </div>
     </div>
   )
@@ -519,7 +442,6 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
   const [emps, setEmps] = useState<Emp[]>([])
   const [emp, setEmp] = useState<Emp | null>(null)
   const [limits, setLimits] = useState<ComponentLimit[]>([])
-  const [win, setWin] = useState<any>(null)
   const [loading, setLoading] = useState(false)
   const [frames, setFrames] = useState<Frame[]>([blankFrame()])
   const [busy, setBusy] = useState(false)
@@ -541,11 +463,9 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
     setEmp(e); setEmps([]); setQ(''); setLoading(true); setFrames([blankFrame()])
     const ent = await loadEntitlements(e.id)
     setLimits(ent.limits)
-    if (ent.companyId) { const n = new Date(); setWin(await loadWindow(ent.companyId, n.getFullYear(), n.getMonth() + 1)) }
     setLoading(false)
   }
 
-  const isOpen = win?.status === 'OPEN'
   const remainingOf = (code: string) => { const l = limits.find(x => x.code === code); return l ? l.annual_limit - l.approved - l.pending : -1 }
   const options = limits.filter(l => !NO_INVOICE.includes(l.code) && (l.annual_limit - l.approved - l.pending) > 0).map(l => ({ code: l.code, name: l.name, remaining: l.annual_limit - l.approved - l.pending }))
   const setF = (id: string, p: Partial<Frame>) => setFrames(fs => fs.map(f => f.id === id ? { ...f, ...p } : f))
@@ -555,7 +475,6 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
 
   async function submitAll() {
     if (!emp) return
-    if (!isOpen) return notify('The flexi submission window is closed for this month. Open it in the Window tab first.')
     for (const f of frames.filter(x => x.code || x.amount || x.files.length)) {
       if (!f.code) return notify(`Bill ${frames.indexOf(f) + 1}: choose a bill type`)
       if (!f.amount || Number(f.amount) <= 0) return notify(`Bill ${frames.indexOf(f) + 1}: enter an amount`)
@@ -565,8 +484,8 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
     if (!active.length) return notify('Add at least one bill')
     setBusy(true); let ok = 0
     for (const f of active) {
-      const res = await post({ action: 'SUBMIT', window_id: win.id, employee_id: emp.id, company_id: companyId, component_code: f.code, claim_amount: Number(f.amount), bill_date: f.billDate || null, bill_no: f.billNo || null, agency_name: f.vendor || null, vendor_desc: f.vendor || null })
-      if (res.error || !res.claim_id) continue
+      const res = await post({ action: 'SUBMIT', employee_id: emp.id, company_id: companyId, component_code: f.code, claim_amount: Number(f.amount), bill_date: f.billDate || null, bill_no: f.billNo || null, agency_name: f.vendor || null, vendor_desc: f.vendor || null })
+      if (res.error || !res.claim_id) { notify(`${f.code}: ${res.error || 'could not be filed'}`); continue }
       for (const file of f.files) {
         const path = `flexi-claims/${emp.id}/${res.claim_id}/${Date.now()}_${file.name}`
         const { data: up } = await supabase.storage.from('flexi-bills').upload(path, file)
@@ -600,13 +519,12 @@ function SubmitBillTab({ companyId, notify }: { companyId: string; notify: (m: s
         <>
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12, padding: '10px 12px', background: TK.sunken, borderRadius: 10 }}>
             <div><b>{emp.full_name}</b> <span style={{ fontFamily: 'monospace', color: C.muted, fontSize: 12 }}>{emp.emp_code}</span></div>
-            <button onClick={() => { setEmp(null); setLimits([]); setWin(null) }} style={{ ...S.sec, marginLeft: 'auto' }}>Change employee</button>
+            <button onClick={() => { setEmp(null); setLimits([]) }} style={{ ...S.sec, marginLeft: 'auto' }}>Change employee</button>
           </div>
 
           {loading ? <div style={{ color: C.muted, fontSize: 13, padding: 20 }}>Loading entitlements…</div>
-          : win && !isOpen ? <div style={{ background: C.redBg, border: `1px solid #FCA5A5`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: '#991B1B' }}>The submission window is closed this month. Open it in the <b>Window</b> tab before filing bills.</div>
-          : !win ? <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.amber }}>No submission window exists for this month. Create/open one in the <b>Window</b> tab.</div>
-          : options.length === 0 ? <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.amber }}>This employee has no claimable flexi components with limit remaining.</div>
+          : !windowOpenAt(new Date()) ? <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.amber }}>Bills can be filed from the 1st to the 20th of the month. The window opens again on the 1st.</div>
+          : options.length === 0 ? <div style={{ background: C.amberBg, border: `1px solid ${TK.warningTint}`, borderRadius: 10, padding: '10px 14px', fontSize: 12, color: C.amber }}>This employee’s balance is ₹0 on every component that takes a bill, so no bill can be filed.</div>
           : (
             <>
               {frames.map((f, i) => (

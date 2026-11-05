@@ -34,7 +34,7 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/dashboard/bulk-upload/page.tsx': 6,
   'app/dashboard/employees/page.tsx': 1,
   'app/dashboard/ess/page.tsx': 2,
-  'app/dashboard/flexi-claims/page.tsx': 8,
+  'app/dashboard/flexi-claims/page.tsx': 7,
   'app/dashboard/flexi-invoices/page.tsx': 17,
   'app/dashboard/holidays/page.tsx': 1,
   'app/dashboard/layout.tsx': 11,
