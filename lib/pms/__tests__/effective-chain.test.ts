@@ -170,6 +170,34 @@ test('the policy read asks for the chain it points at', () => {
     'the policy is read without the chain it points at')
 })
 
+test('the Config panel shows the chain in force, not the fallback', () => {
+  // This is the panel an administrator opens to CONFIRM the configuration.
+  // Reading approvalChain unconditionally would have it state the preset
+  // while the cycle travels somewhere else — a screen whose only job is to
+  // report the truth, confidently reporting the wrong thing.
+  const TABS = read('components/pms/AdminTabs.tsx')
+  assert.match(TABS, /policy\?\.chainRungs\?\.length\s*\n?\s*\?/,
+    'the Config panel does not check for a composed chain first')
+  assert.match(TABS, /chainLabel\(policy\.chainRungs as Stage\[\], CHAIN_LABEL\)/,
+    'a composed chain is not named from its rungs')
+  assert.match(TABS, /chainName \?\? 'A built chain'/,
+    'a chain with no name renders as nothing in the panel')
+  // The preset path has to survive, since it is what an untouched policy uses.
+  assert.match(TABS, /\(not supported yet\)/,
+    'the unmodelled-preset fallback was dropped')
+})
+
+test('the dashboard reads the chain, in both embed shapes', () => {
+  const PAGE = read('app/dashboard/pms/page.tsx')
+  assert.match(PAGE, /chain_id, pms_chain\(name, rungs\)/,
+    'the policy query does not fetch the chain it points at')
+  assert.match(PAGE, /const row = Array\.isArray\(e\) \? e\[0\] : e/,
+    'only one of the two embed shapes is read')
+  for (const f of ['chainId:', 'chainName:', 'chainRungs:']) {
+    assert.ok(PAGE.includes(f), `the mapped policy drops ${f}`)
+  }
+})
+
 test('no PMS screen reads approval_chain for the chain any more', () => {
   // The whole point of one decision point. Any direct read is a screen that
   // shows the preset to a company on a composed chain.

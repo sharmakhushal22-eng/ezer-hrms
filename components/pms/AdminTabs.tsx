@@ -59,6 +59,7 @@ import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
          ROLES, ROLE_LABEL, ACTIONS, ACTION_LABEL, may, SCOPE_NOTE,
          REPORTING_LINE, type Role } from '@/lib/pms/hierarchy'
 import { DEFAULT_RULES } from '@/lib/pms/cycle'
+import { chainLabel, type Stage } from '@/lib/pms/chain'
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from '@/lib/pms/status'
 import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { csvText, parseCsv } from '@/lib/pms/csv'
@@ -101,6 +102,12 @@ export interface PolicyConfig {
   midPeriodCheckin?: boolean | null
   finalReviewOneToOne?: boolean | null
   approvalChain?: string | null
+  /** 218. The composed chain this policy points at, if any. When chainRungs
+   *  is present it is what runs and approvalChain is only the fallback — so
+   *  the panel must show this one, not that one. */
+  chainId?: string | null
+  chainName?: string | null
+  chainRungs?: string[] | null
   whoCanFinalise?: string | null
   ratingScaleType?: string | null
   selfRatingMandatory?: boolean | null
@@ -412,14 +419,22 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy,
         <div className="divider" />
         <Section>Workflow &amp; rating</Section>
         <div className="grid g4">
+          {/* 218: THE COMPOSED CHAIN IS WHAT RUNS when one is selected, so
+              it is what this shows. Reading approvalChain unconditionally
+              would have this panel — the one an admin opens to confirm the
+              configuration — state the preset while the cycle travels
+              somewhere else. */}
           <Fixed label="Approval chain" value={
-            policy?.approvalChain
-              ? ((CHAIN_LABEL as Record<string, string>)[policy.approvalChain]
-                 // A chain the schema allows but lib/pms/hierarchy does not
-                 // model — SELF_RM1_RM2_HOD_MD — has no label. Show the raw
-                 // value and say so, rather than rendering "undefined".
-                 ?? `${policy.approvalChain} (not supported yet)`)
-              : '—'} />
+            policy?.chainRungs?.length
+              ? `${policy.chainName ?? 'A built chain'}: `
+                + chainLabel(policy.chainRungs as Stage[], CHAIN_LABEL)
+              : policy?.approvalChain
+                ? ((CHAIN_LABEL as Record<string, string>)[policy.approvalChain]
+                   // A chain the schema allows but lib/pms/hierarchy does not
+                   // model — SELF_RM1_RM2_HOD_MD — has no label. Show the raw
+                   // value and say so, rather than rendering "undefined".
+                   ?? `${policy.approvalChain} (not supported yet)`)
+                : '—'} />
           <Fixed label="Who can finalise" value={
             policy?.whoCanFinalise
               ? ((FINALISER_LABEL as Record<string, string>)[policy.whoCanFinalise]

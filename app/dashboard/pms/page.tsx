@@ -119,11 +119,31 @@ interface Coverage {
  * EVERY COLUMN toConfig READS, in one place so the 211 retry can drop one
  * from it rather than restate the list and drift.
  */
+/**
+ * The embedded chain row, whichever shape PostgREST sent it in.
+ *
+ * A to-one embed arrives as an object or as a one-element array depending on
+ * how the relationship is inferred. Reading one shape only is how a composed
+ * chain silently shows as the preset — see effectiveChain, which handles the
+ * same two shapes for the same reason.
+ */
+function chainRowOf(p: Record<string, unknown>):
+    { name?: string; rungs?: string[] } | null {
+  const e = p.pms_chain as
+    { name?: string; rungs?: string[] } | { name?: string; rungs?: string[] }[] | null | undefined
+  const row = Array.isArray(e) ? e[0] : e
+  return row ?? null
+}
+
 const POLICY_SELECT =
   'id, company_id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
   + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
   + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
   + ' final_review_one_to_one, approval_chain, rating_scale_type,'
+  // 218: the composed chain this policy points at, with the chain itself.
+  // Without it the Config panel shows the PRESET to a company running a
+  // composed chain — the configuration screen disagreeing with the cycle.
+  + ' chain_id, pms_chain(name, rungs),'
   + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
   + ' publish_scope, hr_head_final_rating,'
   + ' include_notice_period, include_exited'
@@ -490,6 +510,9 @@ export default function PmsPage() {
           midPeriodCheckin: p.mid_period_checkin as boolean ?? null,
           finalReviewOneToOne: p.final_review_one_to_one as boolean ?? null,
           approvalChain: (p.approval_chain as string) ?? null,
+          chainId: (p.chain_id as string) ?? null,
+          chainName: chainRowOf(p)?.name ?? null,
+          chainRungs: chainRowOf(p)?.rungs ?? null,
           whoCanFinalise: (p.who_can_finalise as string) ?? null,
           ratingScaleType: (p.rating_scale_type as string) ?? null,
           selfRatingMandatory: p.self_rating_mandatory as boolean ?? null,
