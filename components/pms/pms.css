@@ -1152,7 +1152,7 @@
 
 /* Where it will land. A border change alone is easy to miss mid-drag while
  * the pointer is moving, so the row also lifts. */
-.pms .rung.over {
+.pms .rung.rung-over {
   border-color: var(--ez-brand);
   background: var(--ez-brand-tint);
   transform: translateY(-1px);
@@ -1160,21 +1160,29 @@
 
 /* The two ends. Not draggable, not removable, and they have to LOOK that way
  * — a chain that appears to have a detachable publisher is one somebody will
- * try to detach. */
-.pms .rung.fixed {
+ * try to detach.
+ *
+ * NAMED rung-end, NOT `fixed`. `fixed` is a Tailwind utility in this app's
+ * @layer utilities, and a bare utility class name on an element is claimed by
+ * that layer no matter what this file says — `position: fixed` took both ends
+ * out of flow and stacked all three rows on top of each other. It rendered
+ * wrong in the browser while every unit test passed, because a test that
+ * reads source cannot see a collision that only exists once the sheets are
+ * combined. Every modifier here is namespaced so it cannot happen again. */
+.pms .rung.rung-end {
   cursor: default;
   background: var(--ez-sunken);
   border-style: dashed;
   color: var(--ez-muted);
 }
-.pms .rung.fixed:hover { border-color: var(--ez-line); box-shadow: none; }
+.pms .rung.rung-end:hover { border-color: var(--ez-line); box-shadow: none; }
 
-.pms .rung.empty {
+.pms .rung.rung-none {
   cursor: default;
   background: transparent;
   border-style: dashed;
 }
-.pms .rung.empty:hover { box-shadow: none; }
+.pms .rung.rung-none:hover { box-shadow: none; }
 
 .pms .rung-no {
   flex: 0 0 22px;
@@ -1187,11 +1195,11 @@
   font-size: 11px;
   font-weight: 600;
 }
-.pms .rung.fixed .rung-no { background: transparent; }
+.pms .rung.rung-end .rung-no { background: transparent; }
 
 .pms .rung-grip { color: var(--ez-faint); font-size: 13px; letter-spacing: -1px; }
-.pms .rung.fixed .rung-grip,
-.pms .rung.empty .rung-grip { display: none; }
+.pms .rung.rung-end .rung-grip,
+.pms .rung.rung-none .rung-grip { display: none; }
 
 .pms .rung-name {
   flex: 1 1 auto;

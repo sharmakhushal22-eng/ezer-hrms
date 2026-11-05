@@ -319,11 +319,26 @@ test('a rung nobody occupies warns and does not refuse', () => {
 
 test('a partly populated rung says how many it skips for', () => {
   const w = chainWarnings(['RM_L2', 'HOD'], {
-    RM_L2: { have: 205, of: 401 }, HOD: { have: 401, of: 401 },
+    RM_L2: { have: 261, of: 398 }, HOD: { have: 398, of: 398 },
   })
   assert.equal(w.length, 1)
-  assert.ok(w[0].includes('196') && w[0].includes('401'),
+  assert.ok(w[0].includes('137') && w[0].includes('398'),
     `the warning does not say how many: ${w[0]}`)
+})
+
+test('a warning keeps the acronyms in the rung name', () => {
+  // Seen on screen: "3 of 398 employees have no reporting manager (l1)" and
+  // "have no site hr". Lower-casing the whole label to fit it mid-sentence
+  // destroyed every initialism in it. Only the first letter should drop.
+  const w = chainWarnings(['RM_L1', 'SITE_HR'], {
+    RM_L1: { have: 395, of: 398 }, SITE_HR: { have: 0, of: 398 },
+  })
+  assert.ok(w[0].includes('reporting manager (L1)'), w[0])
+  assert.ok(!w[0].includes('(l1)'), `the acronym was lower-cased: ${w[0]}`)
+  assert.ok(w[1].includes('site HR'), w[1])
+  assert.ok(!w[1].includes('site hr'), `the acronym was lower-cased: ${w[1]}`)
+  // And it still reads as mid-sentence, not a capital mid-clause.
+  assert.ok(!w[0].includes('no Reporting'), `not lower-cased at all: ${w[0]}`)
 })
 
 test('a fully populated chain warns about nothing', () => {

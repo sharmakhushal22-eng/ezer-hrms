@@ -167,6 +167,15 @@ export type Coverage = Partial<Record<Stage, { have: number; of: number }>>
  * here is what it will do". Mixing them is how a warning gets dismissed as
  * pedantry or a refusal gets read as advice.
  */
+/**
+ * Mid-sentence, without destroying the acronyms.
+ *
+ * `label.toLowerCase()` produced "no reporting manager (l1)" and "no site hr"
+ * on screen — only the FIRST letter needs to come down, because the rest of
+ * every label is either already lower case or an initialism that must stay up.
+ */
+const midSentence = (s: string) => s.charAt(0).toLowerCase() + s.slice(1)
+
 export function chainWarnings(
   rungs: readonly string[] | null | undefined,
   coverage: Coverage | null | undefined,
@@ -176,13 +185,13 @@ export function chainWarnings(
   for (const r of rungs ?? []) {
     const c = cov[r as Stage]
     if (!c || !c.of) continue
-    const label = RUNG_CHOICES.find(x => x.stage === r)?.label ?? r
+    const label = midSentence(RUNG_CHOICES.find(x => x.stage === r)?.label ?? r)
     if (c.have === 0) {
-      out.push(`No employee has a ${label.toLowerCase()} assigned, so this rung `
+      out.push(`No employee has a ${label} assigned, so this rung `
              + 'will be skipped for everybody until somebody fills it in.')
     } else if (c.have < c.of) {
       const miss = c.of - c.have
-      out.push(`${miss} of ${c.of} employees have no ${label.toLowerCase()}. `
+      out.push(`${miss} of ${c.of} employees have no ${label}. `
              + 'The rung is skipped for them and the chain carries on.')
     }
   }

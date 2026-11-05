@@ -102,6 +102,24 @@ function SaveRow({ busy, error, saved, onSave, label = 'Save changes', disabled 
   )
 }
 
+/**
+ * The same feedback, for an action that has no save button next to it.
+ *
+ * SaveRow pairs a message with the button that caused it, which is right for
+ * a form. It is WRONG for a row action in a table: Retire lives outside the
+ * editor, so a SaveRow inside `{editing && …}` had nowhere to render its
+ * refusal. Clicking Retire on a chain a policy still uses did exactly what it
+ * should — the route refused, naming the policy — and the screen showed
+ * nothing at all. The button appeared to do nothing.
+ *
+ * Rendered only when no editor is open, so the message never appears twice.
+ */
+function RowFeedback({ error, saved }: { error: string | null; saved: string | null }) {
+  if (error) return <Note tone="bad">{error}</Note>
+  if (saved) return <Note tone="good">{saved}</Note>
+  return null
+}
+
 /** Every panel needs the same three pieces of state and the same reset on a
  *  fresh attempt. Written once so a panel cannot show a stale "Saved" next to
  *  a new failure. */
@@ -123,7 +141,18 @@ function useSaver(reload: () => Promise<void>) {
     return true
   }, [reload])
 
-  return { busy, error, saved, run, setError }
+  /**
+   * Forget the last outcome.
+   *
+   * The state outlives the action that produced it, which is right while you
+   * are looking at the thing you just did and wrong the moment you start
+   * something else: a refusal from Retire sat under the editor's Save button
+   * afterwards, reading as a failed save. Call this when opening or closing
+   * an editor.
+   */
+  const reset = useCallback(() => { setError(null); setSaved(null) }, [])
+
+  return { busy, error, saved, run, setError, reset }
 }
 
 // ══ 1. POLICIES ═══════════════════════════════════════════════════════════
@@ -656,6 +685,9 @@ function CataloguePanel({ catalogue, companyId, reload }: {
         )}
       </div>
 
+      {/* Retire and Bring back sit in the table, away from any SaveRow. */}
+      {!editing && <RowFeedback error={error} saved={saved} />}
+
       {editing && (
         <>
           <div className="divider" />
@@ -823,7 +855,7 @@ function RungRow({ rung, idx, count, cover, onMove, onRemove }: {
   const partial = cover && cover.of > 0 && cover.have > 0 && cover.have < cover.of
 
   return (
-    <div className={`rung${over ? ' over' : ''}`}
+    <div className={`rung${over ? ' rung-over' : ''}`}
          draggable
          onDragStart={e => {
            e.dataTransfer.setData('application/x-pms-rung', String(idx))
@@ -873,7 +905,7 @@ function ChainPanel({ chains, policies, coverage, companyId, reload }: {
 }) {
   const [editing, setEditing] = useState<Row | null>(null)
   const [group, setGroup] = useState(false)
-  const { busy, error, saved, run } = useSaver(reload)
+  const { busy, error, saved, run, reset } = useSaver(reload)
 
   const draft = (editing?.rungs as string[] | undefined) ?? []
   const setRungs = (next: string[]) => setEditing(d => d ? { ...d, rungs: next } : d)
@@ -906,7 +938,8 @@ function ChainPanel({ chains, policies, coverage, companyId, reload }: {
       )}
 
       <div className="btnrow">
-        <button className="btn" onClick={() => setEditing({ ...BLANK_CHAIN, rungs: [] })}>
+        <button className="btn"
+                onClick={() => { reset(); setEditing({ ...BLANK_CHAIN, rungs: [] }) }}>
           Build a chain
         </button>
         {chains.length > 0 && (
@@ -915,6 +948,9 @@ function ChainPanel({ chains, policies, coverage, companyId, reload }: {
           </span>
         )}
       </div>
+
+      {/* Retire lives in the table below, with no save button beside it. */}
+      {!editing && <RowFeedback error={error} saved={saved} />}
 
       {editing && (
         <>
@@ -930,7 +966,7 @@ function ChainPanel({ chains, policies, coverage, companyId, reload }: {
             The order an appraisal travels. Drag to reorder, or use the arrows.
           </div>
           <div className="chaintrack">
-            <div className="rung fixed">
+            <div className="rung rung-end">
               <span className="rung-no">·</span>
               <span className="rung-name">
                 The employee rates themselves
@@ -939,7 +975,7 @@ function ChainPanel({ chains, policies, coverage, companyId, reload }: {
             </div>
 
             {!draft.length && (
-              <div className="rung empty">
+              <div className="rung rung-none">
                 <span className="rung-name k">
                   No approvers yet. Add one below — without any, a submission
                   would go straight to publishing.
@@ -953,7 +989,7 @@ function ChainPanel({ chains, policies, coverage, companyId, reload }: {
                        onRemove={() => setRungs(draft.filter(x => x !== r))} />
             ))}
 
-            <div className="rung fixed">
+            <div className="rung rung-end">
               <span className="rung-no">·</span>
               <span className="rung-name">
                 HR settles the final rating and publishes
@@ -1062,13 +1098,13 @@ function ChainPanel({ chains, policies, coverage, companyId, reload }: {
                       <td>
                         <div className="btnrow">
                           <button className="btn ghost"
-                                  onClick={() => setEditing({
+                                  onClick={() => { reset(); setEditing({
                                     ...c,
                                     // The two fixed ends are drawn separately, so
                                     // the editable list is the approvers only.
                                     rungs: ((c.rungs as string[] | null) ?? [])
                                       .filter(r => r !== 'EMPLOYEE' && r !== 'HR'),
-                                  })}>Edit</button>
+                                  }) }}>Edit</button>
                           {/* Retired, never deleted: a policy may point at this
                               row and every appraisal that ran it recorded the
                               shape. The route refuses while it is in use. */}

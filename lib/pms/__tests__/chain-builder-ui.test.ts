@@ -178,13 +178,13 @@ test('an unoccupied rung is labelled on the rung itself', () => {
 
 test('the self rating and HR are drawn but not removable', () => {
   const c = fn('ChainPanel')
-  const fixed = [...c.matchAll(/className="rung fixed"/g)]
+  const fixed = [...c.matchAll(/className="rung rung-end"/g)]
   assert.equal(fixed.length, 2, 'the two fixed ends are not both drawn')
   assert.match(c, /always first/)
   assert.match(c, /always last/)
-  // .rung.fixed must not be draggable or offer a Remove — it is drawn inline
+  // .rung.rung-end must not be draggable or offer a Remove — it is drawn inline
   // rather than through RungRow, which is what makes that true.
-  assert.ok(!/className="rung fixed"[\s\S]{0,400}?draggable/.test(c),
+  assert.ok(!/className="rung rung-end"[\s\S]{0,400}?draggable/.test(c),
     'a fixed end is draggable')
 })
 
@@ -257,6 +257,59 @@ test('the list says what each chain runs as and who uses it', () => {
     'a chain that nothing uses looks the same as one running the company')
 })
 
+test('a row action says what happened, with no save button beside it', () => {
+  // ── CAUGHT BY CLICKING IT, NOT BY READING IT ──────────────────────────
+  //
+  // Retire lives in the table, outside `{editing && …}`, and SaveRow — the
+  // only thing that rendered useSaver's error — lives inside. So clicking
+  // Retire on a chain a policy still uses did exactly the right thing (the
+  // route refused, naming the policy) and the screen showed NOTHING. The
+  // button looked broken rather than refused, which is the worst of both:
+  // the carefully worded refusal existed and nobody could read it.
+  //
+  // Every test in this file passed. It took loading the page and pressing
+  // the button.
+  const c = fn('ChainPanel')
+  assert.match(c, /\{!editing && <RowFeedback error=\{error\} saved=\{saved\} \/>\}/,
+    'a refusal from a row action has nowhere to render')
+  // Only when no editor is open, or the same message appears twice.
+  assert.ok(!/\{<RowFeedback/.test(c), 'the feedback is not gated on the editor')
+
+  // The catalogue has the identical shape and had the identical silence.
+  assert.match(fn('CataloguePanel'),
+    /\{!editing && <RowFeedback error=\{error\} saved=\{saved\} \/>\}/,
+    'Retire in the training catalogue is silent too')
+})
+
+test('RowFeedback actually renders both outcomes, and prefers the failure', () => {
+  // Asserting only that the panels CALL it leaves the component itself
+  // untested — a mutation gutting its body survived, which would restore the
+  // exact silence this was written to end.
+  const r = fn('RowFeedback')
+  assert.match(r, /if \(error\) return <Note tone="bad">\{error\}<\/Note>/,
+    'a refusal is not rendered')
+  assert.match(r, /if \(saved\) return <Note tone="good">\{saved\}<\/Note>/,
+    'a success is not rendered')
+  // Error first: a stale "Saved" beside a fresh failure is the worst reading.
+  assert.ok(r.indexOf('tone="bad"') < r.indexOf('tone="good"'),
+    'a success can mask a failure')
+  assert.match(r, /return null/, 'it renders something when there is no news')
+})
+
+test('opening an editor clears the last action’s message', () => {
+  // The refusal from Retire sat under the editor's Save button afterwards,
+  // reading as a failed save. Seen on screen after the fix above landed.
+  assert.match(EDITOR, /const reset = useCallback\(\(\) => \{ setError\(null\); setSaved\(null\) \}/,
+    'useSaver cannot forget the last outcome')
+  assert.match(EDITOR, /\{ busy, error, saved, run, reset \} = useSaver/,
+    'ChainPanel does not take reset')
+  const c = fn('ChainPanel')
+  assert.match(c, /onClick=\{\(\) => \{ reset\(\); setEditing\(\{ \.\.\.BLANK_CHAIN/,
+    'Build a chain keeps a stale message')
+  assert.match(c, /onClick=\{\(\) => \{ reset\(\); setEditing\(\{\s*\n?\s*\.\.\.c,/,
+    'Edit keeps a stale message')
+})
+
 test('a chain is retired through the route, never deleted here', () => {
   const c = fn('ChainPanel')
   assert.match(c, /pmsAdmin\('chain_set_active',/)
@@ -283,7 +336,10 @@ test('an empty library explains that nothing has changed yet', () => {
  */
 function hasRule(selector: string): boolean {
   const esc = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-  return new RegExp(`${esc}(?![\\w-])\\s*[{,:]`).test(CSS)
+  // `{` or `,` only — NOT `:`. Accepting `:` let `.pms .rung.rung-end:hover`
+  // satisfy a check for `.pms .rung.rung-end`, so the base rule could be
+  // renamed away while its hover variant kept the test green.
+  return new RegExp(`${esc}(?![\\w-])\\s*[{,]`).test(CSS)
 }
 
 test('the track has styles, and none of them are a hex colour', () => {
@@ -291,7 +347,7 @@ test('the track has styles, and none of them are a hex colour', () => {
   // app/ and components/ by count; the rule applies here on its own terms.
   assert.ok(hasRule('.pms .chaintrack'),
     'the chain track has no styles, so it renders as a stack')
-  for (const cls of ['.pms .rung', '.pms .rung.over', '.pms .rung.fixed',
+  for (const cls of ['.pms .rung', '.pms .rung.rung-over', '.pms .rung.rung-end',
                      '.pms .rung-no', '.pms .rung-name', '.pms .rung-grip']) {
     assert.ok(hasRule(cls), `${cls} is unstyled`)
   }
@@ -299,6 +355,54 @@ test('the track has styles, and none of them are a hex colour', () => {
   const hex = block.match(/#[0-9a-fA-F]{3,8}\b/g)
   assert.equal(hex, null, `hardcoded colours in the chain styles: ${hex}`)
   assert.match(block, /var\(--ez-/, 'the track does not use the theme tokens')
+})
+
+test('every chain-builder class name is namespaced', () => {
+  // ── A BUG NO SOURCE-READING TEST COULD SEE ─────────────────────────────
+  //
+  // The two fixed ends were `className="rung fixed"`. This app's root
+  // stylesheet has a Tailwind `@layer utilities` with a bare `.fixed`
+  // setting position: fixed — so both ends left the flow and all three rows
+  // stacked on top of each other. Every test here passed, because the
+  // collision does not exist in any one file: it appears only once the
+  // sheets are combined in a browser. It was found by looking at the screen
+  // and then at getComputedStyle.
+  //
+  // What a test CAN enforce is the rule that makes it impossible: a bare,
+  // generic class name is the utility layer's to claim, so every class this
+  // feature puts in the DOM is prefixed. That is checkable here.
+  const c = fn('ChainPanel') + fn('RungRow')
+  const classes = new Set<string>()
+  // Plain literals...
+  for (const m of c.matchAll(/className="([^"{]+)"/g)) {
+    for (const cls of m[1].trim().split(/\s+/)) classes.add(cls)
+  }
+  // ...AND template literals. A first version scanned only the former, and
+  // `className={`rung${over ? ' over' : ''}`}` went unseen — which is where
+  // a second bare utility name was still hiding after the first was fixed.
+  for (const m of c.matchAll(/className=\{`([^`]+)`\}/g)) {
+    for (const cls of m[1].replace(/\$\{[^}]*\}/g, ' ').trim().split(/\s+/)) {
+      if (cls) classes.add(cls)
+    }
+    // The strings inside the ${...} are class names too.
+    for (const lit of m[1].matchAll(/'([^']*)'/g)) {
+      for (const cls of lit[1].trim().split(/\s+/)) if (cls) classes.add(cls)
+    }
+  }
+  assert.ok(classes.size > 3, `too few class names found (${classes.size}); the scan is broken`)
+  // Names this module already owns and shares across panels.
+  const SHARED = new Set(['card', 'sub', 'btn', 'ghost', 'btnrow', 'wrap', 'k',
+                          'divider', 'tblwrap', 'pill', 'p-green', 'p-grey',
+                          'p-amber', 'chk', 'fld'])
+  for (const cls of classes) {
+    if (SHARED.has(cls)) continue
+    assert.ok(/^(rung|chaintrack)/.test(cls),
+      `"${cls}" is a bare class name the utility layer can claim — `
+      + 'prefix it (rung-…) or add it to the shared list deliberately')
+  }
+  // And the one that actually bit: never again, under any spelling.
+  assert.ok(!classes.has('fixed'),
+    'the utility layer sets position: fixed on a bare "fixed" class')
 })
 
 test('the track survives a phone', () => {
