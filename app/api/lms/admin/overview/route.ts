@@ -16,11 +16,17 @@ export async function GET(req: NextRequest) {
   const { actor, error } = await lmsAdmin(req)
   if (error) return error
   try {
+    // ?lite=1: who this person is here, without the figures. The app asks this on every start to
+    // decide whether to show the Studio at all; the Studio asks for the figures when it opens.
+    const lite = req.nextUrl.searchParams.get('lite') === '1'
     const companies = await readCompanies(actor, req.nextUrl.searchParams.get('company'))
-    const { data: names } = await sb.from('companies').select('id, company_name, company_code').in('id', actor.companies ?? await readCompanies(actor))
+    const [{ data: names }, figures] = await Promise.all([
+      sb.from('companies').select('id, company_name, company_code').in('id', actor.companies ?? await readCompanies(actor)),
+      lite ? Promise.resolve(null) : overview(actor, companies),
+    ])
     return NextResponse.json({
       caps: actor.caps, branch_only: !!actor.locationId, me: actor.employeeId, companies: names || [],
-      overview: shape(await overview(actor, companies), actor.caps.reports),
+      overview: figures ? shape(figures, actor.caps.reports) : null,
     })
   } catch (e) { return errorResponse(e) }
 }

@@ -36,9 +36,10 @@ async function branchOnly(g: Grant): Promise<boolean> {
 /** The signed-in admin, or the response that refuses them. `need` may be one capability or
  *  several, any of which will do. */
 export async function lmsAdmin(req: NextRequest, need?: LmsCap | LmsCap[]): Promise<{ actor: LmsActor; error: null } | { actor: null; error: NextResponse }> {
-  const auth = await requireDashboardUser(req)
+  // Both read the same token, so side by side they cost one wait rather than two. Every
+  // admin call starts here, and a builder edit makes two of them.
+  const [auth, grant] = await Promise.all([requireDashboardUser(req), grantForRequest(req)])
   if (auth.error) return { actor: null, error: auth.error }
-  const grant = await grantForRequest(req)
   const caps = lmsCaps(grant)
   const list = need === undefined ? null : Array.isArray(need) ? need : [need]
   const allowed = list ? list.some(c => caps[c]) : hasAnyLmsCap(caps)

@@ -69,7 +69,7 @@ export default function BuilderDetails({ b }: { b: BuilderApi }) {
           <Field label="Summary" hint="One or two lines shown on the course card.">
             <EditText multiline rows={2} value={c.summary} disabled={off} onSave={v => b.patchCourse({ summary: v || null })} />
           </Field>
-          <Field label="Description" hint="What people will learn and why it matters.">
+          <Field label="Description" hint={'What people will learn and why it matters. Lines that start with "- " become the "What you\'ll learn" checklist on the course page.'}>
             <EditText multiline rows={5} value={c.description} disabled={off} onSave={v => b.patchCourse({ description: v || null })} />
           </Field>
           <div style={grid(190)}>

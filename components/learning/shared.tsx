@@ -8,6 +8,13 @@ import type { CSSProperties, ReactNode } from 'react'
 import { C, F, W, S, R, E, tone, numeric, Badge, Button, Card, IconAlert, IconLearning, IconLetters, type IconProps, type Tone } from '@/lib/ui'
 import { daysUntil } from '@/lib/lms/core'
 import { LmsApiError } from '@/lib/lms/client'
+import { GBook, GCube, GDoc, GHeadphones, GLink, GLive, GPlay, GPresent, GTarget } from './glyphs'
+// Every Learn screen imports this module, so the stylesheet arrives wherever they are hosted:
+// the standalone app, the ESS portal and the candidate page.
+import './learn.css'
+// Motion: the moving layer on top of it, and the mouse light and lean on cards (motion/pointer.ts).
+import './motion.css'
+import './motion/pointer'
 
 // ── Shapes the API sends ────────────────────────────────────────────────────
 export interface CourseCardData {
@@ -57,6 +64,18 @@ export interface OpenedLesson {
   lesson_id: string; url: string | null; poster: string | null; duration_s: number | null; mime: string | null; file_name: string | null
   body: string | null; external_url: string | null; resources: { id: string; title: string; url: string | null; external: boolean }[]
   position_s: number; watched_ranges: [number, number][]; dwell_left_s?: number
+  /** A SCORM lesson: the package's signed address and how the last run went. */
+  scorm?: { url: string; version: string; title: string; label: string; score_pct: number | null } | null
+  /** A live-session lesson: the course's webinars, and whether this learner has earned it. */
+  live?: { sessions: LiveSession[]; earned: boolean; recording_pct: number } | null
+}
+/** A live session (webinar) as the learner sees it (lib/lms/live.ts, forLearner). */
+export interface LiveSession {
+  id: string; title: string; description: string | null; host_name: string | null; starts_at: string; ends_at: string; duration_min: number
+  location: string | null; status: string; phase: 'cancelled' | 'upcoming' | 'joinable' | 'live' | 'ended'; course_id: string | null; course_title: string | null
+  cancel_reason: string | null; has_link: boolean; capacity: number | null; seats_left: number | null; has_recording: boolean
+  me: { status: string; registered: boolean; invited: boolean; attended: boolean; recording_done: boolean; joined_at: string | null; recording_pct: number; recording_position_s: number } | null
+  can_join: boolean; can_check_in: boolean; open: boolean
 }
 export interface QuizPaper {
   attempt_id: string; attempt_no: number; title: string; instructions: string | null; pass_pct: number; seconds_left: number | null
@@ -114,6 +133,7 @@ export const STATUS: Record<string, { label: string; t: Tone }> = {
 
 export const KIND_WORD: Record<string, string> = {
   VIDEO: 'Video', AUDIO: 'Audio', DOCUMENT: 'Document', SLIDES: 'Slides', ARTICLE: 'Reading', LINK: 'Link', ASSESSMENT: 'Assessment',
+  SCORM: 'Interactive (SCORM)', LIVE: 'Live session',
 }
 
 /** API messages are written for people already, so they are shown as they are. */
@@ -283,6 +303,112 @@ export function IconStar({ size = 14, filled }: { size?: number; filled?: boolea
 export function KindIcon({ kind, size = 16 }: { kind: string; size?: number }) {
   const Icon = { VIDEO: IconPlay, AUDIO: IconAudio, DOCUMENT: IconLetters, SLIDES: IconSlides, ARTICLE: IconLetters, LINK: IconExternal, ASSESSMENT: IconQuiz }[kind] || IconLetters
   return <Icon size={size} />
+}
+
+// ── The redesign's pieces (classes in learn.css) ────────────────────────────
+
+/** A stable 1–8 from any string, so a course keeps its colour everywhere it appears. */
+export function hueOf(key?: string | null): number {
+  let h = 0
+  for (const ch of String(key || 'ezer')) h = (h * 31 + ch.charCodeAt(0)) >>> 0
+  return (h % 8) + 1
+}
+
+const KIND_GLYPH: Record<string, (p: { size?: number }) => ReactNode> = {
+  VIDEO: GPlay, AUDIO: GHeadphones, DOCUMENT: GDoc, SLIDES: GPresent, ARTICLE: GBook, LINK: GLink, ASSESSMENT: GTarget,
+  SCORM: GCube, LIVE: GLive,
+}
+export function KindGlyph({ kind, size = 16 }: { kind: string; size?: number }) {
+  const I = KIND_GLYPH[kind] || GDoc
+  return <>{I({ size })}</>
+}
+
+/** The course's picture; without one, artwork in the course's own colour so no card is blank. */
+export function CourseArt({ src, id, title, kind, word = true, style, className, children }: {
+  src?: string | null; id?: string | null; title?: string | null; kind?: string; word?: boolean
+  style?: CSSProperties; className?: string; children?: ReactNode
+}) {
+  if (src) {
+    return (
+      <div className={`lx-art ${className || ''}`} style={style}>
+        {/* eslint-disable-next-line @next/next/no-img-element */}
+        <img src={src} alt="" loading="lazy" />
+        {children}
+      </div>
+    )
+  }
+  return (
+    <div className={`lx-art ${className || ''}`} data-gen="1" data-h={hueOf(id || title)} style={style}>
+      <div className="lx-art-glyph">
+        <span>{kind ? <KindGlyph kind={kind} size={22} /> : <IconLearning size={22} />}</span>
+        {word && title && <div className="lx-art-word lx-clamp2">{title}</div>}
+      </div>
+      {children}
+    </div>
+  )
+}
+
+export function Bar({ pct, label }: { pct: number; label?: string }) {
+  const v = Math.max(0, Math.min(100, Math.round(Number(pct) || 0)))
+  return (
+    <div className="lx-bar" data-done={v >= 100 ? '1' : '0'} role="progressbar" aria-valuenow={v} aria-valuemin={0} aria-valuemax={100} aria-label={label || 'Progress'}>
+      <i style={{ width: `${v}%` }} />
+    </div>
+  )
+}
+
+/** A progress ring with the number inside. */
+export function Ring({ pct, size = 56, stroke = 6, track = 'var(--ez-sunken)', color, label, text }: {
+  pct: number; size?: number; stroke?: number; track?: string; color?: string; label?: string; text?: ReactNode
+}) {
+  const v = Math.max(0, Math.min(100, Number(pct) || 0))
+  const r = (size - stroke) / 2, c = 2 * Math.PI * r
+  const fill = color || (v >= 100 ? 'var(--ez-positive)' : 'var(--ez-brand)')
+  return (
+    <span className="lx-ring" role="img" aria-label={label || `${Math.round(v)}% complete`} style={{ width: size, height: size }}>
+      <svg width={size} height={size}>
+        <circle cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} style={{ stroke: track }} />
+        <circle className="lx-ring-fill" cx={size / 2} cy={size / 2} r={r} strokeWidth={stroke} strokeDasharray={c} strokeDashoffset={c - (v / 100) * c} style={{ stroke: fill, ['--lx-c' as string]: c }} />
+      </svg>
+      <b style={{ fontSize: Math.max(11, size * 0.26) }}>{text ?? `${Math.round(v)}%`}</b>
+    </span>
+  )
+}
+
+export function Skel({ h = 16, w = '100%', r = 12, style }: { h?: number | string; w?: number | string; r?: number; style?: CSSProperties }) {
+  return <div className="lx-skel" aria-hidden style={{ height: h, width: w, borderRadius: r, ...style }} />
+}
+
+export function EmptyState({ title, children, action, icon }: { title: string; children?: ReactNode; action?: ReactNode; icon?: ReactNode }) {
+  return (
+    <div className="lx-empty lx-in">
+      <div className="lx-empty-art">{icon || <IconLearning size={34} />}</div>
+      <h3>{title}</h3>
+      {children && <p>{children}</p>}
+      {action && <div style={{ marginTop: 8 }}>{action}</div>}
+    </div>
+  )
+}
+
+export function Oops({ message, onRetry }: { message: string; onRetry?: () => void }) {
+  return (
+    <div className="lx-problem" role="alert">
+      <IconAlert size={18} />
+      <span style={{ flex: 1, minWidth: 180 }}>{message}</span>
+      {onRetry && <button className="lx-btn lx-btn--sm" onClick={onRetry}>Try again</button>}
+    </div>
+  )
+}
+
+/** Due words as a tag. */
+export function DueTag({ dueAt, overdue, status }: { dueAt: string | null | undefined; overdue?: boolean; status?: string }) {
+  if (status && ['COMPLETED', 'EXPIRED', 'WAIVED'].includes(status)) return null
+  // Out of attempts is its own state, and the server does not count it as overdue.
+  if (status === 'FAILED') return <span className="lx-tag lx-tag--critical">{STATUS.FAILED.label}</span>
+  const d = dueWords(dueAt)
+  if (!d) return null
+  const t = overdue ? 'critical' : d.t === 'neutral' ? '' : d.t
+  return <span className={`lx-tag ${t ? `lx-tag--${t}` : ''}`}>{d.text}</span>
 }
 
 export function Stars({ value, size = 14 }: { value: number; size?: number }) {

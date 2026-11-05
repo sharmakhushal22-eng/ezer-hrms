@@ -1,0 +1,103 @@
+/* components/learning/live.css — live sessions (webinars) and SCORM packages in EZER Learn.
+   Same rules as learn.css: scoped under .ezl, colour from var(--ez-*) / var(--lx-*) tokens,
+   stacking from var(--ez-z-*). Imported by LiveCard.tsx and PlayerScorm.tsx. */
+
+/* ── A session card ─────────────────────────────────────────────────────── */
+.ezl .lx-lv{position:relative;display:grid;grid-template-columns:auto 1fr;gap:16px;padding:18px;border-radius:var(--lx-r);
+  background:var(--ez-surface);border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-flat);
+  transition:border-color .2s ease,box-shadow .25s var(--lx-ease),transform .25s var(--lx-ease)}
+.ezl .lx-lv:hover{border-color:var(--ez-line-strong);box-shadow:var(--ez-shadow-raised)}
+.ezl .lx-lv[data-phase="live"],.ezl .lx-lv[data-phase="joinable"]{border-color:color-mix(in srgb,var(--ez-critical) 45%,var(--ez-line))}
+.ezl .lx-lv[data-phase="cancelled"]{opacity:.72}
+.ezl .lx-lv-date{width:64px;border-radius:14px;overflow:hidden;text-align:center;align-self:start;
+  background:var(--ez-sunken);border:1px solid var(--ez-line)}
+.ezl .lx-lv-date b{display:block;padding:4px 0;font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--ez-on-accent);
+  background:linear-gradient(135deg,var(--lx-hero-b),var(--lx-hero-c))}
+.ezl .lx-lv-date span{display:block;padding:6px 0 2px;font-size:24px;font-weight:750;line-height:1;font-variant-numeric:tabular-nums}
+.ezl .lx-lv-date i{display:block;padding:0 0 7px;font-style:normal;font-size:11.5px;color:var(--ez-muted)}
+.ezl .lx-lv-body{min-width:0;display:grid;gap:8px}
+.ezl .lx-lv-title{font-size:16px;font-weight:700;line-height:1.35;color:var(--ez-ink)}
+.ezl .lx-lv-meta{display:flex;flex-wrap:wrap;gap:6px 14px;font-size:13px;color:var(--ez-muted)}
+.ezl .lx-lv-meta span{display:inline-flex;align-items:center;gap:5px}
+.ezl .lx-lv-desc{font-size:13.5px;line-height:1.6;color:var(--ez-ink-soft);white-space:pre-wrap}
+.ezl .lx-lv-acts{display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-top:2px}
+.ezl .lx-lv-code{display:flex;gap:6px;align-items:center}
+.ezl .lx-lv-code input{width:120px;height:34px;border-radius:9px;border:1px solid var(--ez-line-strong);background:var(--ez-surface);color:var(--ez-ink);
+  font:700 14px var(--lx-f-ui);letter-spacing:.14em;text-transform:uppercase;padding:0 10px}
+.ezl .lx-lv-code input:focus{outline:none;border-color:var(--ez-brand);box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 16%,transparent)}
+.ezl .lx-lv-err{font-size:12.5px;color:var(--ez-critical)}
+.ezl .lx-lv-count{font-variant-numeric:tabular-nums;font-weight:700;color:var(--ez-ink)}
+.ezl .lx-lv-bar{height:6px;border-radius:99px;background:var(--ez-sunken);overflow:hidden;max-width:220px}
+.ezl .lx-lv-bar i{display:block;height:100%;border-radius:inherit;background:linear-gradient(90deg,var(--lx-hero-b),var(--lx-hero-c))}
+
+/* "Live now": a red dot that breathes. Still for anyone who asks for less motion. */
+.ezl .lx-live-dot{position:relative;display:inline-block;width:8px;height:8px;border-radius:50%;background:var(--ez-critical)}
+.ezl .lx-live-dot::after{content:"";position:absolute;inset:-4px;border-radius:50%;border:2px solid var(--ez-critical);opacity:0;animation:lx-live-ping 1.6s ease-out infinite}
+@keyframes lx-live-ping{0%{transform:scale(.5);opacity:.8}100%{transform:scale(1.6);opacity:0}}
+
+/* The next session, large, at the top of the page. */
+.ezl .lx-lv-next{position:relative;overflow:hidden;border-radius:22px;padding:26px;color:var(--lx-on-stage);
+  background:radial-gradient(120% 140% at 0% 0%,var(--lx-hero-b),var(--lx-hero-a) 60%);box-shadow:var(--ez-shadow-overlay);isolation:isolate}
+/* The glow is positioned and painted first; the content, positioned too, paints over it. */
+.ezl .lx-lv-next>*{position:relative}
+.ezl .lx-lv-next::before{content:"";position:absolute;width:420px;height:420px;right:-120px;top:-180px;border-radius:50%;pointer-events:none;
+  background:radial-gradient(closest-side,color-mix(in srgb,var(--lx-hero-c) 55%,transparent),transparent);animation:lx-lv-drift 14s ease-in-out infinite alternate}
+@keyframes lx-lv-drift{to{transform:translate(-60px,50px) scale(1.15)}}
+.ezl .lx-lv-next h2{margin:6px 0 8px;font:600 clamp(22px,3vw,30px)/1.2 var(--lx-f-display)}
+.ezl .lx-lv-next p{margin:0;color:var(--lx-on-stage-soft);line-height:1.6;max-width:640px}
+.ezl .lx-lv-kicker{display:inline-flex;align-items:center;gap:8px;font-size:12px;font-weight:750;letter-spacing:.1em;text-transform:uppercase;color:var(--lx-on-stage-soft)}
+.ezl .lx-lv-clock{display:flex;gap:10px;margin:18px 0}
+.ezl .lx-lv-clock div{min-width:66px;padding:10px 8px;border-radius:14px;text-align:center;background:var(--lx-on-stage-faint);backdrop-filter:blur(6px)}
+.ezl .lx-lv-clock b{display:block;font-size:26px;font-weight:750;font-variant-numeric:tabular-nums;line-height:1}
+.ezl .lx-lv-clock span{font-size:11px;letter-spacing:.08em;text-transform:uppercase;color:var(--lx-on-stage-soft)}
+.ezl .lx-lv-next .lx-lv-acts .lx-btn:not(.lx-btn--primary){background:var(--lx-on-stage-faint);border-color:transparent;color:var(--lx-on-stage)}
+
+.ezl .lx-lv-list{display:grid;gap:12px}
+.ezl .lx-lv-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(min(100%,420px),1fr));gap:12px}
+
+/* ── Studio: the register ───────────────────────────────────────────────── */
+.ezl .lx-lv-reg{width:100%;border-collapse:collapse;font-size:13.5px}
+.ezl .lx-lv-reg th{text-align:left;font-size:11.5px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;color:var(--ez-muted);padding:10px 12px;background:var(--ez-sunken);border-bottom:1px solid var(--ez-line)}
+.ezl .lx-lv-reg td{padding:10px 12px;border-bottom:1px solid var(--ez-line);vertical-align:middle}
+.ezl .lx-lv-reg tr:last-child td{border-bottom:0}
+.ezl .lx-lv-codebox{display:inline-flex;align-items:center;gap:10px;padding:10px 16px;border-radius:14px;border:1px dashed var(--ez-brand-edge);background:var(--ez-brand-tint);
+  font:750 22px var(--lx-f-ui);letter-spacing:.2em;color:var(--ez-brand)}
+.ezl .lx-lv-stats{display:grid;grid-template-columns:repeat(auto-fit,minmax(130px,1fr));gap:10px}
+.ezl .lx-lv-stat{padding:14px;border-radius:14px;background:var(--ez-sunken);border:1px solid var(--ez-line)}
+.ezl .lx-lv-stat b{display:block;font-size:22px;font-weight:750;font-variant-numeric:tabular-nums}
+.ezl .lx-lv-stat span{font-size:12.5px;color:var(--ez-muted)}
+.ezl .lx-lv-form{display:grid;gap:14px}
+.ezl .lx-lv-form label{display:grid;gap:6px;font-size:12.5px;font-weight:650;color:var(--ez-ink-soft)}
+.ezl .lx-lv-form textarea{min-height:90px;border-radius:12px;border:1px solid var(--ez-line-strong);background:var(--ez-surface);color:var(--ez-ink);font:inherit;font-size:14px;padding:10px 14px;resize:vertical}
+.ezl .lx-lv-form .lx-input{height:40px;font-size:14px}
+.ezl .lx-lv-row{display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:12px}
+.ezl .lx-lv-check{display:flex !important;grid-template-columns:none;align-items:center;gap:8px;font-weight:550 !important}
+
+/* ── SCORM: the package's frame ─────────────────────────────────────────── */
+.ezl .lx-sc{display:grid;grid-template-rows:auto 1fr;height:min(78vh,860px);min-height:460px;background:var(--lx-stage)}
+.ezl .lx-sc-bar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 14px;color:var(--lx-on-stage);border-bottom:1px solid var(--lx-on-stage-faint)}
+.ezl .lx-sc-bar b{font-size:13.5px;font-weight:650;min-width:0;flex:1 1 200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ezl .lx-sc-bar .lx-btn{background:var(--lx-on-stage-faint);border-color:transparent;color:var(--lx-on-stage)}
+.ezl .lx-sc-frame{position:relative;min-height:0;background:var(--ez-surface)}
+.ezl .lx-sc-frame iframe{position:absolute;inset:0;width:100%;height:100%;border:0;display:block;background:var(--ez-surface)}
+.ezl .lx-sc-wait{position:absolute;inset:0;display:grid;place-items:center;align-content:center;gap:12px;color:var(--ez-muted);font-size:13.5px;background:var(--ez-surface)}
+.ezl .lx-sc:fullscreen{height:100vh;max-height:none}
+.ezl .lx-sc-saved{font-size:12px;color:var(--lx-on-stage-soft);white-space:nowrap}
+
+@media (max-width:760px){
+  .ezl .lx-lv{grid-template-columns:1fr;padding:16px}
+  .ezl .lx-lv-date{display:flex;width:auto;align-items:stretch}
+  .ezl .lx-lv-date b{padding:6px 10px;display:flex;align-items:center}
+  .ezl .lx-lv-date span{padding:6px 10px;font-size:18px}
+  .ezl .lx-lv-date i{padding:6px 10px 6px 0;display:flex;align-items:center}
+  .ezl .lx-lv-next{padding:20px}
+  .ezl .lx-lv-clock div{min-width:56px}
+  .ezl .lx-sc{height:72vh;min-height:420px}
+}
+@media (prefers-reduced-motion: reduce){
+  .ezl .lx-live-dot::after,.ezl .lx-lv-next::before{animation:none}
+}
+
+/* The player's stage for a package: edge to edge, like a document. */
+.lx-stage[data-kind="scorm"]{background:var(--lx-stage);padding:0}
+.lx-stage[data-kind="scorm"] .lx-stage-inner{max-width:none}

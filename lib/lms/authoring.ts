@@ -7,8 +7,9 @@ import { publishProblems, questionProblem, type PublishLesson, type PublishQuiz,
 import { audit, BUCKET, fileUrls, LmsError, must, notFound, sb, settingsFor, tusEndpoint } from './server'
 import { inScope, type LmsActor } from './access'
 import { notifyPerson } from './notify'
+import { indexPackage } from './scorm'
 
-const KINDS = ['VIDEO', 'AUDIO', 'DOCUMENT', 'SLIDES', 'ARTICLE', 'LINK', 'ASSESSMENT']
+const KINDS = ['VIDEO', 'AUDIO', 'DOCUMENT', 'SLIDES', 'ARTICLE', 'LINK', 'ASSESSMENT', 'SCORM', 'LIVE']
 const pick = <T extends object>(o: any, keys: (keyof T & string)[]) =>
   Object.fromEntries(keys.filter(k => o?.[k] !== undefined).map(k => [k, o[k]])) as Partial<T>
 
@@ -54,24 +55,39 @@ export async function listCourses(companies: string[]) {
   ])
   const cat = new Map(((cats as any).data || []).map((c: any) => [c.id, c.name]))
   const counts = ((enrols as any).data || {}) as Record<string, { enrolled: number; completed: number; overdue: number }>
+  // How many lessons each version holds, for the Studio's course cards: the working draft
+  // if there is one, else what is live.
+  const versionIds = ((versions as any).data || []).map((v: any) => v.id)
+  const { data: lessonRows } = versionIds.length ? await sb.from('lms_lessons').select('version_id').in('version_id', versionIds).limit(20000) : { data: [] as any[] }
+  const perVersion = new Map<string, number>()
+  for (const l of (lessonRows || []) as any[]) perVersion.set(l.version_id, (perVersion.get(l.version_id) || 0) + 1)
   return rows.map(r => {
     const vs = ((versions as any).data || []).filter((v: any) => v.course_id === r.id)
     const stats = counts[r.id]
+    const draft = vs.find((v: any) => v.status !== 'PUBLISHED') || null, live = vs.find((v: any) => v.status === 'PUBLISHED') || null
     return {
       ...r, category: cat.get(r.category_id) || null, thumbnail: thumbs.get(r.thumbnail_asset_id) || null,
-      draft: vs.find((v: any) => v.status !== 'PUBLISHED') || null, live: vs.find((v: any) => v.status === 'PUBLISHED') || null,
+      draft, live, lessons: perVersion.get((draft || live)?.id) || 0,
       enrolled: stats?.enrolled || 0, completed: stats?.completed || 0, overdue: stats?.overdue || 0,
     }
   })
 }
 
+/** Signed thumbnail links are good for an hour; they are reused for most of it, so a catalogue
+ *  page does not sign the same pictures on every visit. A thumbnail file never changes in place:
+ *  a new picture is a new asset. */
+const THUMB_REUSE_MS = 45 * 60_000
+const thumbCache = new Map<string, { at: number; url: string }>()
+
 export async function thumbnails(assetIds: (string | null)[]): Promise<Map<string, string>> {
   const ids = [...new Set(assetIds.filter(Boolean))] as string[]
   const out = new Map<string, string>()
-  if (!ids.length) return out
-  const { data } = await sb.from('lms_assets').select('id, storage_path').in('id', ids)
+  const now = Date.now()
+  const missing = ids.filter(id => { const c = thumbCache.get(id); if (c && now - c.at < THUMB_REUSE_MS) { out.set(id, c.url); return false } return true })
+  if (!missing.length) return out
+  const { data } = await sb.from('lms_assets').select('id, storage_path').in('id', missing)
   const urls = await fileUrls((data || []).map((a: any) => a.storage_path))
-  for (const a of (data || []) as any[]) { const u = urls.get(a.storage_path); if (u) out.set(a.id, u) }
+  for (const a of (data || []) as any[]) { const u = urls.get(a.storage_path); if (u) { out.set(a.id, u); thumbCache.set(a.id, { at: now, url: u }) } }
   return out
 }
 
@@ -96,8 +112,12 @@ export async function createCourse(a: LmsActor, company: string, body: any) {
 
 /** Everything the builder shows, with quiz keys: this is for authors, behind viewContent. */
 export async function courseDetail(a: LmsActor, id: string, versionId?: string | null) {
-  const course = await courseOf(a, id)
-  const versions = must(await sb.from('lms_course_versions').select('*').eq('course_id', id).order('version_no', { ascending: false })) as any[]
+  // courseOf refuses a course outside this person's scope, which drops the versions unread.
+  const [course, versionRows] = await Promise.all([
+    courseOf(a, id),
+    sb.from('lms_course_versions').select('*').eq('course_id', id).order('version_no', { ascending: false }),
+  ])
+  const versions = must(versionRows) as any[]
   const working = versions.find(v => v.id === versionId) || versions.find(v => v.status === 'DRAFT' || v.status === 'IN_REVIEW') || versions[0]
   const [modules, lessons, quizzes, audience, prereqs, settings] = await Promise.all([
     sb.from('lms_modules').select('*').eq('version_id', working.id).order('position'),
@@ -116,11 +136,13 @@ export async function courseDetail(a: LmsActor, id: string, versionId?: string |
     lessonIds.length ? sb.from('lms_lesson_resources').select('*').in('lesson_id', lessonIds).order('position') : { data: [] },
   ])
   const assetIds = [...new Set([...lessonRows.map(l => l.asset_id), ...((resources as any).data || []).map((r: any) => r.asset_id), course.thumbnail_asset_id].filter(Boolean))]
-  const { data: assets } = assetIds.length
-    ? await sb.from('lms_assets').select('id, kind, original_name, mime_type, size_bytes, duration_s, status, poster_path').in('id', assetIds)
-    : { data: [] as any[] }
-  const assetById = new Map((assets || []).map((x: any) => [x.id, x]))
-  const thumbs = await thumbnails([course.thumbnail_asset_id])
+  const [assets, thumbs] = await Promise.all([
+    assetIds.length
+      ? sb.from('lms_assets').select('id, kind, original_name, mime_type, size_bytes, duration_s, status, poster_path').in('id', assetIds)
+      : { data: [] as any[] },
+    thumbnails([course.thumbnail_asset_id]),
+  ])
+  const assetById = new Map(((assets as any).data || []).map((x: any) => [x.id, x]))
   const tree = {
     version: working, modules: must(modules) as any[],
     lessons: lessonRows.map(l => ({ ...l, asset: assetById.get(l.asset_id) || null, resources: ((resources as any).data || []).filter((r: any) => r.lesson_id === l.id).map((r: any) => ({ ...r, asset: assetById.get(r.asset_id) || null })) })),
@@ -220,7 +242,7 @@ export async function courseAction(a: LmsActor, id: string, action: string, body
       const note = String(body?.note || '').trim()
       if (!note) throw new LmsError('Say what needs to change.')
       must(await sb.from('lms_course_versions').update({ status: 'DRAFT', review_note: note, reviewed_by_name: a.label, reviewed_at: new Date().toISOString() }).eq('id', v.id).select('id'))
-      if (v.submitted_by_id) await notifyPerson(v.submitted_by_id, 'LMS_COMPLETED', 'Course sent back', `${c.title}: ${note}`, '/dashboard/learning').catch(() => {})
+      if (v.submitted_by_id) await notifyPerson(v.submitted_by_id, 'LMS_COMPLETED', 'Course sent back', `${c.title}: ${note}`, '/learning/studio').catch(() => {})
       await log('COURSE_SENT_BACK', { version: v.version_no, note })
       return { ok: true }
     }
@@ -369,10 +391,10 @@ export async function builderOp(a: LmsActor, op: string, b: any): Promise<any> {
     case 'lesson.create': {
       const { m, v } = await viaModule(b.module_id)
       if (!KINDS.includes(b.kind)) throw new LmsError('Unknown lesson type.')
-      const s = await settingsFor(v.company_id)
+      const [s, position] = await Promise.all([settingsFor(v.company_id), nextPosition('lms_lessons', 'module_id', m.id)])
       const lesson = must(await sb.from('lms_lessons').insert({
         company_id: v.company_id, version_id: v.id, module_id: m.id, kind: b.kind, title: String(b.title || 'New lesson'),
-        media_pct: s.default_media_pct, position: await nextPosition('lms_lessons', 'module_id', m.id),
+        media_pct: s.default_media_pct, position,
         ...pick<any>(b, LESSON_FIELDS.filter(k => k !== 'title') as any),
       }).select('*').single()) as any
       if (b.kind === 'ASSESSMENT') return builderOp(a, 'quiz.attach', { lesson_id: lesson.id, title: lesson.title })
@@ -471,8 +493,11 @@ export async function builderOp(a: LmsActor, op: string, b: any): Promise<any> {
 const LIMITS: Record<string, { mimes: RegExp; maxBytes: number }> = {
   VIDEO:    { mimes: /^video\/mp4$/, maxBytes: 2 * 1024 ** 3 },
   AUDIO:    { mimes: /^audio\/(mpeg|mp4|wav|x-wav|webm)$/, maxBytes: 300 * 1024 ** 2 },
-  DOCUMENT: { mimes: /^(application\/pdf|application\/vnd\.|application\/msword|application\/zip|text\/(csv|plain))/, maxBytes: 100 * 1024 ** 2 },
+  // text/vtt: a captions file attached to a video lesson; the player shows it as subtitles.
+  DOCUMENT: { mimes: /^(application\/pdf|application\/vnd\.|application\/msword|application\/zip|text\/(csv|plain|vtt))/, maxBytes: 100 * 1024 ** 2 },
   IMAGE:    { mimes: /^image\/(jpeg|png|webp)$/, maxBytes: 5 * 1024 ** 2 },
+  // A SCORM package: one zip, read in place by the player (lib/lms/scorm.ts).
+  SCORM:    { mimes: /^application\/(zip|x-zip-compressed)$/, maxBytes: 1024 ** 3 },
 }
 const safeName = (s: string) => s.normalize('NFKD').replace(/[^\w.\-]+/g, '_').replace(/_+/g, '_').slice(-80) || 'file'
 
@@ -482,7 +507,10 @@ export async function beginUpload(a: LmsActor, company: string, body: any) {
   const kind = String(body?.kind || '')
   const rule = LIMITS[kind]
   if (!rule) throw new LmsError('Unknown file type.')
-  const mime = String(body?.mime || ''), size = Number(body?.size || 0), name = String(body?.name || 'file')
+  const size = Number(body?.size || 0), name = String(body?.name || 'file')
+  let mime = String(body?.mime || '')
+  // Windows calls a zip application/x-zip-compressed; the bucket knows it as application/zip.
+  if (kind === 'SCORM' && /zip/.test(mime)) mime = 'application/zip'
   if (!rule.mimes.test(mime)) throw new LmsError(kind === 'VIDEO' ? 'Videos must be MP4 (H.264 video, AAC audio).' : `That file type is not accepted here (${mime || 'unknown'}).`)
   if (!(size > 0) || size > rule.maxBytes) throw new LmsError(`That file is too large. The limit is ${Math.round(rule.maxBytes / 1024 ** 2)} MB.`)
 
@@ -513,10 +541,22 @@ export async function finishUpload(a: LmsActor, assetId: string, body: any) {
   const name = String(x.storage_path).split('/').pop()!
   const { data: files } = await sb.storage.from(BUCKET).list(dir)
   if (!(files || []).some((f: any) => f.name === name)) throw new LmsError('The upload has not arrived in storage yet.', 409)
+  // A package is only usable once its manifest is read; a zip that is not one fails here.
+  if (x.kind === 'SCORM') {
+    try { await indexPackage(assetId) } catch (e) {
+      await sb.from('lms_assets').update({ status: 'FAILED' }).eq('id', assetId)
+      throw e
+    }
+  }
   const patch: Record<string, unknown> = { status: 'READY' }
   if (body?.duration_s != null && Number(body.duration_s) > 0) patch.duration_s = Number(body.duration_s)
   if (body?.poster_path && String(body.poster_path).startsWith(`${dir}/`)) patch.poster_path = body.poster_path
-  return must(await sb.from('lms_assets').update(patch).eq('id', assetId).select('id, kind, original_name, mime_type, size_bytes, duration_s, status').single())
+  const done = must(await sb.from('lms_assets').update(patch).eq('id', assetId).select('id, kind, original_name, mime_type, size_bytes, duration_s, status').single()) as any
+  if (x.kind === 'SCORM') {
+    const { data: m } = await sb.from('lms_assets').select('version:scorm->>version, title:scorm->>title, launch:scorm->>launch, files:scorm->>files').eq('id', assetId).maybeSingle()
+    return { ...done, scorm: m }
+  }
+  return done
 }
 
 export async function listAssets(companies: string[], kind?: string | null) {

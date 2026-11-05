@@ -37,10 +37,11 @@ const withView = (path: string) => {
   return `${path}${path.includes('?') ? '&' : '?'}employee_id=${encodeURIComponent(viewingEmployee)}`
 }
 
-/** GET when there is no body, POST when there is; `method` overrides. Throws LmsApiError. */
-export async function lmsApi<T = any>(path: string, body?: unknown, method?: string): Promise<T> {
+/** GET when there is no body, POST when there is; `method` overrides. Throws LmsApiError.
+ *  `keepalive` lets a report finish even if the page is closed or reloaded while it is sent. */
+export async function lmsApi<T = any>(path: string, body?: unknown, method?: string, opts?: { keepalive?: boolean }): Promise<T> {
   const r = await fetch(withView(path), {
-    method: method || (body === undefined ? 'GET' : 'POST'), cache: 'no-store', headers: await headers(),
+    method: method || (body === undefined ? 'GET' : 'POST'), cache: 'no-store', headers: await headers(), keepalive: !!opts?.keepalive,
     ...(body === undefined ? {} : { body: JSON.stringify(body) }),
   })
   const j = await r.json().catch(() => ({}))

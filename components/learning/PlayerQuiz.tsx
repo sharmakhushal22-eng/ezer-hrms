@@ -4,9 +4,13 @@
 // The paper carries no answer key and the server does all the marking. The only thing kept in
 // the browser is the learner's own unsent answers (sessionStorage, by attempt), so a refresh
 // mid-paper does not lose them. The review comes back with the result and is held in state.
+//
+// The paper is one question at a time, the way people sit a test on a learning site, with a
+// map of every question beside it so nothing has to be answered in order.
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
-import { Z, C, F, W, S, R, E, Badge, Button, Card, Input, numeric, IconAlert, IconCheck, IconClock, IconClose, IconLock } from '@/lib/ui'
-import { IconQuiz, ProgressBar, errorWords, plural, timeWords, type PlayerQuiz, type QuizOutcome, type QuizPaper } from './shared'
+import { IconAlert, IconCheck, IconClock, IconClose, IconLock } from '@/lib/ui'
+import { errorWords, plural, timeWords, type PlayerQuiz, type QuizOutcome, type QuizPaper } from './shared'
+import { GFlag, GLeft, GRedo, GRight, GTarget, GTrophy } from './glyphs'
 
 type Answers = Record<string, string | string[]>
 const draftKey = (attemptId: string) => `ezl-quiz:${attemptId}`
@@ -18,15 +22,8 @@ const dropDraft = (attemptId: string) => { try { sessionStorage.removeItem(draft
 
 const answered = (a: string | string[] | undefined) => Array.isArray(a) ? a.length > 0 : !!String(a ?? '').trim()
 const clock = (s: number) => `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}`
-
-function Fact({ label, value }: { label: string; value: string }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: F.tiny, color: C.muted }}>{label}</div>
-      <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, ...numeric }}>{value}</div>
-    </div>
-  )
-}
+const LETTERS = 'ABCDEFGHIJKLMNOP'
+const KIND_HINT: Record<string, string> = { SINGLE: 'Choose one answer', MULTI: 'Choose all that apply', TRUE_FALSE: 'True or false', SHORT_TEXT: 'Type a short answer' }
 
 /** Counts down to a moment, and says when it has passed. */
 function RetryCountdown({ at, onZero }: { at: string; onZero: () => void }) {
@@ -40,7 +37,11 @@ function RetryCountdown({ at, onZero }: { at: string; onZero: () => void }) {
     }, 1000)
     return () => clearInterval(id)
   }, [at, onZero])
-  return <span style={numeric}>{left > 3600 ? `at ${timeWords(at)}` : `in ${clock(left)}`}</span>
+  return <span className="lx-num">{left > 3600 ? `at ${timeWords(at)}` : `in ${clock(left)}`}</span>
+}
+
+function Line({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
+  return <div style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 14, color: 'var(--ez-ink-soft)' }}><span style={{ color: 'var(--ez-muted)' }}>{icon}</span><span>{children}</span></div>
 }
 
 /** Everything about a quiz before it starts, in each of the states the server can put it in. */
@@ -56,80 +57,89 @@ export function QuizCard({ quiz, kind, readOnly, complete, busy, err, hasOpenAtt
   onStart: () => void
   onRefresh: () => void
 }) {
-  const attempts = quiz.max_attempts == null ? 'No limit' : `${quiz.attempts_left ?? 0} of ${quiz.max_attempts} left`
+  const attempts = quiz.max_attempts == null ? 'No limit' : `${quiz.attempts_left ?? 0} of ${quiz.max_attempts}`
   const best = quiz.best_pct != null ? `${Number(quiz.best_pct)}%` : 'None yet'
   const time = quiz.time_limit_minutes ? `${quiz.time_limit_minutes} min` : 'No limit'
   const gate = hasOpenAttempt ? 'READY' : quiz.gate
   const word = kind === 'ASSESSMENT' ? 'assessment' : 'quiz'
   return (
-    <Card pad={S.lg} elevation="flat" style={{ display: 'grid', gap: S.md }}>
-      <div style={{ display: 'flex', gap: S.md, alignItems: 'center' }}>
-        <span style={{ width: 38, height: 38, borderRadius: R.md, display: 'grid', placeItems: 'center', flexShrink: 0, background: gate === 'PASSED' ? C.positiveTint : C.brandTint, color: gate === 'PASSED' ? C.positive : C.brand }}>{gate === 'PASSED' ? <IconCheck size={18} /> : <IconQuiz size={18} />}</span>
+    <section className="lx-qcard" data-passed={gate === 'PASSED' ? '1' : '0'}>
+      <div className="lx-qcard-head">
+        <span>{gate === 'PASSED' ? <IconCheck size={22} /> : <GTarget size={22} />}</span>
         <div style={{ minWidth: 0, flex: 1 }}>
-          <div style={{ fontWeight: W.semi, fontSize: F.body }}>{quiz.title}</div>
-          {!quiz.required && <div style={{ fontSize: F.tiny, color: C.muted }}>Optional</div>}
+          <div style={{ fontSize: 12, fontWeight: 750, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--ez-muted)' }}>{kind === 'ASSESSMENT' ? 'Assessment' : 'Knowledge check'}{!quiz.required ? ' · optional' : ''}</div>
+          <div style={{ fontWeight: 750, fontSize: 17, marginTop: 2 }}>{quiz.title}</div>
         </div>
-        {gate === 'PASSED' && <Badge t="positive">Passed</Badge>}
+        {gate === 'PASSED' && <span className="lx-tag lx-tag--positive">Passed</span>}
       </div>
-      {quiz.instructions && gate !== 'PASSED' && <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{quiz.instructions}</div>}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(96px,1fr))', gap: S.md, padding: `${S.sm + 2}px ${S.md}px`, background: C.sunken, borderRadius: R.md }}>
-        <Fact label="Pass mark" value={`${quiz.pass_pct}%`} />
-        <Fact label="Attempts" value={attempts} />
-        <Fact label="Best score" value={best} />
-        <Fact label="Time limit" value={time} />
+      <div className="lx-qfacts">
+        <div><span>Pass mark</span><b>{quiz.pass_pct}%</b></div>
+        <div><span>Attempts left</span><b>{attempts}</b></div>
+        <div><span>Best score</span><b>{best}</b></div>
+        <div><span>Time limit</span><b>{time}</b></div>
       </div>
-
-      {err && <div role="alert" style={{ fontSize: F.small, color: C.critical }}>{err}</div>}
-
-      {complete ? <div style={{ fontSize: F.small, color: C.muted }}>This course is complete, so the {word} is closed.</div>
-        : gate === 'WATCH_FIRST' ? <Line icon={<IconLock size={15} />}>Finish the lesson above first. The {word} opens after it.</Line>
-        : gate === 'COOLDOWN' ? <Line icon={<IconClock size={15} />}>You can try again <RetryCountdown at={quiz.retry_at!} onZero={onRefresh} />.</Line>
-        : gate === 'LOCKED' ? <Line icon={<IconAlert size={15} />}>No attempts left. Ask HR for another attempt.</Line>
-        : gate === 'READY' ? (
-          <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
-            <Button variant="primary" disabled={busy || readOnly} onClick={onStart}>{busy ? 'Opening' : hasOpenAttempt ? 'Go back to your attempt' : quiz.best_pct != null ? 'Try again' : `Start the ${word}`}</Button>
-            {!!quiz.time_limit_minutes && !hasOpenAttempt && <span style={{ fontSize: F.tiny, color: C.muted }}>The clock starts as soon as you begin.</span>}
-          </div>
-        ) : null}
-    </Card>
+      <div style={{ padding: '16px 20px', display: 'grid', gap: 12 }}>
+        {quiz.instructions && gate !== 'PASSED' && <div style={{ fontSize: 14, color: 'var(--ez-ink-soft)', lineHeight: 1.6, whiteSpace: 'pre-wrap' }}>{quiz.instructions}</div>}
+        {err && <div role="alert" style={{ fontSize: 13.5, color: 'var(--ez-critical)' }}>{err}</div>}
+        {complete ? <div style={{ fontSize: 14, color: 'var(--ez-muted)' }}>This course is complete, so the {word} is closed.</div>
+          : gate === 'WATCH_FIRST' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <Line icon={<IconLock size={16} />}>Finish the lesson first. The {word} opens right after it.</Line>
+              <button className="lx-sec-link" onClick={onRefresh}>Finished it? Check again</button>
+            </div>
+          )
+          : gate === 'COOLDOWN' ? <Line icon={<IconClock size={16} />}>You can try again <RetryCountdown at={quiz.retry_at!} onZero={onRefresh} />.</Line>
+          : gate === 'LOCKED' ? <Line icon={<IconAlert size={16} />}>No attempts left. Ask HR for another attempt.</Line>
+          : gate === 'PASSED' ? <Line icon={<GTrophy size={16} />}>Well done. Your best score counts.</Line>
+          : gate === 'READY' ? (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+              <button className="lx-btn lx-btn--primary lx-btn--lg" disabled={busy || readOnly} onClick={onStart}>
+                {busy ? 'Opening…' : hasOpenAttempt ? 'Go back to your attempt' : quiz.best_pct != null ? <><GRedo size={17} /> Try again</> : <><GTarget size={17} /> Start the {word}</>}
+              </button>
+              {!!quiz.time_limit_minutes && !hasOpenAttempt && <span style={{ fontSize: 13, color: 'var(--ez-muted)' }}>The clock starts as soon as you begin.</span>}
+            </div>
+          ) : null}
+      </div>
+    </section>
   )
 }
 
-function Line({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return <div style={{ display: 'flex', gap: S.sm, alignItems: 'center', fontSize: F.small, color: C.inkSoft }}><span style={{ color: C.muted }}>{icon}</span><span>{children}</span></div>
-}
-
-function Option({ type, name, checked, label, onChange }: { type: 'radio' | 'checkbox'; name: string; checked: boolean; label: string; onChange: () => void }) {
+function Choice({ type, name, checked, letter, label, onChange }: { type: 'radio' | 'checkbox'; name: string; checked: boolean; letter: string; label: string; onChange: () => void }) {
   return (
-    <label className="ezl-opt" style={{ display: 'flex', gap: S.sm + 2, alignItems: 'flex-start', padding: `${S.sm + 3}px ${S.md}px`, border: `1px solid ${C.line}`, borderRadius: R.md, cursor: 'pointer', fontSize: F.body, color: C.ink, lineHeight: 1.4, minHeight: 44 }}>
-      <input type={type} name={name} checked={checked} onChange={onChange} style={{ width: 18, height: 18, marginTop: 1, flexShrink: 0, accentColor: C.brand }} />
+    <label className="lx-opt" data-multi={type === 'checkbox' ? '1' : '0'}>
+      <input type={type} name={name} checked={checked} onChange={onChange} />
+      <span className="lx-opt-key">{letter}</span>
       <span style={{ minWidth: 0 }}>{label}</span>
+      <span className="lx-opt-tick"><IconCheck size={12} /></span>
     </label>
   )
 }
 
-function Question({ q, n, total, value, flagged, onChange }: { q: QuizPaper['questions'][number]; n: number; total: number; value: string | string[] | undefined; flagged: boolean; onChange: (v: string | string[]) => void }) {
+function Question({ q, value, onChange }: { q: QuizPaper['questions'][number]; value: string | string[] | undefined; onChange: (v: string | string[]) => void }) {
   const many = Array.isArray(value) ? value : []
+  if (q.kind === 'SHORT_TEXT') {
+    return <input className="lx-input" data-no-titlecase="" aria-label="Your answer" value={String(value ?? '')} placeholder="Type your answer" maxLength={500} onChange={e => onChange(e.target.value)} />
+  }
+  if (q.kind === 'TRUE_FALSE') {
+    return (
+      <div className="lx-tf" role="radiogroup">
+        {q.options.map((o, i) => <Choice key={o.id} type="radio" name={q.id} letter={LETTERS[i]} label={o.text} checked={value === o.id} onChange={() => onChange(o.id)} />)}
+      </div>
+    )
+  }
   return (
-    <Card pad={S.lg} elevation="flat" style={flagged ? { border: `1px solid ${C.warningEdge}` } : undefined}>
-      <div id={`ezl-q-${q.id}`} style={{ fontSize: F.tiny, fontWeight: W.semi, color: C.muted, marginBottom: 4, scrollMarginTop: 90, ...numeric }}>Question {n} of {total}{q.marks !== 1 ? ` · ${q.marks} marks` : ''}</div>
-      <div style={{ fontSize: F.lead, fontWeight: W.semi, lineHeight: 1.45, whiteSpace: 'pre-wrap', marginBottom: S.md }}>{q.prompt}</div>
-      {q.kind === 'MULTI' && <div style={{ fontSize: F.tiny, color: C.muted, marginTop: -6, marginBottom: S.sm }}>Choose all that apply.</div>}
-      {q.kind === 'SHORT_TEXT' ? (
-        <Input data-no-titlecase="" aria-label={`Answer to question ${n}`} value={String(value ?? '')} placeholder="Type your answer" maxLength={500} onChange={e => onChange(e.target.value)} />
-      ) : (
-        <div style={{ display: 'grid', gap: 6 }}>
-          {q.options.map(o => q.kind === 'MULTI'
-            ? <Option key={o.id} type="checkbox" name={q.id} label={o.text} checked={many.includes(o.id)} onChange={() => onChange(many.includes(o.id) ? many.filter(x => x !== o.id) : [...many, o.id])} />
-            : <Option key={o.id} type="radio" name={q.id} label={o.text} checked={value === o.id} onChange={() => onChange(o.id)} />)}
-        </div>
-      )}
-    </Card>
+    <div className="lx-opts" role={q.kind === 'MULTI' ? 'group' : 'radiogroup'}>
+      {q.options.map((o, i) => q.kind === 'MULTI'
+        ? <Choice key={o.id} type="checkbox" name={q.id} letter={LETTERS[i]} label={o.text} checked={many.includes(o.id)} onChange={() => onChange(many.includes(o.id) ? many.filter(x => x !== o.id) : [...many, o.id])} />
+        : <Choice key={o.id} type="radio" name={q.id} letter={LETTERS[i]} label={o.text} checked={value === o.id} onChange={() => onChange(o.id)} />)}
+    </div>
   )
 }
 
 export function QuizRunner({ paper, onSubmit, onLeave }: { paper: QuizPaper; onSubmit: (answers: Answers) => Promise<void>; onLeave: () => void }) {
   const [answers, setAnswers] = useState<Answers>(() => ({ ...paper.answers, ...readDraft(paper.attempt_id) }))
+  const [at, setAt] = useState(0)
+  const [flags, setFlags] = useState<Set<string>>(new Set())
   const [left, setLeft] = useState(paper.seconds_left)
   const [confirming, setConfirming] = useState(false)
   const [busy, setBusy] = useState(false)
@@ -140,7 +150,8 @@ export function QuizRunner({ paper, onSubmit, onLeave }: { paper: QuizPaper; onS
   const deadline = useRef<number | null>(null)
 
   const total = paper.questions.length
-  const missing = useMemo(() => paper.questions.filter(q => !answered(answers[q.id])), [paper.questions, answers])
+  const q = paper.questions[at]
+  const missing = useMemo(() => paper.questions.filter(x => !answered(answers[x.id])), [paper.questions, answers])
 
   const send = useCallback(async () => {
     if (sending.current) return
@@ -170,61 +181,108 @@ export function QuizRunner({ paper, onSubmit, onLeave }: { paper: QuizPaper; onS
     return () => { clearInterval(id); document.removeEventListener('visibilitychange', tick) }
   }, [paper.seconds_left])
 
+  // Number keys pick an option, Enter moves on: a test can be taken without the mouse.
+  useEffect(() => {
+    const k = (e: KeyboardEvent) => {
+      const t = e.target as HTMLElement
+      if (/INPUT|TEXTAREA/.test(t.tagName) && (t as HTMLInputElement).type !== 'radio' && (t as HTMLInputElement).type !== 'checkbox') return
+      if (!q || q.kind === 'SHORT_TEXT' || e.metaKey || e.ctrlKey || e.altKey) return
+      const i = 'abcdefghijklmnop'.indexOf(e.key.toLowerCase())
+      const n = Number(e.key) - 1
+      const pickAt = i >= 0 && i < q.options.length ? i : n >= 0 && n < q.options.length ? n : -1
+      if (pickAt >= 0) {
+        const id = q.options[pickAt].id
+        if (q.kind === 'MULTI') { const cur = Array.isArray(latest.current[q.id]) ? latest.current[q.id] as string[] : []; set(q.id, cur.includes(id) ? cur.filter(x => x !== id) : [...cur, id]) }
+        else set(q.id, id)
+      } else if (e.key === 'ArrowRight' && at < total - 1) setAt(at + 1)
+      else if (e.key === 'ArrowLeft' && at > 0) setAt(at - 1)
+    }
+    window.addEventListener('keydown', k)
+    return () => window.removeEventListener('keydown', k)
+  }) // eslint-disable-line react-hooks/exhaustive-deps
+
   const set = (id: string, v: string | string[]) => {
     const next = { ...latest.current, [id]: v }
     latest.current = next
     setAnswers(next)
     writeDraft(paper.attempt_id, next)
   }
-  const tryHandIn = () => { if (missing.length) { setConfirming(true); document.getElementById(`ezl-q-${missing[0].id}`)?.scrollIntoView({ behavior: 'smooth', block: 'start' }) } else void send() }
+  const flag = () => setFlags(f => { const x = new Set(f); if (x.has(q.id)) x.delete(q.id); else x.add(q.id); return x })
+  const tryHandIn = () => { if (missing.length) { setConfirming(true); setAt(paper.questions.indexOf(missing[0])) } else void send() }
   const low = left != null && left <= 60
+  const done = total - missing.length
 
   return (
-    <div style={{ display: 'grid', gap: S.md }}>
-      <div className="ezl-quizbar" style={{ zIndex: Z.raised, background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg, boxShadow: E.raised, padding: `${S.sm + 2}px ${S.md}px`, display: 'grid', gap: 8 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: S.md, flexWrap: 'wrap' }}>
-          <div style={{ flex: '1 1 160px', minWidth: 0 }}>
-            <div style={{ fontWeight: W.semi, fontSize: F.body, lineHeight: 1.25 }}>{paper.title}</div>
-            <div style={{ fontSize: F.tiny, color: C.muted, ...numeric }}>Attempt {paper.attempt_no} · Pass mark {paper.pass_pct}% · {total - missing.length} of {total} answered</div>
+    <div className="lx-qrun" style={{ padding: '24px 0 40px' }}>
+      <div className="lx-qpaper">
+        <div className="lx-qpaper-top">
+          <div style={{ flex: '1 1 200px', minWidth: 0 }}>
+            <div style={{ fontWeight: 750, fontSize: 16 }}>{paper.title}</div>
+            <div className="lx-num" style={{ fontSize: 12.5, color: 'var(--ez-muted)', marginTop: 2 }}>Attempt {paper.attempt_no} · Pass mark {paper.pass_pct}% · {done} of {total} answered</div>
           </div>
-          {left != null && (
-            <span role="timer" aria-label={`${clock(left)} left`} style={{ display: 'inline-flex', alignItems: 'center', gap: 5, padding: '4px 10px', borderRadius: R.pill, fontSize: F.small, fontWeight: W.semi, background: low ? C.criticalTint : C.sunken, color: low ? C.critical : C.inkSoft, ...numeric }}><IconClock size={14} />{clock(left)}</span>
-          )}
+          {left != null && <span className="lx-timer" data-low={low ? '1' : '0'} role="timer" aria-label={`${clock(left)} left`}><IconClock size={15} />{clock(left)}</span>}
         </div>
-        <ProgressBar pct={total ? ((total - missing.length) / total) * 100 : 0} height={4} label="Questions answered" />
+        <div className="lx-bar" style={{ borderRadius: 0, height: 4 }}><i style={{ width: `${total ? (done / total) * 100 : 0}%` }} /></div>
+        {q && (
+          <div className="lx-qbody lx-in" key={q.id}>
+            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, flexWrap: 'wrap' }}>
+              <span className="lx-qn">Question {at + 1} of {total}{q.marks !== 1 ? ` · ${q.marks} marks` : ''}</span>
+              <span style={{ fontSize: 12.5, color: 'var(--ez-muted)', fontWeight: 600 }}>{KIND_HINT[q.kind]}</span>
+            </div>
+            {at === 0 && paper.instructions && <div className="lx-note">{paper.instructions}</div>}
+            <div className="lx-qprompt">{q.prompt}</div>
+            <Question q={q} value={answers[q.id]} onChange={v => set(q.id, v)} />
+          </div>
+        )}
+        <div className="lx-qfoot">
+          <div style={{ display: 'flex', gap: 8 }}>
+            <button className="lx-btn" disabled={at === 0} onClick={() => setAt(at - 1)}><GLeft size={16} /> Previous</button>
+            <button className="lx-btn lx-btn--ghost" aria-pressed={flags.has(q?.id)} onClick={flag} title="Mark this question to come back to"><GFlag size={15} /> {flags.has(q?.id) ? 'Marked' : 'Mark for review'}</button>
+          </div>
+          {at < total - 1
+            ? <button className="lx-btn lx-btn--primary" onClick={() => setAt(at + 1)}>Next question <GRight size={16} /></button>
+            : <button className="lx-btn lx-btn--primary" disabled={busy} onClick={tryHandIn}>{busy ? 'Submitting…' : 'Submit answers'}</button>}
+        </div>
       </div>
 
-      {paper.instructions && <div style={{ fontSize: F.small, color: C.inkSoft, lineHeight: 1.55, whiteSpace: 'pre-wrap' }}>{paper.instructions}</div>}
-
-      {paper.questions.map((q, i) => (
-        <Question key={q.id} q={q} n={i + 1} total={total} value={answers[q.id]} flagged={confirming && !answered(answers[q.id])} onChange={v => set(q.id, v)} />
-      ))}
-
-      {confirming && missing.length > 0 && (
-        <div role="alert" style={{ display: 'grid', gap: S.sm, background: C.warningTint, border: `1px solid ${C.warningEdge}`, borderRadius: R.md, padding: S.md }}>
-          <div style={{ fontSize: F.small, color: C.inkSoft }}>{plural(missing.length, 'question')} not answered yet. Unanswered questions score nothing.</div>
-          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-            <Button onClick={() => setConfirming(false)}>Keep going</Button>
-            <Button variant="primary" disabled={busy} onClick={() => void send()}>Submit anyway</Button>
+      <aside className="lx-qnav" aria-label="Questions">
+        <div style={{ fontWeight: 750, fontSize: 14 }}>Questions</div>
+        <div className="lx-qdots">
+          {paper.questions.map((x, i) => (
+            <button key={x.id} className="lx-qdot" aria-current={i === at ? 'true' : undefined} data-done={answered(answers[x.id]) ? '1' : '0'} data-flag={flags.has(x.id) || (confirming && !answered(answers[x.id])) ? '1' : '0'}
+              onClick={() => setAt(i)} aria-label={`Question ${i + 1}${answered(answers[x.id]) ? ', answered' : ''}`}>{i + 1}</button>
+          ))}
+        </div>
+        <div style={{ display: 'grid', gap: 6, fontSize: 12.5, color: 'var(--ez-muted)' }}>
+          <span><span className="lx-qdot" data-done="1" style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 4, verticalAlign: '-2px', marginRight: 6 }} />Answered</span>
+          <span><span className="lx-qdot" data-flag="1" style={{ display: 'inline-block', width: 14, height: 14, borderRadius: 4, verticalAlign: '-2px', marginRight: 6 }} />Marked or missing</span>
+        </div>
+        {confirming && missing.length > 0 && (
+          <div role="alert" className="lx-note" data-t="warning" style={{ display: 'grid', gap: 10 }}>
+            <span>{plural(missing.length, 'question')} not answered yet. Unanswered questions score nothing.</span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="lx-btn lx-btn--sm" onClick={() => setConfirming(false)}>Keep going</button>
+              <button className="lx-btn lx-btn--sm lx-btn--primary" disabled={busy} onClick={() => void send()}>Submit anyway</button>
+            </div>
           </div>
-        </div>
-      )}
-      {timedOut && !err && <div role="status" style={{ fontSize: F.small, color: C.inkSoft }}>Time is up. Handing in your answers.</div>}
-      {err && (
-        <div role="alert" style={{ display: 'grid', gap: S.sm, background: C.criticalTint, border: `1px solid ${C.criticalEdge}`, borderRadius: R.md, padding: S.md }}>
-          <div style={{ fontSize: F.small, color: C.inkSoft }}>{err}</div>
-          <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-            <Button variant="primary" disabled={busy} onClick={() => void send()}>Try again</Button>
-            <Button onClick={onLeave}>Back to the lesson</Button>
+        )}
+        {timedOut && !err && <div role="status" className="lx-note">Time is up. Handing in your answers.</div>}
+        {err && (
+          <div role="alert" className="lx-problem" style={{ display: 'grid', gap: 10 }}>
+            <span>{err}</span>
+            <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+              <button className="lx-btn lx-btn--sm lx-btn--primary" disabled={busy} onClick={() => void send()}>Try again</button>
+              <button className="lx-btn lx-btn--sm" onClick={onLeave}>Back to the lesson</button>
+            </div>
           </div>
-        </div>
-      )}
-      {!confirming && !err && (
-        <div style={{ display: 'flex', gap: S.sm, flexWrap: 'wrap' }}>
-          <Button variant="primary" size="lg" disabled={busy} onClick={tryHandIn}>{busy ? 'Submitting' : 'Submit answers'}</Button>
-          {left == null && <Button size="lg" disabled={busy} onClick={onLeave}>Save and leave</Button>}
-        </div>
-      )}
+        )}
+        {!confirming && !err && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <button className="lx-btn lx-btn--primary lx-btn--full" disabled={busy} onClick={tryHandIn}>{busy ? 'Submitting…' : 'Submit answers'}</button>
+            {left == null && <button className="lx-btn lx-btn--full" disabled={busy} onClick={onLeave}>Save and leave</button>}
+          </div>
+        )}
+      </aside>
     </div>
   )
 }
@@ -232,31 +290,33 @@ export function QuizRunner({ paper, onSubmit, onLeave }: { paper: QuizPaper; onS
 function ReviewItem({ r, n }: { r: NonNullable<QuizOutcome['review']>[number]; n: number }) {
   const chosen = Array.isArray(r.your_answer) ? r.your_answer : r.your_answer != null ? [r.your_answer] : []
   return (
-    <div style={{ padding: S.md, borderTop: n > 1 ? `1px solid ${C.line}` : 0, display: 'grid', gap: S.sm }}>
-      <div style={{ display: 'flex', gap: S.sm, alignItems: 'flex-start' }}>
-        <span aria-label={r.correct ? 'Correct' : 'Not correct'} style={{ width: 22, height: 22, borderRadius: R.pill, display: 'grid', placeItems: 'center', flexShrink: 0, background: r.correct ? C.positiveTint : C.criticalTint, color: r.correct ? C.positive : C.critical }}>{r.correct ? <IconCheck size={13} /> : <IconClose size={13} />}</span>
-        <div style={{ minWidth: 0, fontSize: F.small, fontWeight: W.semi, lineHeight: 1.45, whiteSpace: 'pre-wrap' }}>{n}. {r.prompt}</div>
+    <div className="lx-rv">
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <span aria-label={r.correct ? 'Correct' : 'Not correct'} style={{ width: 26, height: 26, borderRadius: '50%', display: 'grid', placeItems: 'center', flexShrink: 0, background: r.correct ? 'var(--ez-positive)' : 'var(--ez-critical)', color: 'var(--ez-on-accent)' }}>{r.correct ? <IconCheck size={14} /> : <IconClose size={14} />}</span>
+        <div style={{ minWidth: 0, fontSize: 15, fontWeight: 650, lineHeight: 1.5, whiteSpace: 'pre-wrap' }}>{n}. {r.prompt}</div>
+        <span className="lx-num" style={{ marginLeft: 'auto', fontSize: 12.5, color: 'var(--ez-muted)', whiteSpace: 'nowrap' }}>{r.earned} / {r.marks}</span>
       </div>
       {r.kind === 'SHORT_TEXT' ? (
-        <div style={{ fontSize: F.small, color: C.inkSoft, paddingLeft: 30, display: 'grid', gap: 2 }}>
-          <span>Your answer: {chosen[0] ? String(chosen[0]) : 'Not answered'}</span>
+        <div style={{ fontSize: 14, color: 'var(--ez-ink-soft)', paddingLeft: 36, display: 'grid', gap: 4 }}>
+          <span>Your answer: <b>{chosen[0] ? String(chosen[0]) : 'Not answered'}</b></span>
           {!r.correct && !!r.accepted?.length && <span>Accepted: {r.accepted.join(', ')}</span>}
         </div>
       ) : (
-        <div style={{ display: 'grid', gap: 4, paddingLeft: 30 }}>
-          {r.options.map(o => {
+        <div style={{ display: 'grid', gap: 6, paddingLeft: 36 }}>
+          {r.options.map((o, i) => {
             const mine = chosen.includes(o.id)
             return (
-              <div key={o.id} style={{ display: 'flex', gap: 6, alignItems: 'center', flexWrap: 'wrap', fontSize: F.small, color: o.correct ? C.positive : C.inkSoft, fontWeight: o.correct ? W.semi : W.regular }}>
-                {o.correct ? <IconCheck size={13} /> : <span style={{ width: 13, flexShrink: 0 }} />}
-                <span style={{ minWidth: 0 }}>{o.text}</span>
-                {mine && <span style={{ fontSize: F.tiny, color: C.muted, fontWeight: W.regular }}>Your answer</span>}
+              <div key={o.id} className="lx-rv-opt" data-correct={o.correct ? '1' : '0'} data-wrong={mine && !o.correct ? '1' : '0'}>
+                <b style={{ width: 18, color: 'var(--ez-muted)' }}>{LETTERS[i]}</b>
+                <span style={{ flex: 1, minWidth: 0 }}>{o.text}</span>
+                {o.correct && <span style={{ color: 'var(--ez-positive)', display: 'inline-flex' }}><IconCheck size={15} /></span>}
+                {mine && <span className="lx-tag" style={{ height: 20, fontSize: 11 }}>Your answer</span>}
               </div>
             )
           })}
         </div>
       )}
-      {r.explanation && <div style={{ fontSize: F.small, color: C.muted, lineHeight: 1.5, paddingLeft: 30, whiteSpace: 'pre-wrap' }}>{r.explanation}</div>}
+      {r.explanation && <div className="lx-note" style={{ marginLeft: 36 }}>{r.explanation}</div>}
     </div>
   )
 }
@@ -274,42 +334,52 @@ export function QuizResult({ r, canNext, complete, busy, onNext, onRetry, onRewa
 }) {
   const cooling = r.cooldown_minutes > 0
   const retry = !r.passed && !r.sent_back && !r.locked && r.attempts_left !== 0
-  const headline = r.late ? 'Time ran out' : r.passed ? 'You passed' : 'Not this time'
+  const headline = r.late ? 'Time ran out' : r.passed ? 'You passed!' : 'Not this time'
   const sub = r.late ? 'This attempt ended before it was handed in, so it does not count as a pass.'
-    : r.passed ? 'Well done.'
+    : r.passed ? 'Well done. You can move on.'
     : r.sent_back ? 'You have used all your attempts. Go through the lesson again and you will get a fresh set.'
     : r.locked ? 'You have used all your attempts. Ask HR for another attempt.'
     : retry && cooling ? `You can try again in ${plural(r.cooldown_minutes, 'minute')}.`
-    : 'You can look over the lesson and try again.'
+    : 'Look over the lesson, then try again.'
+  const right = (r.review || []).filter(x => x.correct).length
   return (
-    <div style={{ display: 'grid', gap: S.md }}>
-      <Card pad={S.xl} className="ez-rise" style={{ textAlign: 'center' }}>
-        <div style={{ fontSize: 40, fontWeight: W.bold, lineHeight: 1.1, letterSpacing: '-.02em', color: r.passed ? C.positive : C.ink, ...numeric }}>{Number(r.pct)}%</div>
-        <div style={{ fontSize: F.title, fontWeight: W.semi, marginTop: 6 }}>{headline}</div>
-        <div style={{ fontSize: F.small, color: C.muted, marginTop: 4, lineHeight: 1.55 }}>{sub}</div>
-        <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 8, ...numeric }}>
-          Pass mark {r.pass_pct}%{r.attempts_left != null && !r.passed ? ` · ${plural(r.attempts_left, 'attempt')} left` : ''}
+    <div style={{ display: 'grid', gap: 18, padding: '24px 0 40px' }}>
+      <section className="lx-result lx-in" data-pass={r.passed ? '1' : '0'}>
+        <span style={{ position: 'relative' }}>
+          <svg width={150} height={150} viewBox="0 0 150 150" style={{ transform: 'rotate(-90deg)' }} aria-hidden>
+            <circle cx={75} cy={75} r={64} fill="none" strokeWidth={12} style={{ stroke: 'var(--ez-sunken)' }} />
+            <circle cx={75} cy={75} r={64} fill="none" strokeWidth={12} strokeLinecap="round" strokeDasharray={402} strokeDashoffset={402 - (Math.min(100, Number(r.pct)) / 100) * 402}
+              style={{ stroke: r.passed ? 'var(--ez-positive)' : 'var(--ez-warning)', transition: 'stroke-dashoffset 1s ease' }} />
+          </svg>
+          <b className="lx-num" style={{ position: 'absolute', inset: 0, display: 'grid', placeItems: 'center', fontSize: 34, fontWeight: 800, letterSpacing: '-.03em' }}>{Number(r.pct)}%</b>
+        </span>
+        <h2>{headline}</h2>
+        <p style={{ color: 'var(--ez-muted)', maxWidth: 480, lineHeight: 1.6 }}>{sub}</p>
+        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', justifyContent: 'center' }}>
+          <span className="lx-tag">Pass mark {r.pass_pct}%</span>
+          <span className="lx-tag lx-num">Score {r.score} of {r.max_score}</span>
+          {r.review && <span className="lx-tag lx-tag--positive lx-num">{right} of {r.review.length} correct</span>}
+          {r.attempts_left != null && !r.passed && <span className="lx-tag lx-tag--warning">{plural(r.attempts_left, 'attempt')} left</span>}
         </div>
-        <div style={{ display: 'flex', gap: S.sm, justifyContent: 'center', flexWrap: 'wrap', marginTop: S.lg }}>
-          {complete ? <Button variant="primary" onClick={onFinish}>See your results</Button>
-            : r.passed ? (canNext ? <Button variant="primary" onClick={onNext}>Next lesson</Button> : <Button variant="primary" onClick={onBack}>Back to the lesson</Button>)
-            : r.sent_back ? <Button variant="primary" onClick={onRewatch}>Go through the lesson again</Button>
+        <div style={{ display: 'flex', gap: 10, justifyContent: 'center', flexWrap: 'wrap', marginTop: 8 }}>
+          {complete ? <button className="lx-btn lx-btn--primary lx-btn--lg" onClick={onFinish}><GTrophy size={18} /> See your results</button>
+            : r.passed ? (canNext ? <button className="lx-btn lx-btn--primary lx-btn--lg" onClick={onNext}>Next lesson <GRight size={17} /></button> : <button className="lx-btn lx-btn--primary lx-btn--lg" onClick={onBack}>Back to the lesson</button>)
+            : r.sent_back ? <button className="lx-btn lx-btn--primary lx-btn--lg" onClick={onRewatch}>Go through the lesson again</button>
             : retry ? (
               <>
-                {!cooling && <Button variant="primary" disabled={busy} onClick={onRetry}>{busy ? 'Opening' : 'Try again'}</Button>}
-                <Button onClick={onBack}>Back to the lesson</Button>
+                {!cooling && <button className="lx-btn lx-btn--primary lx-btn--lg" disabled={busy} onClick={onRetry}><GRedo size={17} /> {busy ? 'Opening…' : 'Try again'}</button>}
+                <button className="lx-btn lx-btn--lg" onClick={onBack}>Back to the lesson</button>
               </>
-            ) : <Button onClick={onBack}>Back to the lesson</Button>}
+            ) : <button className="lx-btn lx-btn--lg" onClick={onBack}>Back to the lesson</button>}
         </div>
-      </Card>
+      </section>
       {r.review && r.review.length > 0 && (
-        <Card pad={0} elevation="flat" style={{ overflow: 'hidden' }}>
-          <div style={{ padding: `${S.sm + 4}px ${S.md}px`, fontWeight: W.semi, fontSize: F.small, borderBottom: `1px solid ${C.line}` }}>Your answers</div>
+        <section className="lx-panel">
+          <div className="lx-panel-head"><div className="lx-panel-title">Your answers</div><span style={{ fontSize: 12.5, color: 'var(--ez-muted)' }}>Correct answers are marked in green</span></div>
           {r.review.map((item, i) => <ReviewItem key={item.question_id} r={item} n={i + 1} />)}
-        </Card>
+        </section>
       )}
-      {r.passed === false && r.review == null && <div style={{ fontSize: F.tiny, color: C.muted, textAlign: 'center' }}>The answers are shown once you pass.</div>}
+      {r.passed === false && r.review == null && <div style={{ fontSize: 13, color: 'var(--ez-muted)', textAlign: 'center' }}>The answers are shown once you pass.</div>}
     </div>
   )
 }
-

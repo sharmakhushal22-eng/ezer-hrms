@@ -1,7 +1,8 @@
 # EZER Learn
 
 The self-paced learning module of EZER HRMS. Centrally managed content, no instructor role.
-HR builds courses from short videos, documents and quizzes, publishes them to a company
+HR builds courses from short videos, documents, quizzes and SCORM packages, runs live
+sessions (webinars) on the company's own Zoom, Meet or Teams, publishes to a company
 catalogue, and assigns them to people, groups or new joiners. The system tracks progress,
 enforces passing rules, chases deadlines and issues verifiable certificates.
 
@@ -13,6 +14,7 @@ enforces passing rules, chases deadlines and issues verifiable certificates.
 | [IMPLEMENTATION-REPORT.md](IMPLEMENTATION-REPORT.md) | What was built, test results, and what is outstanding |
 | [research/lms-products.md](research/lms-products.md) | Ten LMS products and four Indian HR suites, with source links |
 | [research/video-delivery.md](research/video-delivery.md) | Video hosting options, a worked cost model, upload and tracking design |
+| [REDESIGN.md](REDESIGN.md) | The standalone EZER Learn app (3 Nov 2026): navigation, screens, player, slide viewer, Studio; and (6 Nov) webinars, SCORM, manager mail, motion |
 
 ## Where it lives
 
@@ -33,8 +35,11 @@ lib/lms/preboarding.ts     candidates: invite, sign-in, conversion
 lib/lms/daily.ts           the nightly job
 
 app/api/lms/**             admin, learner, team, candidate and public routes
-app/dashboard/learning/    the HR workspace (also reachable inside ESS)
-components/learning/       employee and manager screens, course player
+app/learning/[[...path]]/  EZER Learn, full screen: learner screens and the Studio (HR workspace)
+app/dashboard/learning/    forwards to /learning/studio (sidebar, ESS admin host, old links)
+components/learning/       learner screens, course player, video player, PDF slide viewer
+components/learning/app/   the app shell and its router
+components/learning/studio/ the Studio: courses, builder, curriculum board, assignment wizard
 app/learn/[token]/         the candidate portal
 app/learn/verify/[code]/   public certificate check
 ```

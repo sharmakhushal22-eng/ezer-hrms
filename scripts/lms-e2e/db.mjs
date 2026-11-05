@@ -20,6 +20,9 @@ export const fkOf = {}
 function ddl() {
   const out = []
   for (const [t, d] of Object.entries(defs)) {
+    // Learning's own tables come from the migrations below, with their constraints, even when
+    // the copied schema already has them (once 206 has run on the real project).
+    if (t.startsWith('lms_')) continue
     const cols = [], pks = []
     for (const [c, p] of Object.entries(d.properties || {})) {
       const pk = /<pk\/>/.test(p.description || '')
@@ -70,7 +73,7 @@ export async function build(dir) {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO service_role;
   `)
   await seed(db)
-  for (const f of ['206_lms_schema.sql', '207_lms_engine.sql', '208_lms_roles.sql']) {
+  for (const f of ['206_lms_schema.sql', '207_lms_engine.sql', '208_lms_roles.sql', '211_lms_live_and_scorm.sql']) {
     await db.exec(fs.readFileSync(path.join(REPO, 'supabase/migrations', f), 'utf8'))
   }
   return db

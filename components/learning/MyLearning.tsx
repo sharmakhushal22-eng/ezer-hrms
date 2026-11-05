@@ -1,258 +1,137 @@
 'use client'
-// components/learning/MyLearning.tsx — the learner's home, for employees and candidates alike.
+// components/learning/MyLearning.tsx — everything the learner is taking, sorted into what to do,
+// what is under way, what is finished, what waits for approval, and their learning paths.
+// Also the candidate's home on their /learn link, where it is the whole page.
 //
 // The dashboard route answers in overlapping lists (an overdue mandatory course in progress
-// is in three of them). A course shows as a card once, in the most pressing section it
-// belongs to. Upcoming deadlines is a dated list, so it may repeat a title on purpose.
+// is in three of them). Each course shows once per tab.
 import { useState } from 'react'
-import { C, F, W, S, R, E, Badge, Button, Card, numeric, IconCheck, IconClock } from '@/lib/ui'
-import { CourseTile, DueBadge, ProgressBar, SectionHead, STATUS, dayWords, durationWords, dueWords, firstName, plural, shortDay, type Dashboard, type LearnItem, type LearnPath } from './shared'
+import { linkProps, navigate, to } from './app/router'
+import { LearnCard } from './CourseCard'
+import { EmptyState, Oops, Ring, Skel, dueWords, firstName, plural, type Dashboard, type LearnItem } from './shared'
+import { GBook, GCompass, GLayers } from './glyphs'
+import { Aurora } from './motion/Aurora'
+import { CountUp } from './motion/CountUp'
 
-function ActionWord(i: LearnItem, readOnly?: boolean) {
-  if (readOnly) return 'View'
-  if (i.status === 'IN_PROGRESS') return 'Resume'
-  if (i.status === 'FAILED') return 'Open'
-  return 'Start'
+type Tab = 'todo' | 'going' | 'done' | 'requests' | 'paths'
+
+const uniq = (list: LearnItem[]) => list.filter((x, i, a) => a.findIndex(y => y.id === x.id) === i)
+
+function Grid({ items, onOpen, readOnly }: { items: LearnItem[]; onOpen?: (id: string) => void; readOnly?: boolean }) {
+  return <div className="lx-grid">{items.map(i => <LearnCard key={i.id} item={i} readOnly={readOnly} onOpen={onOpen ? () => onOpen(i.id) : undefined} />)}</div>
 }
 
-function CourseRow({ item, onOpen, primary, readOnly }: { item: LearnItem; onOpen: (id: string) => void; primary?: boolean; readOnly?: boolean }) {
-  const pct = Number(item.progress_pct) || 0
-  const c = item.course
-  const mins = durationWords(c?.est_minutes)
-  return (
-    <div className="ezl-row ezl-hover" onClick={() => onOpen(item.id)}
-      style={{ background: C.surface, border: `1px solid ${item.overdue ? C.criticalEdge : C.line}`, borderRadius: R.lg, padding: S.md, boxShadow: E.flat, cursor: 'pointer' }}>
-      <CourseTile src={c?.thumbnail} />
-      <div style={{ minWidth: 0, display: 'grid', gap: 6 }}>
-        <div style={{ fontWeight: W.semi, color: C.ink, fontSize: F.body, lineHeight: 1.3 }}>{c?.title || 'Course'}</div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, alignItems: 'center' }}>
-          {item.mandatory && <Badge t="brand" size="sm">Mandatory</Badge>}
-          {c?.is_compliance && <Badge t="info" size="sm">Compliance</Badge>}
-          {item.status === 'FAILED' && <Badge t="critical" size="sm">{STATUS.FAILED.label}</Badge>}
-          <DueBadge dueAt={item.due_at} overdue={item.overdue} />
-          {mins && <span style={{ fontSize: F.tiny, color: C.muted }}>{mins}</span>}
-        </div>
-        {pct > 0 && (
-          <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: S.sm, alignItems: 'center' }}>
-            <ProgressBar pct={pct} label={`${c?.title || 'Course'} progress`} />
-            <span style={{ fontSize: F.tiny, color: C.muted, ...numeric }}>{Math.round(pct)}%</span>
-          </div>
-        )}
-      </div>
-      <div className="ezl-row-action" onClick={e => e.stopPropagation()}>
-        <Button variant={primary ? 'primary' : 'secondary'} onClick={() => onOpen(item.id)}>{ActionWord(item, readOnly)}</Button>
-      </div>
-    </div>
-  )
-}
-
-function CourseList({ title, items, onOpen, t, hint, order, primary, readOnly }: { title: string; items: LearnItem[]; onOpen: (id: string) => void; t?: 'critical'; hint?: string; order: number; primary?: boolean; readOnly?: boolean }) {
-  if (!items.length) return null
-  return (
-    <section style={{ order }}>
-      <SectionHead title={title} count={items.length} t={t} hint={hint} />
-      <div style={{ display: 'grid', gap: S.sm }}>
-        {items.map(i => <CourseRow key={i.id} item={i} onOpen={onOpen} primary={primary} readOnly={readOnly} />)}
-      </div>
-    </section>
-  )
-}
-
-function Upcoming({ items, onOpen, order }: { items: LearnItem[]; onOpen: (id: string) => void; order: number }) {
-  if (!items.length) return null
-  return (
-    <section style={{ order }}>
-      <SectionHead title="Upcoming deadlines" />
-      <Card pad={0} elevation="flat" style={{ overflow: 'hidden' }}>
-        {items.map((i, n) => {
-          const d = dueWords(i.due_at)
-          return (
-            <div key={i.id} style={{ borderTop: n ? `1px solid ${C.line}` : 0 }}>
-              <button onClick={() => onOpen(i.id)} className="ezl-navrow"
-                style={{ width: '100%', display: 'grid', gridTemplateColumns: '52px minmax(0,1fr)', gap: S.md, alignItems: 'center', padding: `${S.sm + 2}px ${S.md}px`, background: 'transparent', border: 0, textAlign: 'left', fontFamily: 'inherit', color: C.ink }}>
-                <span style={{ fontSize: F.tiny, fontWeight: W.semi, color: C.inkSoft, ...numeric }}>{shortDay(i.due_at)}</span>
-                <span style={{ minWidth: 0 }}>
-                  <span style={{ display: 'block', fontSize: F.small, fontWeight: W.medium, lineHeight: 1.3 }}>{i.course?.title || 'Course'}</span>
-                  <span style={{ display: 'block', fontSize: F.tiny, color: d?.t === 'warning' ? C.warning : C.muted, marginTop: 1 }}>{d?.text}</span>
-                </span>
-              </button>
-            </div>
-          )
-        })}
-      </Card>
-    </section>
-  )
-}
-
-function PathsCard({ paths, order }: { paths: LearnPath[]; order: number }) {
-  if (!paths.length) return null
-  return (
-    <section style={{ order }}>
-      <SectionHead title="Learning paths" />
-      <div style={{ display: 'grid', gap: S.sm }}>
-        {paths.map(p => (
-          <Card key={p.id} pad={S.md} elevation="flat">
-            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: S.sm }}>
-              <div style={{ fontWeight: W.semi, fontSize: F.small, minWidth: 0 }}>{p.title}</div>
-              <span style={{ fontSize: F.tiny, color: C.muted, flexShrink: 0, ...numeric }}>{Math.round(Number(p.progress_pct) || 0)}%</span>
-            </div>
-            <div style={{ margin: '8px 0 6px' }}><ProgressBar pct={p.progress_pct} label={`${p.title} progress`} /></div>
-            <div style={{ fontSize: F.tiny, color: C.muted }}>
-              {p.status === 'COMPLETED' ? 'Completed' : p.order_mode === 'SEQUENTIAL' ? 'Courses open one after another' : 'Take the courses in any order'}
-              {p.status !== 'COMPLETED' && p.due_at ? ` · ${dueWords(p.due_at)?.text}` : ''}
-            </div>
-          </Card>
-        ))}
-      </div>
-    </section>
-  )
-}
-
-function PendingCard({ items, order }: { items: LearnItem[]; order: number }) {
-  if (!items.length) return null
-  return (
-    <section style={{ order }}>
-      <SectionHead title="Pending requests" count={items.length} />
-      <Card pad={0} elevation="flat" style={{ overflow: 'hidden' }}>
-        {items.map((i, n) => (
-          <div key={i.id} style={{ display: 'flex', gap: S.sm, alignItems: 'center', padding: `${S.sm + 2}px ${S.md}px`, borderTop: n ? `1px solid ${C.line}` : 0 }}>
-            <span style={{ color: C.warning }}><IconClock size={16} /></span>
-            <span style={{ minWidth: 0 }}>
-              <span style={{ display: 'block', fontSize: F.small, fontWeight: W.medium }}>{i.course?.title || 'Course'}</span>
-              <span style={{ display: 'block', fontSize: F.tiny, color: C.muted }}>Waiting for your manager</span>
-            </span>
-          </div>
-        ))}
-      </Card>
-    </section>
-  )
-}
-
-function CompletedList({ items, onOpen, order }: { items: LearnItem[]; onOpen: (id: string) => void; order: number }) {
-  const [all, setAll] = useState(false)
-  if (!items.length) return null
-  const shown = all ? items : items.slice(0, 4)
-  return (
-    <section style={{ order }}>
-      <SectionHead title="Completed" count={items.length} />
-      <Card pad={0} elevation="flat" style={{ overflow: 'hidden' }}>
-        {shown.map((i, n) => {
-          const st = STATUS[i.status] || STATUS.COMPLETED
-          const opens = i.status === 'COMPLETED'
-          return (
-            <div key={i.id} style={{ borderTop: n ? `1px solid ${C.line}` : 0 }}>
-            <button disabled={!opens} onClick={() => onOpen(i.id)} className="ezl-navrow"
-              style={{ width: '100%', display: 'grid', gridTemplateColumns: '28px minmax(0,1fr) auto', gap: S.sm, alignItems: 'center', padding: `${S.sm + 2}px ${S.md}px`, background: 'transparent', border: 0, textAlign: 'left', fontFamily: 'inherit', color: C.ink, opacity: 1 }}>
-              <span style={{ width: 24, height: 24, borderRadius: R.pill, display: 'grid', placeItems: 'center', background: i.status === 'COMPLETED' ? C.positiveTint : C.sunken, color: i.status === 'COMPLETED' ? C.positive : C.muted }}><IconCheck size={13} /></span>
-              <span style={{ minWidth: 0 }}>
-                <span style={{ display: 'block', fontSize: F.small, fontWeight: W.medium, lineHeight: 1.3 }}>{i.course?.title || 'Course'}</span>
-                <span style={{ display: 'block', fontSize: F.tiny, color: C.muted, marginTop: 1, ...numeric }}>
-                  {i.status === 'COMPLETED' ? `Finished ${dayWords(i.completed_at)}` : st.label}{i.score_pct != null ? ` · ${Number(i.score_pct)}%` : ''}
-                </span>
-              </span>
-              {i.status === 'EXPIRED' && <Badge t="warning" size="sm">Expired</Badge>}
-            </button>
-            </div>
-          )
-        })}
-        {items.length > 4 && (
-          <div style={{ padding: `${S.sm}px ${S.md}px`, borderTop: `1px solid ${C.line}` }}>
-            <button className="ezl-linkbtn" style={{ fontSize: F.small }} onClick={() => setAll(a => !a)}>{all ? 'Show fewer' : `Show all ${items.length}`}</button>
-          </div>
-        )}
-      </Card>
-    </section>
-  )
-}
-
-function greeting(name: string, candidate: boolean) {
-  if (candidate) return name ? `Welcome, ${name}` : 'Welcome'
-  const h = new Date().getHours()
-  const part = h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
-  return name ? `${part}, ${name}` : part
-}
-
-function Count({ label, value, t }: { label: string; value: number; t?: 'critical' }) {
-  return (
-    <div style={{ minWidth: 0 }}>
-      <div style={{ fontSize: 22, fontWeight: W.bold, lineHeight: 1.1, color: t && value ? C.critical : C.ink, ...numeric }}>{value}</div>
-      <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2 }}>{label}</div>
-    </div>
-  )
-}
-
-export default function MyLearning({ data, onOpen, onBrowse, readOnly }: {
-  data: Dashboard
-  onOpen: (enrollmentId: string) => void
-  /** Absent for candidates: they have no catalogue. */
+export default function MyLearning({ data, err, tab: asked, onReload, onOpen, onBrowse, readOnly }: {
+  data: Dashboard | null
+  err?: string
+  /** ?tab= on the address. */
+  tab?: string | null
+  onReload?: () => void
+  /** Open a course; by default the app's own player address. The candidate page takes over. */
+  onOpen?: (enrollmentId: string) => void
+  /** Absent for candidates in their own page: they have no catalogue. */
   onBrowse?: () => void
   readOnly?: boolean
 }) {
+  const [own, setOwn] = useState<Tab | null>(null)
+  if (!data) {
+    if (err) return <Oops message={err} onRetry={onReload} />
+    return <div style={{ display: 'grid', gap: 24 }}><Skel h={150} r={22} /><Skel h={44} w={420} /><div className="lx-grid">{[0, 1, 2].map(i => <Skel key={i} h={300} r={16} />)}</div></div>
+  }
   const candidate = data.kind === 'CANDIDATE'
-  const counts = data.counts || { assigned: 0, mandatory: 0, overdue: 0, in_progress: 0, completed: 0 }
+  const embedded = !!onOpen
+  const n = data.counts || { assigned: 0, mandatory: 0, overdue: 0, in_progress: 0, completed: 0 }
+  const todo = uniq([...(data.overdue || []), ...(data.mandatory || []), ...(data.optional || [])]).filter(i => i.status !== 'IN_PROGRESS')
+  const going = uniq([...(data.overdue || []), ...(data.continue || []), ...(data.mandatory || []), ...(data.optional || [])]).filter(i => i.status === 'IN_PROGRESS')
+  const done = data.completed || []
+  const requests = data.pending || []
+  const paths = data.paths || []
 
-  const seen = new Set<string>()
-  const once = (list: LearnItem[] = []) => list.filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true })
-  const overdue = once(data.overdue), resume = once(data.continue), mandatory = once(data.mandatory), optional = once(data.optional)
-  const upcoming = data.upcoming || [], paths = data.paths || [], pending = data.pending || [], completed = data.completed || []
-  const hasSide = upcoming.length + paths.length + pending.length > 0
-  const nothing = !seen.size && !completed.length && !pending.length && !paths.length
+  const tabs: { k: Tab; label: string; n: number }[] = [
+    { k: 'todo', label: 'To do', n: todo.length },
+    { k: 'going', label: 'In progress', n: going.length },
+    { k: 'done', label: 'Completed', n: done.length },
+    ...(requests.length ? [{ k: 'requests' as const, label: 'Requests', n: requests.length }] : []),
+    ...(paths.length ? [{ k: 'paths' as const, label: 'Learning paths', n: paths.length }] : []),
+  ]
+  const fallback: Tab = going.length ? 'going' : todo.length ? 'todo' : done.length ? 'done' : 'todo'
+  const wanted = (own || asked) as Tab | null
+  const tab: Tab = wanted && tabs.some(t => t.k === wanted) ? wanted : fallback
+  const pick = (k: Tab) => { setOwn(k); if (!embedded) navigate(to.my(k), { replace: true, keepScroll: true }) }
+  const total = n.assigned + n.completed
+  const pct = total ? Math.round((n.completed / total) * 100) : 0
+  const browse = onBrowse || (!candidate && !embedded ? () => navigate(to.catalog()) : undefined)
 
-  const line = counts.assigned
-    ? `${plural(counts.assigned, 'course')} to finish${counts.overdue ? `, ${counts.overdue} overdue` : ''}.`
-    : completed.length ? 'You are all caught up.' : candidate ? 'Your lessons will appear here.' : 'Nothing assigned to you right now.'
+  let body: React.ReactNode
+  if (tab === 'paths') {
+    body = (
+      <div className="lx-grid">
+        {paths.map(p => {
+          const v = Math.round(Number(p.progress_pct) || 0)
+          return (
+            <div key={p.id} className="lx-panel lx-in" style={{ padding: 20, display: 'grid', gap: 14 }}>
+              <div style={{ display: 'flex', gap: 14, alignItems: 'center' }}>
+                <Ring pct={p.status === 'COMPLETED' ? 100 : v} size={60} />
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 12, fontWeight: 750, letterSpacing: '.06em', textTransform: 'uppercase', color: 'var(--ez-brand)', display: 'flex', gap: 6, alignItems: 'center' }}><GLayers size={13} /> Learning path</div>
+                  <div style={{ fontWeight: 750, fontSize: 16, marginTop: 2 }}>{p.title}</div>
+                </div>
+              </div>
+              <div style={{ fontSize: 13.5, color: 'var(--ez-muted)' }}>{p.status === 'COMPLETED' ? 'Completed' : p.order_mode === 'SEQUENTIAL' ? 'Courses open one after another' : 'Take the courses in any order'}{p.status !== 'COMPLETED' && p.due_at ? ` · ${dueWords(p.due_at)?.text}` : ''}</div>
+              <div style={{ fontSize: 13, color: 'var(--ez-muted)' }}>Its courses are listed under To do and In progress.</div>
+            </div>
+          )
+        })}
+      </div>
+    )
+  } else if (tab === 'requests') {
+    body = (
+      <div className="lx-panel">
+        {requests.map((i, k) => (
+          <div key={i.id} className="lx-path" style={{ display: 'flex', alignItems: 'center', gap: 12, borderTop: k ? undefined : 0 }}>
+            <span className="lx-tag lx-tag--warning">Waiting</span>
+            <span style={{ fontWeight: 650, flex: 1, minWidth: 0 }}>{i.course?.title || 'Course'}</span>
+            <span style={{ fontSize: 13, color: 'var(--ez-muted)' }}>Your manager decides</span>
+          </div>
+        ))}
+      </div>
+    )
+  } else {
+    const list = tab === 'todo' ? todo : tab === 'going' ? going : done
+    body = list.length
+      ? <Grid items={list} onOpen={onOpen} readOnly={readOnly} />
+      : (
+        <EmptyState title={tab === 'done' ? 'Nothing completed yet' : tab === 'going' ? 'Nothing under way' : candidate ? 'Nothing here just yet' : 'You are all caught up'} icon={<GBook size={34} />}
+          action={browse && tab !== 'done' ? <button className="lx-btn lx-btn--primary" onClick={browse}><GCompass size={16} /> Explore courses</button> : undefined}>
+          {tab === 'done' ? 'Courses you finish are kept here, with their scores and certificates.'
+            : candidate ? 'HR will add your lessons soon. We will let you know.'
+            : 'Anything HR or your manager assigns appears here. You can also pick a course yourself.'}
+        </EmptyState>
+      )
+  }
 
   return (
-    <div className="ez-rise" style={{ display: 'grid', gap: S.xl }}>
-      <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: S.lg, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0 }}>
-          <div style={{ fontSize: 20, fontWeight: W.bold, letterSpacing: '-.015em', color: C.ink }}>{greeting(firstName(data.name), candidate)}</div>
-          <div style={{ fontSize: F.small, color: C.muted, marginTop: 2 }}>{line}</div>
-        </div>
-        {!nothing && (
-          <div className="ezl-counts">
-            <Count label="To finish" value={counts.assigned} />
-            <Count label="In progress" value={counts.in_progress} />
-            <Count label="Overdue" value={counts.overdue} t="critical" />
-            <Count label="Completed" value={counts.completed} />
+    <div>
+      <header className="lx-ph lx-in">
+        <Aurora specks={8} />
+        <div className="lx-ph-row">
+          <div>
+            <h1>{candidate ? `Welcome${firstName(data.name) ? `, ${firstName(data.name)}` : ''}` : 'My learning'}</h1>
+            <p>{n.assigned ? `${plural(n.assigned, 'course')} to finish${n.overdue ? `, ${n.overdue} overdue` : ''}. Everything you have been given and everything you chose, in one place.` : 'Everything you have been given and everything you chose, in one place.'}</p>
           </div>
-        )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
+            <Ring pct={pct} size={78} stroke={7} track="rgba(255,255,255,.18)" color="var(--lx-hero-c)" text={<span style={{ color: 'var(--ez-on-dark)', fontSize: 19 }}>{pct}%</span>} label={`${pct}% of your assigned learning complete`} />
+            <div className="lx-hero-stat lx-num"><b><CountUp value={n.completed} /><span style={{ display: 'inline', fontSize: 16, opacity: .7, margin: 0 }}> / {total}</span></b><span>courses completed</span></div>
+          </div>
+        </div>
       </header>
-
-      {nothing ? (
-        <Card style={{ textAlign: 'center', padding: `${S.huge}px ${S.xl}px` }}>
-          <div style={{ fontSize: F.lead, fontWeight: W.semi }}>{candidate ? 'Nothing here just yet' : 'Your learning will show up here'}</div>
-          <div style={{ fontSize: F.small, color: C.muted, marginTop: 6 }}>
-            {candidate ? 'HR will add your lessons soon. We will let you know.' : 'Anything HR assigns appears on this page. You can also pick a course yourself.'}
-          </div>
-          {onBrowse && <div style={{ marginTop: S.lg }}><Button variant="primary" onClick={onBrowse}>Browse the catalogue</Button></div>}
-        </Card>
-      ) : (
-        <div className="ezl-dash" data-side={hasSide ? '1' : '0'}>
-          <div className="ezl-col">
-            <CourseList title="Overdue" items={overdue} onOpen={onOpen} t="critical" order={1} primary readOnly={readOnly} />
-            <CourseList title="Continue learning" items={resume} onOpen={onOpen} order={2} primary={!overdue.length} readOnly={readOnly} />
-            <CourseList title="Mandatory training" items={mandatory} onOpen={onOpen} order={3} readOnly={readOnly} />
-            <CourseList title="Optional learning" items={optional} onOpen={onOpen} order={5} readOnly={readOnly} />
-            {!seen.size && onBrowse && (
-              <div style={{ order: 5 }}>
-                <Card elevation="flat" style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: S.md, flexWrap: 'wrap' }}>
-                  <span style={{ fontSize: F.small, color: C.inkSoft }}>Nothing left to do. Want to learn something new?</span>
-                  <Button onClick={onBrowse}>Browse the catalogue</Button>
-                </Card>
-              </div>
-            )}
-            <CompletedList items={completed} onOpen={onOpen} order={8} />
-          </div>
-          {hasSide && (
-            <div className="ezl-col">
-              <Upcoming items={upcoming} onOpen={onOpen} order={4} />
-              <PathsCard paths={paths} order={6} />
-              <PendingCard items={pending} order={7} />
-            </div>
-          )}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap', marginBottom: 22 }}>
+        <div className="lx-tabs" role="tablist" aria-label="My learning">
+          {tabs.map(t => <button key={t.k} role="tab" aria-selected={t.k === tab} onClick={() => pick(t.k)}>{t.label}{t.n > 0 && <span className="lx-nav-count lx-num">{t.n}</span>}</button>)}
         </div>
-      )}
+        {browse && !embedded && <a className="lx-sec-link" {...linkProps(to.catalog())}><GCompass size={15} /> Find something new</a>}
+      </div>
+      <div key={tab} className="lx-in">{body}</div>
     </div>
   )
 }

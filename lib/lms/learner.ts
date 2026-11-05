@@ -50,13 +50,30 @@ async function candidateLearner(token: string): Promise<Learner | null> {
   }
 }
 
+/** Who an employee is as a learner barely changes, and every click asks: kept for half a minute
+ *  per server instance. Access itself is not cached; essCaller checks the account each time. */
+const LEARNER_TTL_MS = 30_000
+const learnerCache = new Map<string, { at: number; l: Learner }>()
+
 async function employeeLearner(employeeId: string, readOnly: boolean): Promise<Learner | null> {
-  const { data: e } = await sb.from('employees')
-    .select('id, company_id, full_name, department_id, designation, location_id, grade, employment_type, employee_category, team_name')
-    .eq('id', employeeId).maybeSingle()
+  const hit = learnerCache.get(employeeId)
+  if (hit && Date.now() - hit.at < LEARNER_TTL_MS) return { ...hit.l, readOnly }
+  const l = await loadEmployeeLearner(employeeId, readOnly)
+  if (l) learnerCache.set(employeeId, { at: Date.now(), l })
+  return l
+}
+
+async function loadEmployeeLearner(employeeId: string, readOnly: boolean): Promise<Learner | null> {
+  // Side by side: neither read needs the other's answer.
+  const [{ data: e }, first] = await Promise.all([
+    sb.from('employees')
+      .select('id, company_id, full_name, department_id, designation, location_id, grade, employment_type, employee_category, team_name')
+      .eq('id', employeeId).maybeSingle(),
+    sb.from('lms_learners').select('id, company_id').eq('employee_id', employeeId),
+  ])
   if (!e?.company_id) return null
 
-  let { data: rows } = await sb.from('lms_learners').select('id, company_id').eq('employee_id', employeeId)
+  let rows = first.data
   let mine = (rows || []).find((r: any) => r.company_id === e.company_id)
   if (!mine) {
     must(await sb.rpc('lms_ensure_learners', { p_company: e.company_id, p_employees: [employeeId] }))

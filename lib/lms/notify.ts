@@ -6,13 +6,15 @@
 // daily job sends each person ONE digest of everything new or due. Small assignments mail
 // straight away. Every mail respects deliverable(), so seeded addresses are never tried.
 import { notify } from '@/lib/notifications/dispatch'
-import { sendMail } from '@/lib/mail/send'
+import { sendMail, type MailAttachment } from '@/lib/mail/send'
 import { deliverable } from '@/lib/leave/notify'
 import { sb } from './server'
 
 export const appBase = () => (process.env.NEXT_PUBLIC_APP_URL || 'https://app.ezerhrms.com').replace(/\/+$/, '')
+/** EZER Learn itself, not the ESS page that used to hold it: `learnUrl('/team')`. */
+export const learnUrl = (path = '') => `${appBase()}/learning${path}`
 
-export async function notifyPerson(employeeId: string, code: string, title: string, body: string, link = '/ess/learning') {
+export async function notifyPerson(employeeId: string, code: string, title: string, body: string, link = '/learning') {
   await notify({ subjectId: employeeId, code, title, body, link, toOverride: [employeeId] })
 }
 
@@ -43,9 +45,23 @@ export function digestHtml(name: string, sections: { heading: string; lines: Dig
   return `Dear ${esc(name)},<br><br>` + sections.filter(s => s.lines.length).map(s => `<b>${esc(s.heading)}</b>${list(s.lines)}`).join('')
 }
 
-export async function mailLearner(to: string | null | undefined, subject: string, html: string, text: string) {
+export async function mailLearner(to: string | null | undefined, subject: string, html: string, text: string, attachments?: MailAttachment[]) {
   if (!deliverable(to)) return { sent: false, skipped: 'undeliverable' as const }
-  return sendMail({ to: to!, subject, html, text, fromName: 'EZER Learn' })
+  return sendMail({ to: to!, subject, html, text, fromName: 'EZER Learn', attachments })
+}
+
+export interface OverdueLine { name: string; course: string; due: string | null }
+
+/** The manager's mail: who in their team is overdue, on what, and since when. */
+export function teamOverdueHtml(managerName: string, lines: OverdueLine[]) {
+  const late = (iso: string | null) => {
+    if (!iso) return ''
+    const days = Math.max(1, Math.floor((Date.now() - new Date(iso).getTime()) / 86_400_000))
+    return ` · due ${esc(when(iso))}, ${days} day${days === 1 ? '' : 's'} overdue`
+  }
+  return `Dear ${esc(managerName)},<br><br>These people in your team have mandatory or assigned training past its due date:` +
+    `<ul style="margin:8px 0 14px;padding-left:20px">${lines.map(l => `<li style="margin:3px 0"><b>${esc(l.name)}</b> — ${esc(l.course)}<span style="color:#b91c1c">${late(l.due)}</span></li>`).join('')}</ul>` +
+    'A word from you usually helps. You can see where each of them is from My team in EZER Learn.'
 }
 
 /** The learner's manager, for an escalation. */

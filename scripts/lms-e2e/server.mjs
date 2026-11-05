@@ -70,6 +70,8 @@ function parseSelect(s) {
   for (const raw of splitTop(String(s || '*').replace(/\s+/g, ''))) {
     const m = raw.match(/^(?:([a-zA-Z0-9_]+):)?([a-zA-Z0-9_]+)(?:!([a-zA-Z0-9_]+))?\((.*)\)$/)
     if (m) embeds.push({ alias: m[1] || m[2], table: m[2], hint: m[3], cols: m[4] })
+    // A JSON field as text, PostgREST's col->>key, named by its alias or its key.
+    else if (/->>/.test(raw)) { const j = raw.match(/^(?:([a-zA-Z0-9_]+):)?([a-zA-Z0-9_]+)->>([a-zA-Z0-9_]+)$/); if (j) cols.push(`${q(j[2])}->>'${j[3]}' AS ${q(j[1] || j[3])}`) }
     else { const a = raw.match(/^(?:([a-zA-Z0-9_]+):)?([a-zA-Z0-9_*]+)$/); if (a) cols.push(a[2] === '*' ? '*' : a[1] ? `${q(a[2])} AS ${q(a[1])}` : q(a[2])) }
   }
   return { cols, embeds }

@@ -10,6 +10,10 @@ In the Supabase SQL Editor, in this order. Each one is safe to run twice.
 2. `supabase/migrations/207_lms_engine.sql`
 3. `supabase/migrations/208_lms_roles.sql`
 4. `supabase/verify/208_lms_verify.sql`: read-only, and every row must say PASS
+5. `supabase/migrations/211_lms_live_and_scorm.sql`: webinars and SCORM (two new tables,
+   three new columns, two wider CHECK lists). It also moves "tell the manager after" from 7
+   overdue days to 1, for companies still on the old default only. Without it, Live sessions
+   and SCORM uploads say this migration is needed; everything else works.
 
 206 and 207 only add `lms_*` tables and functions and one storage bucket. 208 adds three
 roles to `ess_roles` and new rows to `role_permissions`. It uses `ON CONFLICT DO NOTHING`,

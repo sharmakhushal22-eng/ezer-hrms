@@ -8,7 +8,7 @@
 // (migration 207), and the two meet only at the tables.
 
 // ── Shapes ──────────────────────────────────────────────────────────────────
-export type LessonKind = 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'SLIDES' | 'ARTICLE' | 'LINK' | 'ASSESSMENT'
+export type LessonKind = 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'SLIDES' | 'ARTICLE' | 'LINK' | 'ASSESSMENT' | 'SCORM' | 'LIVE'
 export type QuestionKind = 'SINGLE' | 'MULTI' | 'TRUE_FALSE' | 'SHORT_TEXT'
 export type OrderMode = 'SEQUENTIAL' | 'MODULE_SEQUENTIAL' | 'FREE'
 export type CompletionMode = 'ALL_REQUIRED' | 'PERCENT' | 'FINAL_ONLY'
@@ -562,8 +562,8 @@ export function publishProblems(
   const quizById = new Map(quizzes.map(q => [q.id, q]))
   for (const l of lessons) {
     const t = `Lesson "${l.title}"`
-    if ((l.kind === 'VIDEO' || l.kind === 'AUDIO' || l.kind === 'DOCUMENT' || l.kind === 'SLIDES')) {
-      if (!l.asset_id) out.push(`${t} has no file.`)
+    if ((l.kind === 'VIDEO' || l.kind === 'AUDIO' || l.kind === 'DOCUMENT' || l.kind === 'SLIDES' || l.kind === 'SCORM')) {
+      if (!l.asset_id) out.push(l.kind === 'SCORM' ? `${t} has no SCORM package.` : `${t} has no file.`)
       else if (l.asset_ready === false) out.push(`${t}: its file has not finished uploading.`)
     }
     if (l.kind === 'ARTICLE' && !l.body?.trim()) out.push(`${t} has no text.`)

@@ -3,17 +3,17 @@
 //
 // A serverless request body stops at 4.5 MB, so no file travels through our routes. The route
 // checks permission and hands back a signed token; the bytes go directly to the bucket; and
-// the route then confirms they arrived. Video and audio use TUS, which resumes where it left
-// off after a dropped connection, in the exact 6 MB chunks Supabase requires.
+// the route then confirms they arrived. Video, audio and SCORM packages use TUS, which resumes
+// where it left off after a dropped connection, in the exact 6 MB chunks Supabase requires.
 import { Upload } from 'tus-js-client'
 import { supabase } from '@/lib/supabase'
 import { inspectMp4 } from './mp4-check'
 import { lmsApi } from './client'
 
-export type AssetKind = 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'IMAGE'
+export type AssetKind = 'VIDEO' | 'AUDIO' | 'DOCUMENT' | 'IMAGE' | 'SCORM'
 
 export interface UploadedAsset { id: string; kind: string; original_name: string; mime_type: string; size_bytes: number; duration_s: number | null; status: string }
-export interface UploadOptions { kind: AssetKind; companyId?: string | null; onProgress?: (pct: number) => void }
+export interface UploadOptions { kind: AssetKind; companyId?: string | null; onProgress?: (pct: number) => void; purpose?: 'recording' }
 
 const TUS_CHUNK = 6 * 1024 * 1024
 
@@ -44,14 +44,14 @@ function probeMedia(file: File, kind: 'VIDEO' | 'AUDIO'): Promise<{ duration: nu
   })
 }
 
-function tusUpload(file: File, start: { tus_endpoint: string; token: string; bucket: string; path: string }, onProgress?: (pct: number) => void): Promise<void> {
+function tusUpload(file: File, start: { tus_endpoint: string; token: string; bucket: string; path: string }, contentType: string, onProgress?: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     new Upload(file, {
       endpoint: start.tus_endpoint,
       chunkSize: TUS_CHUNK,
       retryDelays: [0, 3000, 5000, 10000, 20000],
       headers: { 'x-signature': start.token },
-      metadata: { bucketName: start.bucket, objectName: start.path, contentType: file.type, cacheControl: '31536000' },
+      metadata: { bucketName: start.bucket, objectName: start.path, contentType: contentType || file.type, cacheControl: '31536000' },
       removeFingerprintOnSuccess: true,
       uploadDataDuringCreation: false,
       onError: e => reject(new Error(`The upload stopped: ${e.message || 'connection lost'}. Choose the file again to resume.`)),
@@ -69,10 +69,15 @@ export async function uploadLmsFile(file: File, o: UploadOptions): Promise<Uploa
   }
   if (o.kind === 'VIDEO' || o.kind === 'AUDIO') ({ duration, poster } = await probeMedia(file, o.kind))
 
-  const mime = file.type || (file.name.toLowerCase().endsWith('.pdf') ? 'application/pdf' : '')
-  const start = await lmsApi('/api/lms/admin/assets', { company_id: o.companyId || undefined, kind: o.kind, name: file.name, mime, size: file.size, duration_s: duration })
+  // A .vtt captions file is stored as plain text: the bucket's allowed types (migration 206) do
+  // not list text/vtt, and the player reads the words itself rather than trusting the type.
+  const lower = file.name.toLowerCase()
+  // A zip is application/zip to the bucket whatever the browser calls it (Windows says x-zip-compressed).
+  const mime = lower.endsWith('.vtt') ? 'text/plain' : lower.endsWith('.zip') ? 'application/zip' : file.type || (lower.endsWith('.pdf') ? 'application/pdf' : '')
+  const start = await lmsApi('/api/lms/admin/assets', { company_id: o.companyId || undefined, kind: o.kind, name: file.name, mime, size: file.size, duration_s: duration, purpose: o.purpose })
   try {
-    if (o.kind === 'VIDEO' || o.kind === 'AUDIO') await tusUpload(file, start, o.onProgress)
+    // Big files resume after a dropped connection: video, audio and SCORM packages.
+    if (o.kind === 'VIDEO' || o.kind === 'AUDIO' || o.kind === 'SCORM') await tusUpload(file, start, mime, o.onProgress)
     else {
       const { error } = await supabase.storage.from(start.bucket).uploadToSignedUrl(start.path, start.token, file, { contentType: mime })
       if (error) throw error

@@ -1,60 +1,45 @@
 'use client'
-// components/learning/Catalogue.tsx — what this person may take, and a page for each course.
+// components/learning/Catalogue.tsx — Explore: every course this person may take, a spotlight,
+// categories, search, filters and sorting, and the learning paths that bundle courses together.
 // Filtering is on the client: the route already returned only what they are allowed to see.
 import { useCallback, useEffect, useMemo, useState } from 'react'
-import { C, F, W, S, R, E, Badge, Button, Card, Input, Select, Skeleton, numeric, IconCheck, IconLock, IconSearch } from '@/lib/ui'
+import { IconSearch } from '@/lib/ui'
 import { lmsApi } from '@/lib/lms/client'
-import { CalmMessage, CourseTile, IconBack, IconStar, KIND_WORD, KindIcon, LEVEL, Problem, SectionHead, STATUS, Stars, dayWords, durationWords, errorWords, plural, type LearnPath } from './shared'
+import { navigate, to } from './app/router'
+import { CourseCard, isNew, type CatCourse } from './CourseCard'
+import { CourseArt, EmptyState, IconStar, KIND_WORD, LEVEL, Oops, Skel, durationWords, errorWords, hueOf, plural, type LearnPath } from './shared'
+import { GArrowRight, GClock, GCompass, GLayers, GSort, GSparkle, GUsers } from './glyphs'
+import { Aurora } from './motion/Aurora'
+import { Carousel } from './motion/Carousel'
+import { CountUp } from './motion/CountUp'
+import { Scroller } from './motion/Scroller'
+import { viewTransition } from './motion/transition'
 
-interface Mine { id: string; status: string; progress_pct?: number; completed_at?: string | null; expires_at?: string | null }
-interface CatCourse {
-  id: string; title: string; summary: string | null; category_id: string | null; difficulty: string | null; est_minutes: number | null
-  tags: string[] | null; skills: string[] | null; enrolment_mode: string; is_compliance: boolean; is_featured: boolean
-  thumbnail: string | null; rating: number | null; ratings: number; mine: Mine | null
-}
-interface CatPath {
+export type { CatCourse }
+export interface CatPath {
   id: string; title: string; summary: string | null; order_mode: string; enrolment_mode: string
+  mine?: { path_id: string; status: string; progress_pct: number } | null
   courses?: { id: string; title: string; is_required: boolean }[]
 }
-interface Cat { courses: CatCourse[]; categories: { id: string; name: string }[]; recommended?: CatCourse[]; paths: CatPath[] }
-interface OutlineLesson { id: string; title: string; kind: string; est_minutes: number | null; has_quiz: boolean }
-interface OutlineModule { id: string; title: string; lessons: OutlineLesson[] }
-interface Info {
-  course: { id: string; title: string; summary: string | null; description: string | null; difficulty: string | null; est_minutes: number | null; language: string | null; skills: string[] | null; enrolment_mode: string; is_compliance: boolean; validity_months: number | null; certificate_enabled: boolean; thumbnail: string | null }
-  outline: OutlineModule[]; prerequisites: { id: string; title: string }[]; reviews: { rating: number; comment: string | null; created_at: string }[]; mine: Mine | null
-}
+export interface Catalog { courses: CatCourse[]; categories: { id: string; name: string }[]; recommended?: CatCourse[]; paths: CatPath[] }
 
 const DURATIONS: Record<string, { label: string; test: (m: number) => boolean }> = {
-  short: { label: 'Up to 15 min', test: m => m <= 15 },
+  short: { label: 'Under 15 min', test: m => m <= 15 },
   medium: { label: '15 to 60 min', test: m => m > 15 && m <= 60 },
   long: { label: 'Over an hour', test: m => m > 60 },
 }
-
-function CourseCard({ c, onInfo }: { c: CatCourse; onInfo: (id: string) => void }) {
-  const st = c.mine ? STATUS[c.mine.status] : null
-  const mins = durationWords(c.est_minutes)
-  return (
-    <div role="button" tabIndex={0} className="ezl-hover" onClick={() => onInfo(c.id)}
-      onKeyDown={e => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); onInfo(c.id) } }}
-      style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg, boxShadow: E.flat, overflow: 'hidden', cursor: 'pointer', display: 'flex', flexDirection: 'column', minWidth: 0 }}>
-      <CourseTile src={c.thumbnail} ratio="16 / 6" radius={0} size={24} />
-      <div style={{ padding: S.md, display: 'grid', gap: 6, flex: 1, alignContent: 'start' }}>
-        <div style={{ fontWeight: W.semi, fontSize: F.body, lineHeight: 1.3 }}>{c.title}</div>
-        {c.summary && <div className="ezl-clamp2" style={{ fontSize: F.small, color: C.muted, lineHeight: 1.45 }}>{c.summary}</div>}
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 10px', fontSize: F.tiny, color: C.muted, alignItems: 'center', marginTop: 2, ...numeric }}>
-          {c.rating != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3, color: C.inkSoft }}><span style={{ color: C.warning }}><IconStar size={13} filled /></span>{c.rating.toFixed(1)}</span>}
-          {mins && <span>{mins}</span>}
-          {c.difficulty && <span>{LEVEL[c.difficulty]}</span>}
-        </div>
-        {(c.is_compliance || st) && (
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 2 }}>
-            {c.is_compliance && <Badge t="info" size="sm">Compliance</Badge>}
-            {st && <Badge t={st.t} size="sm">{st.label}</Badge>}
-          </div>
-        )}
-      </div>
-    </div>
-  )
+const SORTS: Record<string, { label: string; fn: (a: CatCourse, b: CatCourse) => number }> = {
+  best: { label: 'Best match', fn: (a, b) => (b.recommended_score || 0) - (a.recommended_score || 0) || Number(b.is_featured) - Number(a.is_featured) || (b.learners || 0) - (a.learners || 0) },
+  new: { label: 'Newest', fn: (a, b) => String(b.published_at || '').localeCompare(String(a.published_at || '')) },
+  popular: { label: 'Most taken', fn: (a, b) => (b.learners || 0) - (a.learners || 0) },
+  rating: { label: 'Highest rated', fn: (a, b) => (b.rating || 0) - (a.rating || 0) || b.ratings - a.ratings },
+  short: { label: 'Shortest first', fn: (a, b) => (a.est_minutes || 9999) - (b.est_minutes || 9999) },
+  az: { label: 'A to Z', fn: (a, b) => a.title.localeCompare(b.title) },
+}
+const STATUS_FILTER: Record<string, { label: string; test: (c: CatCourse) => boolean }> = {
+  open: { label: 'Not started yet', test: c => !c.mine },
+  going: { label: 'In progress', test: c => !!c.mine && ['IN_PROGRESS', 'NOT_STARTED', 'FAILED'].includes(c.mine.status) },
+  done: { label: 'Completed', test: c => c.mine?.status === 'COMPLETED' },
 }
 
 function PathCard({ p, mine, readOnly, onEnrolled }: { p: CatPath; mine?: LearnPath; readOnly?: boolean; onEnrolled: () => void }) {
@@ -65,255 +50,247 @@ function PathCard({ p, mine, readOnly, onEnrolled }: { p: CatPath; mine?: LearnP
     try { await lmsApi('/api/lms/me/enrol', { path_id: p.id }); onEnrolled() }
     catch (e) { setErr(errorWords(e)) } finally { setBusy(false) }
   }
+  const pct = Math.round(Number(mine?.progress_pct) || 0)
   return (
-    <Card pad={S.md} elevation="flat" style={{ display: 'grid', gap: 6, alignContent: 'start' }}>
-      <div style={{ fontWeight: W.semi, fontSize: F.body }}>{p.title}</div>
-      {p.summary && <div className="ezl-clamp2" style={{ fontSize: F.small, color: C.muted, lineHeight: 1.45 }}>{p.summary}</div>}
-      <div style={{ fontSize: F.tiny, color: C.muted }}>{p.order_mode === 'SEQUENTIAL' ? 'Courses open one after another' : 'Take the courses in any order'}</div>
-      {!!p.courses?.length && (
-        <ol style={{ margin: 0, paddingLeft: 18, fontSize: F.tiny, color: C.inkSoft, lineHeight: 1.6 }}>
-          {p.courses.map(c => <li key={c.id}>{c.title}</li>)}
-        </ol>
-      )}
-      <div style={{ marginTop: 4 }}>
-        {mine ? <Badge t={mine.status === 'COMPLETED' ? 'positive' : 'brand'} size="sm">{mine.status === 'COMPLETED' ? 'Completed' : `Enrolled · ${Math.round(Number(mine.progress_pct) || 0)}%`}</Badge>
-          : p.enrolment_mode === 'SELF' ? <Button size="sm" disabled={busy || readOnly} onClick={enrol}>{busy ? 'Enrolling' : 'Enrol in this path'}</Button>
-          : <span style={{ fontSize: F.tiny, color: C.muted }}>HR assigns this path</span>}
+    <div className="lx-panel lx-in" style={{ display: 'grid', alignContent: 'start' }}>
+      <div className="lx-art" data-gen="1" data-h={hueOf(p.id)} style={{ height: 96 }}>
+        <div className="lx-art-glyph"><span><GLayers size={22} /></span><div className="lx-art-word">Learning path</div></div>
       </div>
-      {err && <div role="alert" style={{ fontSize: F.tiny, color: C.critical }}>{err}</div>}
-    </Card>
-  )
-}
-
-function CourseAction({ info, readOnly, busy, onEnrol, onOpen }: { info: Info; readOnly?: boolean; busy: boolean; onEnrol: () => void; onOpen: (id: string) => void }) {
-  const mode = info.course.enrolment_mode
-  const mine = info.mine
-  const can = mode !== 'ASSIGN_ONLY'
-  const big = { size: 'lg' as const, full: true }
-  if (mine?.status === 'PENDING_APPROVAL') return <Hint icon={<IconCheck size={15} />}>Request sent. Your manager will decide, and you will hear back in your notifications.</Hint>
-  if (mine?.status === 'NOT_STARTED') return <Button variant="primary" {...big} onClick={() => onOpen(mine.id)}>{readOnly ? 'View course' : 'Start course'}</Button>
-  if (mine && ['IN_PROGRESS', 'FAILED'].includes(mine.status)) return <Button variant="primary" {...big} onClick={() => onOpen(mine.id)}>{readOnly ? 'View course' : 'Continue'}</Button>
-  if (mine?.status === 'COMPLETED') return (
-    <div style={{ display: 'grid', gap: S.sm }}>
-      <Button variant="primary" {...big} onClick={() => onOpen(mine.id)}>View course</Button>
-      {can && <Button full disabled={busy || readOnly} onClick={onEnrol}>{busy ? 'Starting again' : 'Retake'}</Button>}
-    </div>
-  )
-  if (!can) return <Hint icon={<IconLock size={15} />}>HR assigns this course. Ask them if you need it.</Hint>
-  const asks = mode === 'APPROVAL'
-  const word = mine ? (asks ? 'Ask to retake' : 'Retake') : asks ? 'Request access' : 'Enrol'
-  return (
-    <div style={{ display: 'grid', gap: S.sm }}>
-      <Button variant="primary" {...big} disabled={busy || readOnly} onClick={onEnrol}>{busy ? 'One moment' : word}</Button>
-      {asks && <div style={{ fontSize: F.tiny, color: C.muted, textAlign: 'center' }}>Your manager approves this first.</div>}
-    </div>
-  )
-}
-
-function Hint({ icon, children }: { icon: React.ReactNode; children: React.ReactNode }) {
-  return <div style={{ display: 'flex', gap: S.sm, fontSize: F.small, color: C.inkSoft, lineHeight: 1.5 }}><span style={{ color: C.muted, marginTop: 2 }}>{icon}</span><span>{children}</span></div>
-}
-
-function Outline({ modules }: { modules: OutlineModule[] }) {
-  return (
-    <div style={{ display: 'grid', gap: S.md }}>
-      {modules.map((m, i) => (
-        <div key={m.id}>
-          <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, marginBottom: 4 }}>{m.title || `Module ${i + 1}`}</div>
-          <div style={{ border: `1px solid ${C.line}`, borderRadius: R.md, overflow: 'hidden' }}>
-            {(m.lessons || []).map((l, n) => (
-              <div key={l.id} style={{ display: 'flex', alignItems: 'center', gap: S.sm, padding: `${S.sm}px ${S.md}px`, borderTop: n ? `1px solid ${C.line}` : 0, fontSize: F.small, color: C.inkSoft }}>
-                <span style={{ color: C.muted }}><KindIcon kind={l.kind} /></span>
-                <span style={{ flex: 1, minWidth: 0 }}>{l.title}</span>
-                <span style={{ fontSize: F.tiny, color: C.muted, flexShrink: 0, ...numeric }}>{[l.has_quiz && l.kind !== 'ASSESSMENT' ? 'Quiz' : KIND_WORD[l.kind], durationWords(l.est_minutes)].filter(Boolean).join(' · ')}</span>
-              </div>
+      <div style={{ padding: '16px 18px', display: 'grid', gap: 10 }}>
+        <div style={{ fontWeight: 750, fontSize: 16 }}>{p.title}</div>
+        {p.summary && <div className="lx-clamp2" style={{ fontSize: 13.5, color: 'var(--ez-muted)', lineHeight: 1.5 }}>{p.summary}</div>}
+        {!!p.courses?.length && (
+          <ol style={{ margin: 0, padding: 0, listStyle: 'none', display: 'grid', gap: 6 }}>
+            {p.courses.map((c, i) => (
+              <li key={c.id} style={{ display: 'flex', gap: 10, alignItems: 'center', fontSize: 13.5, color: 'var(--ez-ink-soft)' }}>
+                <span className="lx-num" style={{ width: 22, height: 22, borderRadius: '50%', display: 'grid', placeItems: 'center', fontSize: 11, fontWeight: 750, background: 'var(--ez-sunken)', border: '1px solid var(--ez-line)', flexShrink: 0 }}>{i + 1}</span>
+                <span style={{ minWidth: 0 }}>{c.title}{!c.is_required && <span style={{ color: 'var(--ez-muted)' }}> · optional</span>}</span>
+              </li>
             ))}
+          </ol>
+        )}
+        <div style={{ fontSize: 12.5, color: 'var(--ez-muted)' }}>{p.order_mode === 'SEQUENTIAL' ? 'Courses open one after another' : 'Take the courses in any order'}</div>
+        {mine ? (
+          <div style={{ display: 'grid', gap: 6 }}>
+            <div className="lx-bar" data-done={mine.status === 'COMPLETED' ? '1' : '0'}><i style={{ width: `${mine.status === 'COMPLETED' ? 100 : pct}%` }} /></div>
+            <span style={{ fontSize: 12.5, fontWeight: 650, color: mine.status === 'COMPLETED' ? 'var(--ez-positive)' : 'var(--ez-brand)' }}>{mine.status === 'COMPLETED' ? 'Completed' : `Enrolled · ${pct}% done`}</span>
           </div>
-        </div>
-      ))}
-    </div>
-  )
-}
-
-function CourseInfo({ id, card, readOnly, onBack, onOpen, onInfo, onChanged }: { id: string; card?: CatCourse; readOnly?: boolean; onBack: () => void; onOpen: (id: string) => void; onInfo: (id: string) => void; onChanged: () => void }) {
-  const [info, setInfo] = useState<Info | null>(null)
-  const [err, setErr] = useState('')
-  const [busy, setBusy] = useState(false)
-
-  const load = useCallback(() => {
-    setErr('')
-    return lmsApi<Info>(`/api/lms/me/catalog/${id}`).then(setInfo).catch(e => setErr(errorWords(e)))
-  }, [id])
-  useEffect(() => { setInfo(null); load() }, [load])
-
-  const enrol = async () => {
-    setBusy(true); setErr('')
-    try {
-      const r = await lmsApi<{ id: string; status: string }>('/api/lms/me/enrol', { course_id: id })
-      onChanged()
-      if (r.status === 'PENDING_APPROVAL') await load()
-      else onOpen(r.id)
-    } catch (e) { setErr(errorWords(e)) } finally { setBusy(false) }
-  }
-
-  const back = <button className="ezl-linkbtn" style={{ fontSize: F.small }} onClick={onBack}><IconBack size={15} /> Catalogue</button>
-  if (err && !info) return <div style={{ display: 'grid', gap: S.md }}>{back}<Problem message={err} onRetry={load} /></div>
-  if (!info) return <div style={{ display: 'grid', gap: S.md }}>{back}<Skeleton h={180} r={R.lg} /><Skeleton w="60%" /><Skeleton w="80%" /></div>
-
-  const c = info.course
-  const facts = [durationWords(c.est_minutes), c.difficulty && LEVEL[c.difficulty], c.language, c.validity_months ? `Renews every ${plural(c.validity_months, 'month')}` : null, c.certificate_enabled ? 'Certificate on completion' : null].filter(Boolean) as string[]
-  const lessons = (info.outline || []).reduce((n, m) => n + (m.lessons?.length || 0), 0)
-  return (
-    <div className="ez-rise" style={{ display: 'grid', gap: S.lg }}>
-      {back}
-      <div className="ezl-info">
-        <div style={{ display: 'grid', gap: S.lg, minWidth: 0 }}>
-          <div>
-            <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
-              {c.is_compliance && <Badge t="info" size="sm">Compliance</Badge>}
-              {info.mine && STATUS[info.mine.status] && <Badge t={STATUS[info.mine.status].t} size="sm">{STATUS[info.mine.status].label}</Badge>}
-            </div>
-            <h2 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, letterSpacing: '-.02em', lineHeight: 1.2 }}>{c.title}</h2>
-            {c.summary && <p style={{ margin: '6px 0 0', fontSize: F.body, color: C.inkSoft, lineHeight: 1.55 }}>{c.summary}</p>}
-            <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: F.small, color: C.muted, alignItems: 'center', ...numeric }}>
-              {card?.rating != null && <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}><Stars value={card.rating} />{card.rating.toFixed(1)} ({card.ratings})</span>}
-              {facts.map(f => <span key={f}>{f}</span>)}
-            </div>
-          </div>
-          {c.description && <section><SectionHead title="About this course" /><div style={{ fontSize: F.body, color: C.inkSoft, lineHeight: 1.65, whiteSpace: 'pre-wrap' }}>{c.description}</div></section>}
-          {!!c.skills?.length && (
-            <section>
-              <SectionHead title="Skills you will gain" />
-              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{c.skills.map(s => <Badge key={s}>{s}</Badge>)}</div>
-            </section>
-          )}
-          <section>
-            <SectionHead title="What is inside" hint={plural(lessons, 'lesson')} />
-            <Outline modules={info.outline || []} />
-          </section>
-          {info.prerequisites.length > 0 && (
-            <section>
-              <SectionHead title="Finish these first" />
-              <div style={{ display: 'grid', gap: 4, justifyItems: 'start' }}>
-                {info.prerequisites.map(p => <button key={p.id} className="ezl-linkbtn" style={{ fontSize: F.small }} onClick={() => onInfo(p.id)}>{p.title}</button>)}
-              </div>
-            </section>
-          )}
-          {info.reviews.length > 0 && (
-            <section>
-              <SectionHead title="What others said" />
-              <div style={{ display: 'grid', gap: S.sm }}>
-                {info.reviews.map((r, i) => (
-                  <Card key={i} pad={S.md} elevation="flat">
-                    <div style={{ display: 'flex', justifyContent: 'space-between', gap: S.sm, alignItems: 'center' }}><Stars value={r.rating} /><span style={{ fontSize: F.tiny, color: C.muted }}>{dayWords(r.created_at)}</span></div>
-                    <div style={{ marginTop: 6, fontSize: F.small, color: C.inkSoft, lineHeight: 1.55 }}>{r.comment}</div>
-                  </Card>
-                ))}
-              </div>
-            </section>
-          )}
-        </div>
-        <div className="ezl-info-side">
-          <Card pad={S.md} style={{ display: 'grid', gap: S.md }}>
-            {c.thumbnail && <div style={{ borderRadius: R.md, overflow: 'hidden' }}><CourseTile src={c.thumbnail} ratio="16 / 9" /></div>}
-            <CourseAction info={info} readOnly={readOnly} busy={busy} onEnrol={enrol} onOpen={onOpen} />
-            {err && <div role="alert" style={{ fontSize: F.small, color: C.critical }}>{err}</div>}
-          </Card>
-        </div>
+        ) : p.enrolment_mode === 'SELF'
+          ? <button className="lx-btn lx-btn--primary" disabled={busy || readOnly} onClick={enrol}>{busy ? 'Enrolling…' : 'Enrol in this path'}</button>
+          : <span style={{ fontSize: 13, color: 'var(--ez-muted)' }}>HR assigns this path</span>}
+        {err && <div role="alert" style={{ fontSize: 13, color: 'var(--ez-critical)' }}>{err}</div>}
       </div>
     </div>
   )
 }
 
-export default function Catalogue({ infoId, myPaths, readOnly, onInfo, onOpen, onChanged }: {
-  infoId: string | null
+function Spotlight({ c, category, onOpen }: { c: CatCourse; category?: string; onOpen: () => void }) {
+  return (
+    <button className="lx-feature lx-in" onClick={onOpen}>
+      <CourseArt src={c.thumbnail} id={c.id} title={c.title} kind={(c.kinds || [])[0]} />
+      <div className="lx-feature-body">
+        <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+          <span className="lx-tag lx-tag--gold"><GSparkle size={12} /> Spotlight</span>
+          {category && <span className="lx-tag">{category}</span>}
+          {c.is_compliance && <span className="lx-tag lx-tag--info">Compliance</span>}
+        </span>
+        <h3>{c.title}</h3>
+        {c.summary && <p className="lx-clamp3" style={{ color: 'var(--ez-muted)', fontSize: 15, lineHeight: 1.6 }}>{c.summary}</p>}
+        <div className="lx-cc-meta lx-num" style={{ fontSize: 13.5 }}>
+          {c.rating != null && <span className="lx-rating"><IconStar size={14} filled />{c.rating.toFixed(1)}</span>}
+          {!!c.est_minutes && <span><GClock size={14} />{durationWords(c.est_minutes)}</span>}
+          {!!c.lesson_count && <span><GLayers size={14} />{plural(c.lesson_count, 'lesson')}</span>}
+          {!!c.learners && <span><GUsers size={14} />{plural(c.learners, 'learner')}</span>}
+          {c.difficulty && <span>{LEVEL[c.difficulty]}</span>}
+        </div>
+        <span className="lx-btn lx-btn--primary" style={{ justifySelf: 'start' }}>{c.mine ? 'Go to the course' : 'View the course'} <GArrowRight size={16} /></span>
+      </div>
+    </button>
+  )
+}
+
+export default function Catalogue({ cat: given, err: givenErr, myPaths, query, readOnly, onReload, onChanged, onOpenCourse }: {
+  /** Loaded by the app shell. Absent: this screen loads it itself (the embedded portal). */
+  cat?: Catalog | null
+  err?: string
   myPaths: LearnPath[]
+  query?: URLSearchParams
   readOnly?: boolean
-  onInfo: (courseId: string | null) => void
-  onOpen: (enrollmentId: string) => void
+  onReload?: () => void
   onChanged: () => void
+  /** Open a course page; by default the app's own address. */
+  onOpenCourse?: (courseId: string) => void
 }) {
-  const [cat, setCat] = useState<Cat | null>(null)
-  const [err, setErr] = useState('')
-  const [q, setQ] = useState('')
-  const [category, setCategory] = useState('')
+  const [own, setOwn] = useState<Catalog | null>(null)
+  const [ownErr, setOwnErr] = useState('')
+  const selfLoad = given === undefined
+  const loadOwn = useCallback(() => { setOwnErr(''); lmsApi<Catalog>('/api/lms/me/catalog').then(setOwn).catch(e => setOwnErr(errorWords(e))) }, [])
+  useEffect(() => { if (selfLoad) loadOwn() }, [selfLoad, loadOwn])
+  const cat = selfLoad ? own : given
+  const err = selfLoad ? ownErr : givenErr || ''
+  const reload = selfLoad ? loadOwn : onReload
+
+  const [q, setQ] = useState(query?.get('q') || '')
+  const [category, setCategory] = useState(query?.get('cat') || '')
   const [level, setLevel] = useState('')
   const [length, setLength] = useState('')
-  const [tag, setTag] = useState('')
+  const [kind, setKind] = useState('')
+  const [status, setStatus] = useState('')
+  const [onlyMust, setOnlyMust] = useState(false)
+  const [sort, setSort] = useState('best')
+  // The search box in the top bar lands here with ?q=.
+  const qs = query?.toString() || ''
+  useEffect(() => { const p = new URLSearchParams(qs); setQ(p.get('q') || ''); if (p.get('cat')) setCategory(p.get('cat') || '') }, [qs])
 
-  const load = useCallback(() => {
-    setErr('')
-    lmsApi<Cat>('/api/lms/me/catalog').then(setCat).catch(e => setErr(errorWords(e)))
-  }, [])
-  useEffect(() => { load() }, [load])
-
-  const tags = useMemo(() => [...new Set((cat?.courses || []).flatMap(c => c.tags || []))].sort((a, b) => a.localeCompare(b)), [cat])
+  const open = (id: string) => (onOpenCourse ? onOpenCourse(id) : navigate(to.course(id)))
+  const catName = useMemo(() => new Map((cat?.categories || []).map(c => [c.id, c.name])), [cat])
+  const counts = useMemo(() => {
+    const m = new Map<string, number>()
+    for (const c of cat?.courses || []) if (c.category_id) m.set(c.category_id, (m.get(c.category_id) || 0) + 1)
+    return m
+  }, [cat])
+  const kinds = useMemo(() => [...new Set((cat?.courses || []).flatMap(c => c.kinds || []))].filter(k => k !== 'ASSESSMENT'), [cat])
   const levels = useMemo(() => Object.keys(LEVEL).filter(l => (cat?.courses || []).some(c => c.difficulty === l)), [cat])
-  const filtering = !!(q.trim() || category || level || length || tag)
+  const filtering = !!(q.trim() || category || level || length || kind || status || onlyMust)
+
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return (cat?.courses || []).filter(c => {
       if (category && c.category_id !== category) return false
       if (level && c.difficulty !== level) return false
-      if (tag && !(c.tags || []).includes(tag)) return false
+      if (kind && !(c.kinds || []).includes(kind)) return false
+      if (status && !STATUS_FILTER[status].test(c)) return false
+      if (onlyMust && !c.is_compliance) return false
       if (length && !(c.est_minutes != null && DURATIONS[length].test(c.est_minutes))) return false
       if (!needle) return true
-      return [c.title, c.summary, ...(c.tags || []), ...(c.skills || [])].some(s => String(s || '').toLowerCase().includes(needle))
-    })
-  }, [cat, q, category, level, length, tag])
+      return [c.title, c.summary, c.code, catName.get(c.category_id || ''), ...(c.tags || []), ...(c.skills || [])].some(s => String(s || '').toLowerCase().includes(needle))
+    }).sort(SORTS[sort].fn)
+  }, [cat, q, category, level, length, kind, status, onlyMust, sort, catName])
 
-  if (infoId) return <CourseInfo key={infoId} id={infoId} card={cat?.courses.find(c => c.id === infoId)} readOnly={readOnly} onBack={() => onInfo(null)} onOpen={onOpen} onInfo={onInfo} onChanged={() => { onChanged(); load() }} />
-  if (err) return <Problem message={err} onRetry={load} />
-  if (!cat) return <div className="ezl-grid">{[0, 1, 2, 3].map(i => <Skeleton key={i} h={210} r={R.lg} />)}</div>
-  if (!cat.courses.length && !cat.paths.length) return <CalmMessage title="The catalogue is empty for now">When HR publishes courses you can take, they will appear here.</CalmMessage>
+  const setSearch = (v: string) => {
+    setQ(v)
+    if (!onOpenCourse) navigate(to.catalog(v.trim() ? { q: v.trim(), ...(category ? { cat: category } : {}) } : category ? { cat: category } : undefined), { replace: true, keepScroll: true })
+  }
+  const pickCat = (id: string) => {
+    setCategory(id)
+    if (!onOpenCourse) navigate(to.catalog({ ...(q.trim() ? { q: q.trim() } : {}), ...(id ? { cat: id } : {}) }), { replace: true, keepScroll: true })
+  }
+  const clear = () => { setQ(''); setLevel(''); setLength(''); setKind(''); setStatus(''); setOnlyMust(false); pickCat('') }
+  // A filter, sort or category change glides: the cards that stay move to their new places, the
+  // rest fade (motion/transition.ts; each card in the grid carries its own transition name).
+  // Typing in the search box does not, it would restart on every key.
+  const glide = (change: () => void) => viewTransition(change, 'filter')
 
-  const reco = (cat.recommended || []).slice(0, 3)
-  const clear = () => { setQ(''); setCategory(''); setLevel(''); setLength(''); setTag('') }
+  if (err && !cat) return <Oops message={err} onRetry={reload} />
+  if (!cat) {
+    return (
+      <div style={{ display: 'grid', gap: 24 }}>
+        <Skel h={150} r={22} />
+        <Skel h={44} />
+        <div className="lx-grid">{[0, 1, 2, 3, 4, 5].map(i => <Skel key={i} h={300} r={16} />)}</div>
+      </div>
+    )
+  }
+  if (!cat.courses.length && !cat.paths.length) {
+    return <EmptyState title="The catalogue is empty for now" icon={<GCompass size={34} />}>When HR publishes courses you can take, they will appear here.</EmptyState>
+  }
+
+  const spotlight = !filtering ? [...cat.courses].filter(c => c.is_featured).sort(SORTS.best.fn).slice(0, 5) : []
+  const newCount = cat.courses.filter(isNew).length
   return (
-    <div className="ez-rise" style={{ display: 'grid', gap: S.xl }}>
-      <div className="ezl-filters">
-        <div style={{ position: 'relative', minWidth: 0 }}>
-          <span style={{ position: 'absolute', left: 11, top: '50%', transform: 'translateY(-50%)', color: C.faint, pointerEvents: 'none' }}><IconSearch size={15} /></span>
-          <Input type="search" aria-label="Search courses" placeholder="Search courses" value={q} onChange={e => setQ(e.target.value)} style={{ paddingLeft: 33 }} />
+    <div>
+      <header className="lx-ph lx-in">
+        <Aurora specks={8} />
+        <div className="lx-ph-row">
+          <div>
+            <h1>Explore courses</h1>
+            <p>Build the skills your role needs. Search, browse by category, or pick up something new your colleagues are taking.</p>
+          </div>
+          <div style={{ display: 'flex', gap: 24, flexWrap: 'wrap' }} className="lx-num">
+            <div className="lx-hero-stat"><b><CountUp value={cat.courses.length} /></b><span>courses</span></div>
+            <div className="lx-hero-stat"><b><CountUp value={cat.categories.length} /></b><span>categories</span></div>
+            {cat.paths.length > 0 && <div className="lx-hero-stat"><b><CountUp value={cat.paths.length} /></b><span>learning paths</span></div>}
+            {newCount > 0 && <div className="lx-hero-stat"><b><CountUp value={newCount} /></b><span>new this month</span></div>}
+          </div>
         </div>
-        <Select aria-label="Category" value={category} onChange={e => setCategory(e.target.value)}>
-          <option value="">All categories</option>
-          {cat.categories.map(c => <option key={c.id} value={c.id}>{c.name}</option>)}
-        </Select>
-        <Select aria-label="Level" value={level} onChange={e => setLevel(e.target.value)}>
-          <option value="">All levels</option>
-          {levels.map(l => <option key={l} value={l}>{LEVEL[l]}</option>)}
-        </Select>
-        <Select aria-label="Duration" value={length} onChange={e => setLength(e.target.value)}>
-          <option value="">Any length</option>
-          {Object.entries(DURATIONS).map(([k, d]) => <option key={k} value={k}>{d.label}</option>)}
-        </Select>
-        <Select aria-label="Topic" value={tag} onChange={e => setTag(e.target.value)}>
-          <option value="">All topics</option>
-          {tags.map(t => <option key={t} value={t}>{t}</option>)}
-        </Select>
+      </header>
+
+      <div className="lx-toolbar">
+        <div className="lx-search">
+          <IconSearch size={17} />
+          <input type="search" data-no-titlecase="" aria-label="Search courses" placeholder="Search by title, skill or topic" value={q} onChange={e => setSearch(e.target.value)} />
+        </div>
+        <div className="lx-filter-row">
+          <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--ez-muted)' }}>
+            <GSort size={16} /><span className="lx-sr">Sort by</span>
+            <select className="lx-select" aria-label="Sort by" value={sort} onChange={e => { const v = e.target.value; glide(() => setSort(v)) }}>
+              {Object.entries(SORTS).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+            </select>
+          </label>
+          {levels.length > 0 && (
+            <select className="lx-select" aria-label="Level" value={level} onChange={e => { const v = e.target.value; glide(() => setLevel(v)) }}>
+              <option value="">Any level</option>
+              {levels.map(l => <option key={l} value={l}>{LEVEL[l]}</option>)}
+            </select>
+          )}
+          <select className="lx-select" aria-label="Length" value={length} onChange={e => { const v = e.target.value; glide(() => setLength(v)) }}>
+            <option value="">Any length</option>
+            {Object.entries(DURATIONS).map(([k, d]) => <option key={k} value={k}>{d.label}</option>)}
+          </select>
+          {kinds.length > 1 && (
+            <select className="lx-select" aria-label="Content type" value={kind} onChange={e => { const v = e.target.value; glide(() => setKind(v)) }}>
+              <option value="">Any content</option>
+              {kinds.map(k => <option key={k} value={k}>{KIND_WORD[k]}</option>)}
+            </select>
+          )}
+          <select className="lx-select" aria-label="Your progress" value={status} onChange={e => { const v = e.target.value; glide(() => setStatus(v)) }}>
+            <option value="">Any progress</option>
+            {Object.entries(STATUS_FILTER).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
+          </select>
+          <button className="lx-toggle" aria-pressed={onlyMust} onClick={() => glide(() => setOnlyMust(v => !v))}>Compliance only</button>
+        </div>
       </div>
 
-      {!filtering && reco.length > 0 && (
-        <section>
-          <SectionHead title="Recommended for you" hint="Picked by HR, or popular in your team" />
-          <div className="ezl-grid">{reco.map(c => <CourseCard key={c.id} c={c} onInfo={onInfo} />)}</div>
-        </section>
+      {cat.categories.length > 0 && (
+        <div style={{ marginBottom: 22 }}>
+          <Scroller className="lx-chips" n={cat.categories.length} variant="chips" role="group" label="Categories">
+            <button className="lx-chip" aria-pressed={!category} onClick={() => glide(() => pickCat(''))}>All <span className="lx-chip-n">{cat.courses.length}</span></button>
+            {cat.categories.filter(c => counts.get(c.id)).map(c => (
+              <button key={c.id} className="lx-chip" aria-pressed={category === c.id} onClick={() => glide(() => pickCat(category === c.id ? '' : c.id))}>
+                <span className="lx-chip-dot lx-art" data-gen="1" data-h={hueOf(c.id)} style={{ background: 'linear-gradient(135deg,var(--a1),var(--a2))' }} />{c.name} <span className="lx-chip-n">{counts.get(c.id)}</span>
+              </button>
+            ))}
+          </Scroller>
+        </div>
       )}
 
-      <section>
-        <SectionHead title={filtering ? 'Results' : 'All courses'} count={shown.length} action={filtering ? <button className="ezl-linkbtn" style={{ fontSize: F.small }} onClick={clear}>Clear filters</button> : undefined} />
-        {shown.length
-          ? <div className="ezl-grid">{shown.map(c => <CourseCard key={c.id} c={c} onInfo={onInfo} />)}</div>
-          : <Card elevation="flat" style={{ textAlign: 'center', color: C.muted, fontSize: F.small, padding: S.xl }}>No course matches that. Try fewer filters.</Card>}
-      </section>
+      <div className="lx-stack">
+        {spotlight.length === 1 && <Spotlight c={spotlight[0]} category={catName.get(spotlight[0].category_id || '')} onOpen={() => open(spotlight[0].id)} />}
+        {spotlight.length > 1 && (
+          <Carousel items={spotlight} label="Featured courses" slideLabel={c => c.title} variant="below" interval={8000}
+            render={c => <Spotlight c={c} category={catName.get(c.category_id || '')} onOpen={() => open(c.id)} />} />
+        )}
 
-      {!filtering && cat.paths.length > 0 && (
         <section>
-          <SectionHead title="Learning paths" hint="A few courses that belong together" />
-          <div className="ezl-grid">{cat.paths.map(p => <PathCard key={p.id} p={p} readOnly={readOnly} mine={myPaths.find(m => m.path_id === p.id)} onEnrolled={onChanged} />)}</div>
+          <div className="lx-sec-head">
+            <div>
+              <h2 className="lx-sec-title">{filtering ? 'Results' : 'All courses'}</h2>
+              <div className="lx-sec-sub lx-num">{plural(shown.length, 'course')}{category ? ` in ${catName.get(category)}` : ''}{q.trim() ? ` matching “${q.trim()}”` : ''}</div>
+            </div>
+            {filtering && <button className="lx-sec-link" onClick={() => glide(clear)}>Clear all filters</button>}
+          </div>
+          {shown.length
+            ? <div className="lx-grid">{shown.map((c, i) => <CourseCard key={c.id} c={c} category={catName.get(c.category_id || '')} delay={i % 5} vt={`lxc-${c.id}`} onOpen={onOpenCourse ? () => open(c.id) : undefined} />)}</div>
+            : <EmptyState title="Nothing matches that" icon={<IconSearch size={32} />} action={<button className="lx-btn" onClick={() => glide(clear)}>Clear the filters</button>}>Try a shorter search, or fewer filters.</EmptyState>}
         </section>
-      )}
+
+        {!filtering && cat.paths.length > 0 && (
+          <section>
+            <div className="lx-sec-head"><div><h2 className="lx-sec-title">Learning paths</h2><div className="lx-sec-sub">A few courses that belong together, taken as one journey</div></div></div>
+            <div className="lx-grid">{cat.paths.map(p => <PathCard key={p.id} p={p} readOnly={readOnly} mine={myPaths.find(m => m.path_id === p.id)} onEnrolled={onChanged} />)}</div>
+          </section>
+        )}
+      </div>
     </div>
   )
 }

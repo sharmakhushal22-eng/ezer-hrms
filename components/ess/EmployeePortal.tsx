@@ -3268,9 +3268,12 @@ const SECTIONS: NavSection[] = [
 
   // ONE ITEM ON PURPOSE, like Social: the hub draws its own tabs, because Team appears
   // only for someone with reports, which is decided from org data inside it.
+  // EZER Learn is a product of its own at /learning (app/learning), full screen like Travel &
+  // Expenses. Someone viewing another person's portal still gets it inline (see go()), because
+  // /learning would show their own learning, not the person they are looking at.
   { k:'learning', label:'Learning', short:'Learn', icon:'', status:'ready',
     desc:'Your assigned training, the course catalogue and your certificates',
-    items:[{ k:'learning', label:'Learning' }]},
+    items:[{ k:'learning', label:'Learning', href:'/learning' }]},
 
   // Which tabs a person sees inside this is decided by the component from org
   // data — everyone gets My KRAs, managers additionally get My Team, HODs get
@@ -3916,7 +3919,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     // assign for a click, so the portal stays in history and the browser's Back
     // button returns to it just as the module's own "ESS" button does; replace
     // for an arrival nobody asked for, so Back does not land on a redirect.
-    const away = AWAY[k]
+    const away = k === 'learning' && adminMode ? undefined : AWAY[k]
     if (away) {
       setBellOpen(false); setMoreOpen(false)
       if (opts?.replace) window.location.replace(away)
@@ -3970,7 +3973,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
     }
     const loc = parseEssPath(window.location.pathname, window.location.search, ESS_KEYS)
     // A screen that is a page of its own (/ess/expenses → app/ess/travel) is never a view.
-    if (loc.kind === 'view' && AWAY[loc.view]) { window.location.replace(AWAY[loc.view]); return }
+    if (loc.kind === 'view' && AWAY[loc.view] && !(loc.view === 'learning' && adminMode)) { window.location.replace(AWAY[loc.view]); return }
     if (!urlSync) {
       // Embedded portal: honour a deep link, never touch the address bar.
       // replace: nobody clicked this, it is the address being honoured on load.
@@ -4177,7 +4180,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
               <div key={g.label ?? gi} className="ess-group">
                 {g.label && <div className="ess-group-label">{g.label}</div>}
                 {g.items.map(s => (
-                  <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} href={awayOf(s)} onClick={() => goSection(s)} />
+                  <SectionButton key={s.k} s={s} active={!adminKey && s.k === section.k} href={s.k === 'learning' && adminMode ? undefined : awayOf(s)} onClick={() => goSection(s)} />
                 ))}
               </div>
             ))}

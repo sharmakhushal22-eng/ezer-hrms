@@ -13,6 +13,7 @@ import { atEss, pushUrl } from '@/lib/ess/routes'
 import { CalmMessage, LearnStyles, Problem, errorWords, type Dashboard } from './shared'
 import MyLearning from './MyLearning'
 import Catalogue from './Catalogue'
+import CoursePage from './CoursePage'
 import Achievements from './Achievements'
 import Team, { type TeamData } from './Team'
 import Player from './Player'
@@ -139,22 +140,26 @@ export default function LearningHub({ employeeId, viewAs }: { employeeId: string
     </div>
   )
   else if (loc.course) body = <Player key={loc.course} enrollmentId={loc.course} onClose={closeCourse} onOpenCourse={openCourse} />
+  else if (loc.info) body = (
+    <CoursePage key={loc.info} id={loc.info} readOnly={viewAs} onChanged={() => void loadDash()}
+      onBack={() => go({ tab: 'catalogue', course: null, info: null })} onPlay={openCourse} />
+  )
   else body = (
     <>
-      <div className="ess-seg" role="tablist" aria-label="Learning" ref={tabStrip} style={{ position: 'relative' }}>
+      <div className="ess-seg" role="tablist" aria-label="Learning" ref={tabStrip} style={{ position: 'relative', marginBottom: 18 }}>
         {tabs.map(t => (
           <button key={t.k} role="tab" aria-selected={t.k === tab} data-on={t.k === tab ? '1' : '0'} onClick={() => go({ tab: t.k, course: null, info: null })}>{t.label}</button>
         ))}
       </div>
       {viewAs && (
-        <div style={{ fontSize: F.small, color: C.inkSoft, background: C.warningTint, border: `1px solid ${C.warningEdge}`, borderRadius: R.md, padding: `${S.sm + 2}px ${S.md}px`, marginBottom: S.lg }}>
+        <div className="lx-note" data-t="warning" style={{ marginBottom: 18 }}>
           This is someone else&apos;s portal. You can look around, but only they can enrol, learn or submit.
         </div>
       )}
       {tab === 'learning' && <MyLearning data={dash} readOnly={viewAs} onOpen={openCourse} onBrowse={() => go({ tab: 'catalogue', course: null, info: null })} />}
       {tab === 'catalogue' && (
-        <Catalogue infoId={loc.info} myPaths={dash.paths || []} readOnly={viewAs} onChanged={() => void loadDash()} onOpen={openCourse}
-          onInfo={id => go({ tab: 'catalogue', course: null, info: id })} />
+        <Catalogue myPaths={dash.paths || []} readOnly={viewAs} onChanged={() => void loadDash()}
+          onOpenCourse={id => go({ tab: 'catalogue', course: null, info: id })} />
       )}
       {tab === 'achievements' && <Achievements />}
       {tab === 'team' && team && <Team data={team} readOnly={viewAs} onChanged={() => void loadTeam()} />}

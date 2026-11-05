@@ -4,11 +4,14 @@
 // (migration 206), so this file and the /api/lms routes are the only way in.
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { resilientFetch } from '@/lib/resilient-fetch'
 
 export const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
-  { auth: { persistSession: false } },
+  // Reads give up on a dead connection after a few seconds and try once more (lib/resilient-fetch).
+  // These RPCs only read, so they may be repeated too.
+  { auth: { persistSession: false }, global: { fetch: resilientFetch(['lms_audience_preview', 'lms_course_counts', 'lms_overview', 'lms_quiz_stats', 'lms_report_rows', 'lms_reports_of']) } },
 )
 export const BUCKET = 'lms-content'
 
@@ -22,6 +25,9 @@ export const notFound = (what = 'That') => new LmsError(`${what} was not found.`
 /** The friendly form of "the migration has not been run yet". */
 export function setupHint(e: unknown): string | null {
   const m = String((e as any)?.message || e || '')
+  // Webinars and SCORM came later (211): say so rather than send someone back to 206.
+  if (/(lms_session|lms_sessions|lms_session_attendees|'scorm'|\.scorm|scorm column|lms_(lessons|assets)_kind_check)/i.test(m) && /(does not exist|schema cache|relation|Could not find|violates check)/i.test(m))
+    return 'Webinars and SCORM need one more database step: run supabase/migrations/211_lms_live_and_scorm.sql in the Supabase SQL editor.'
   if (/lms_[a-z_]+/.test(m) && /(does not exist|schema cache|relation|Could not find)/i.test(m))
     return 'Learning is not set up yet: run supabase/migrations/206, 207 and 208 in the Supabase SQL editor.'
   if (/Bucket not found/i.test(m)) return 'The storage bucket "lms-content" is missing: run supabase/migrations/206_lms_schema.sql.'

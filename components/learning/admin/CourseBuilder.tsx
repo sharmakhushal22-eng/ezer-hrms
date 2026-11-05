@@ -24,7 +24,7 @@ function SaveLabel({ state }: { state: SaveState }) {
   return <span role="status" style={{ fontSize: F.tiny, fontWeight: W.medium, color: state === 'error' ? C.critical : C.muted }}>{text}</span>
 }
 
-function ReadOnlyNote({ version, canEdit, working, onGo }: { version: any; canEdit: boolean; working: any; onGo: () => void }) {
+export function ReadOnlyNote({ version, canEdit, working, onGo }: { version: any; canEdit: boolean; working: any; onGo: () => void }) {
   if (version.status === 'IN_REVIEW') {
     return <Notice t="warning" title="This version is out for review">{canEdit ? 'Withdraw it from the Publish section to make changes.' : 'It cannot change while it is being reviewed.'}</Notice>
   }

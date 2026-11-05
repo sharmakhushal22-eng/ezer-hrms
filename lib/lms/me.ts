@@ -2,7 +2,7 @@
 import { canSeeCourse, daysUntil, isOverdue, pathLocks, pathProgress } from './core'
 import { courseGate } from './engine'
 import { thumbnails } from './authoring'
-import { LmsError, must, notFound, sb, settingsFor } from './server'
+import { LmsError, fileUrl, mediaUrl, must, notFound, sb, settingsFor } from './server'
 import { notifyPerson } from './notify'
 import type { Learner } from './learner'
 
@@ -16,18 +16,24 @@ async function courseCards(ids: string[]) {
 }
 
 export async function dashboard(l: Learner, now = Date.now()) {
-  const settings = await settingsFor(l.companyId)
+  // Two rounds: the settings, enrolments and paths together, then the course cards and path names.
+  const [settings, rowsRes, { data: pes }] = await Promise.all([
+    settingsFor(l.companyId),
+    sb.from('lms_enrollments').select('id, course_id, status, mandatory, priority, due_at, progress_pct, score_pct, source, cycle_no, started_at, completed_at, expires_at, last_activity_at, path_enrollment_id, enrolled_at').in('learner_id', l.allIds).order('enrolled_at', { ascending: false }).limit(500),
+    sb.from('lms_path_enrollments').select('id, path_id, status, due_at, progress_pct').in('learner_id', l.allIds).in('status', ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED']),
+  ])
   if (!settings.enabled) return { enabled: false }
-  const rows = must(await sb.from('lms_enrollments').select('id, course_id, status, mandatory, priority, due_at, progress_pct, score_pct, source, cycle_no, started_at, completed_at, expires_at, last_activity_at, path_enrollment_id, enrolled_at').in('learner_id', l.allIds).order('enrolled_at', { ascending: false }).limit(500)) as any[]
-  const cards = await courseCards(rows.map(r => r.course_id))
+  const rows = must(rowsRes) as any[]
+  const pathIds = [...new Set((pes || []).map((p: any) => p.path_id))]
+  const [cards, { data: pathRows }] = await Promise.all([
+    courseCards(rows.map(r => r.course_id)),
+    pathIds.length ? sb.from('lms_paths').select('id, title, summary, order_mode').in('id', pathIds) : Promise.resolve({ data: [] as any[] }),
+  ])
   const items = rows.filter(r => !['CANCELLED', 'REJECTED'].includes(r.status)).map(r => ({
     ...r, course: cards.get(r.course_id) || null, overdue: isOverdue(r, now), days_left: r.due_at ? daysUntil(r.due_at, now) : null,
   }))
   const open = items.filter(i => OPEN.includes(i.status))
   const byDue = (a: any, b: any) => (a.due_at ? new Date(a.due_at).getTime() : 9e15) - (b.due_at ? new Date(b.due_at).getTime() : 9e15)
-  const { data: pes } = await sb.from('lms_path_enrollments').select('id, path_id, status, due_at, progress_pct').in('learner_id', l.allIds).in('status', ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED'])
-  const pathIds = [...new Set((pes || []).map((p: any) => p.path_id))]
-  const { data: pathRows } = pathIds.length ? await sb.from('lms_paths').select('id, title, summary, order_mode').in('id', pathIds) : { data: [] as any[] }
   return {
     enabled: true,
     name: l.name, kind: l.kind,
@@ -49,27 +55,50 @@ export async function dashboard(l: Learner, now = Date.now()) {
 /** The catalogue. Candidates have none: they see what they were given. */
 export async function catalogue(l: Learner) {
   if (l.kind === 'CANDIDATE' || !l.facts) return { courses: [], paths: [], categories: [] }
-  const rows = must(await sb.from('lms_courses').select('id, code, title, summary, category_id, difficulty, est_minutes, language, tags, skills, status, visibility, enrolment_mode, is_compliance, is_featured, thumbnail_asset_id').eq('company_id', l.companyId).eq('status', 'PUBLISHED').neq('visibility', 'HIDDEN').limit(1000)) as any[]
-  const restricted = rows.filter(r => r.visibility === 'RESTRICTED').map(r => r.id)
-  const { data: aud } = restricted.length ? await sb.from('lms_course_audience').select('course_id, kind, value').in('course_id', restricted) : { data: [] as any[] }
-  const visible = rows.filter(r => canSeeCourse(r, (aud || []).filter((x: any) => x.course_id === r.id), l.facts!))
-  const ids = visible.map(r => r.id)
-  const [thumbs, enrols, cats, ratings, peers, paths] = await Promise.all([
-    thumbnails(visible.map(r => r.thumbnail_asset_id)),
-    ids.length ? sb.from('lms_enrollments').select('id, course_id, status, progress_pct, completed_at, expires_at').in('learner_id', l.allIds).in('course_id', ids).order('enrolled_at', { ascending: false }) : { data: [] },
+  // Three rounds at most. The first reads what everything else keys on: the published courses,
+  // the categories and the paths. The second reads everything about them at once, for every
+  // published course; what this person may not see is dropped afterwards, before anything is
+  // returned. The third is only for a path naming a course outside that list, which is rare.
+  const [rowsRes, cats, paths] = await Promise.all([
+    sb.from('lms_courses').select('id, code, title, summary, category_id, difficulty, est_minutes, language, tags, skills, status, visibility, enrolment_mode, is_compliance, is_featured, thumbnail_asset_id, published_version_id, created_at, updated_at').eq('company_id', l.companyId).eq('status', 'PUBLISHED').neq('visibility', 'HIDDEN').limit(1000),
     sb.from('lms_categories').select('id, name').eq('company_id', l.companyId).eq('is_active', true).order('position'),
-    ids.length ? sb.from('lms_feedback').select('course_id, rating').in('course_id', ids) : { data: [] },
-    l.facts.department_id && ids.length ? peerCounts(l.companyId, l.facts.department_id, ids) : new Map<string, number>(),
     sb.from('lms_paths').select('id, title, summary, order_mode, enrolment_mode, visibility').eq('company_id', l.companyId).eq('status', 'PUBLISHED').eq('visibility', 'EVERYONE'),
   ])
+  const rows = must(rowsRes) as any[]
+  const all = rows.map(r => r.id)
+  const restricted = rows.filter(r => r.visibility === 'RESTRICTED').map(r => r.id)
+  const versions = rows.map(r => r.published_version_id).filter(Boolean)
   const pathRows = ((paths as any).data || []) as any[]
   const pathIds = pathRows.map(p => p.id)
-  const [{ data: pathItems }, { data: minePaths }] = await Promise.all([
-    pathIds.length ? sb.from('lms_path_items').select('path_id, course_id, position, is_required').in('path_id', pathIds).order('position') : Promise.resolve({ data: [] as any[] }),
-    pathIds.length ? sb.from('lms_path_enrollments').select('path_id, status, progress_pct').in('learner_id', l.allIds).in('path_id', pathIds).in('status', ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED']) : Promise.resolve({ data: [] as any[] }),
+  const none = Promise.resolve({ data: [] as any[] })
+  const [{ data: aud }, thumbs, enrols, ratings, peers, { data: lessonRows }, { data: takers }, { data: versionRows }, { data: pathItems }, { data: minePaths }] = await Promise.all([
+    restricted.length ? sb.from('lms_course_audience').select('course_id, kind, value').in('course_id', restricted) : none,
+    thumbnails(rows.map(r => r.thumbnail_asset_id)),
+    all.length ? sb.from('lms_enrollments').select('id, course_id, status, progress_pct, completed_at, expires_at').in('learner_id', l.allIds).in('course_id', all).order('enrolled_at', { ascending: false }) : none,
+    all.length ? sb.from('lms_feedback').select('course_id, rating').in('course_id', all) : none,
+    l.facts.department_id && all.length ? peerCounts(l.companyId, l.facts.department_id, all) : Promise.resolve(new Map<string, number>()),
+    // What is inside each course and how many have taken it, for the cards: lesson count, the
+    // kinds of content, quizzes, and learners. Counts only, never who.
+    versions.length ? sb.from('lms_lessons').select('version_id, kind, quiz_id').in('version_id', versions).limit(10000) : none,
+    all.length ? sb.from('lms_enrollments').select('course_id').in('course_id', all).not('status', 'in', '(CANCELLED,REJECTED,PENDING_APPROVAL)').limit(20000) : none,
+    versions.length ? sb.from('lms_course_versions').select('id, published_at').in('id', versions) : none,
+    pathIds.length ? sb.from('lms_path_items').select('path_id, course_id, position, is_required').in('path_id', pathIds).order('position') : none,
+    pathIds.length ? sb.from('lms_path_enrollments').select('path_id, status, progress_pct').in('learner_id', l.allIds).in('path_id', pathIds).in('status', ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED']) : none,
   ])
-  const pathCourseIds = [...new Set((pathItems || []).map((i: any) => i.course_id))]
-  const { data: pathCourses } = pathCourseIds.length ? await sb.from('lms_courses').select('id, title').in('id', pathCourseIds) : { data: [] as any[] }
+  const visible = rows.filter(r => canSeeCourse(r, (aud || []).filter((x: any) => x.course_id === r.id), l.facts!))
+  const inside = new Map<string, { lessons: number; quizzes: number; kinds: Set<string> }>()
+  for (const x of (lessonRows || []) as any[]) {
+    const s = inside.get(x.version_id) || { lessons: 0, quizzes: 0, kinds: new Set<string>() }
+    s.lessons++; if (x.quiz_id) s.quizzes++; s.kinds.add(x.kind)
+    inside.set(x.version_id, s)
+  }
+  const learners = new Map<string, number>()
+  for (const x of (takers || []) as any[]) learners.set(x.course_id, (learners.get(x.course_id) || 0) + 1)
+  const publishedAt = new Map(((versionRows || []) as any[]).map(v => [v.id, v.published_at]))
+
+  const titles = new Map(rows.map(r => [r.id, r.title]))
+  const outside = [...new Set((pathItems || []).map((i: any) => i.course_id))].filter(id => !titles.has(id as string))
+  if (outside.length) for (const c of ((await sb.from('lms_courses').select('id, title').in('id', outside)).data || []) as any[]) titles.set(c.id, c.title)
   const mine = new Map<string, any>()
   for (const e of ((enrols as any).data || []) as any[]) if (!['CANCELLED', 'REJECTED'].includes(e.status) && !mine.has(e.course_id)) mine.set(e.course_id, e)
   const doneSkills = new Set(rows.filter(r => mine.get(r.id)?.status === 'COMPLETED').flatMap(r => r.skills || []))
@@ -78,12 +107,17 @@ export async function catalogue(l: Learner) {
     const rs = ((ratings as any).data || []).filter((x: any) => x.course_id === r.id).map((x: any) => x.rating)
     // Plain signals rather than a black box: HR's pick, what your department takes, and more of what you finished.
     const score = (r.is_featured ? 3 : 0) + Math.min(3, (peers as Map<string, number>).get(r.id) || 0) + (doneCats.has(r.category_id) && r.category_id ? 1 : 0) + ((r.skills || []).some((s: string) => doneSkills.has(s)) ? 1 : 0)
-    return { ...r, thumbnail: thumbs.get(r.thumbnail_asset_id) || null, rating: rs.length ? Math.round((rs.reduce((a: number, b: number) => a + b, 0) / rs.length) * 10) / 10 : null, ratings: rs.length, mine: mine.get(r.id) || null, recommended_score: mine.has(r.id) ? 0 : score }
+    const s = inside.get(r.published_version_id)
+    return {
+      ...r, thumbnail: thumbs.get(r.thumbnail_asset_id) || null, rating: rs.length ? Math.round((rs.reduce((a: number, b: number) => a + b, 0) / rs.length) * 10) / 10 : null, ratings: rs.length, mine: mine.get(r.id) || null, recommended_score: mine.has(r.id) ? 0 : score,
+      lesson_count: s?.lessons || 0, quiz_count: s?.quizzes || 0, kinds: s ? [...s.kinds] : [], learners: learners.get(r.id) || 0,
+      published_at: publishedAt.get(r.published_version_id) || r.updated_at,
+    }
   })
-  return { courses, categories: (cats as any).data || [], recommended: [...courses].filter(c => c.recommended_score > 0).sort((a, b) => b.recommended_score - a.recommended_score).slice(0, 6), paths: pathRows.map(p => ({
+  return { courses, categories: cats.data || [], recommended: [...courses].filter(c => c.recommended_score > 0).sort((a, b) => b.recommended_score - a.recommended_score).slice(0, 6), paths: pathRows.map(p => ({
     ...p,
     mine: (minePaths || []).find((m: any) => m.path_id === p.id) || null,
-    courses: (pathItems || []).filter((i: any) => i.path_id === p.id).map((i: any) => ({ id: i.course_id, title: (pathCourses || []).find((c: any) => c.id === i.course_id)?.title || 'Course', is_required: i.is_required })),
+    courses: (pathItems || []).filter((i: any) => i.path_id === p.id).map((i: any) => ({ id: i.course_id, title: titles.get(i.course_id) || 'Course', is_required: i.is_required })),
   })) }
 }
 
@@ -98,11 +132,15 @@ async function peerCounts(company: string, department: string, courseIds: string
 }
 
 async function visibleCourse(l: Learner, id: string) {
-  const { data: c } = await sb.from('lms_courses').select('*').eq('id', id).eq('company_id', l.companyId).maybeSingle()
+  // All three at once: the audience and the learner's own enrolment do not depend on the course
+  // row, and nothing is returned until all of them say this person may see it.
+  const [{ data: c }, { data: aud }, { data: mine }] = await Promise.all([
+    sb.from('lms_courses').select('*').eq('id', id).eq('company_id', l.companyId).maybeSingle(),
+    sb.from('lms_course_audience').select('kind, value').eq('course_id', id),
+    sb.from('lms_enrollments').select('id, status').in('learner_id', l.allIds).eq('course_id', id).not('status', 'in', '(CANCELLED,REJECTED)').order('enrolled_at', { ascending: false }).limit(1).maybeSingle(),
+  ])
   if (!c || !l.facts) throw notFound('That course')
-  const { data: aud } = await sb.from('lms_course_audience').select('kind, value').eq('course_id', id)
   const seen = l.kind === 'EMPLOYEE' && canSeeCourse(c, aud || [], l.facts)
-  const { data: mine } = await sb.from('lms_enrollments').select('id, status').in('learner_id', l.allIds).eq('course_id', id).not('status', 'in', '(CANCELLED,REJECTED)').order('enrolled_at', { ascending: false }).limit(1).maybeSingle()
   if (!seen && !mine) throw notFound('That course')
   return { c, mine, seen }
 }
@@ -110,23 +148,68 @@ async function visibleCourse(l: Learner, id: string) {
 export async function courseInfo(l: Learner, id: string) {
   const { c, mine } = await visibleCourse(l, id)
   const version = c.published_version_id
-  const [{ data: modules }, { data: lessons }, { data: fb }, { data: prereq }] = await Promise.all([
+  // Two rounds after the check above. Quizzes are read by version, so they need not wait for
+  // the lessons; only question counts and file lengths need the first round's ids.
+  const [{ data: modules }, { data: lessons }, { data: fb }, { data: prereq }, { data: rules }, { data: allRatings }, { count: learners }, { data: cat }, { data: quizzes }, thumbs] = await Promise.all([
     sb.from('lms_modules').select('id, title, position').eq('version_id', version).order('position'),
-    sb.from('lms_lessons').select('id, module_id, title, kind, position, est_minutes, is_preview, quiz_id').eq('version_id', version).order('position'),
+    sb.from('lms_lessons').select('id, module_id, title, kind, position, est_minutes, is_preview, is_required, is_final, quiz_id, quiz_required, require_ack, asset_id').eq('version_id', version).order('position'),
     sb.from('lms_feedback').select('rating, comment, created_at').eq('course_id', id).not('comment', 'is', null).order('created_at', { ascending: false }).limit(5),
     sb.from('lms_course_prerequisites').select('requires_course_id').eq('course_id', id),
+    sb.from('lms_course_versions').select('order_mode, completion_mode, completion_pct, require_all_quizzes, require_final, min_overall_pct, published_at').eq('id', version).maybeSingle(),
+    sb.from('lms_feedback').select('rating').eq('course_id', id).limit(5000),
+    sb.from('lms_enrollments').select('id', { count: 'exact', head: true }).eq('course_id', id).not('status', 'in', '(CANCELLED,REJECTED,PENDING_APPROVAL)'),
+    c.category_id ? sb.from('lms_categories').select('name').eq('id', c.category_id).maybeSingle() : Promise.resolve({ data: null as any }),
+    sb.from('lms_quizzes').select('id, pass_pct, max_attempts, time_limit_minutes').eq('version_id', version),
+    thumbnails([c.thumbnail_asset_id]),
   ])
+  const quizIds = ((quizzes || []) as any[]).map(q => q.id)
+  const assetIds = [...new Set((lessons || []).map((x: any) => x.asset_id).filter(Boolean))]
   const pre = (prereq || []).map((p: any) => p.requires_course_id)
-  const { data: names } = pre.length ? await sb.from('lms_courses').select('id, title').in('id', pre) : { data: [] as any[] }
-  const thumbs = await thumbnails([c.thumbnail_asset_id])
+  const [{ data: qcount }, { data: assets }, { data: names }] = await Promise.all([
+    quizIds.length ? sb.from('lms_questions').select('quiz_id').in('quiz_id', quizIds).limit(5000) : Promise.resolve({ data: [] as any[] }),
+    assetIds.length ? sb.from('lms_assets').select('id, duration_s').in('id', assetIds) : Promise.resolve({ data: [] as any[] }),
+    pre.length ? sb.from('lms_courses').select('id, title').in('id', pre) : Promise.resolve({ data: [] as any[] }),
+  ])
+  const quizOf = new Map(((quizzes || []) as any[]).map(q => [q.id, { ...q, questions: ((qcount || []) as any[]).filter(x => x.quiz_id === q.id).length }]))
+  const lengthOf = new Map(((assets || []) as any[]).map(a => [a.id, a.duration_s != null ? Number(a.duration_s) : null]))
+  const rs = ((allRatings || []) as any[]).map(x => Number(x.rating)).filter(Boolean)
   return {
     course: {
       id: c.id, code: c.code, title: c.title, summary: c.summary, description: c.description, difficulty: c.difficulty, est_minutes: c.est_minutes, language: c.language,
       tags: c.tags, skills: c.skills, enrolment_mode: c.enrolment_mode, is_compliance: c.is_compliance, validity_months: c.validity_months, certificate_enabled: c.certificate_enabled, thumbnail: thumbs.get(c.thumbnail_asset_id) || null,
+      category: cat?.name || null, learners: learners || 0, published_at: rules?.published_at || c.updated_at,
+      rating: rs.length ? Math.round((rs.reduce((a, b) => a + b, 0) / rs.length) * 10) / 10 : null, ratings: rs.length,
     },
-    outline: (modules || []).map((m: any) => ({ ...m, lessons: (lessons || []).filter((x: any) => x.module_id === m.id).map((x: any) => ({ id: x.id, title: x.title, kind: x.kind, est_minutes: x.est_minutes, has_quiz: !!x.quiz_id })) })),
+    rules: rules ? { order_mode: rules.order_mode, completion_mode: rules.completion_mode, completion_pct: rules.completion_pct, require_all_quizzes: rules.require_all_quizzes, require_final: rules.require_final, min_overall_pct: rules.min_overall_pct } : null,
+    outline: (modules || []).map((m: any) => ({ ...m, lessons: (lessons || []).filter((x: any) => x.module_id === m.id).map((x: any) => {
+      const q = x.quiz_id ? quizOf.get(x.quiz_id) : null
+      return {
+        id: x.id, title: x.title, kind: x.kind, est_minutes: x.est_minutes, has_quiz: !!x.quiz_id, is_preview: !!x.is_preview && x.kind !== 'ASSESSMENT',
+        is_required: x.is_required, is_final: x.is_final, require_ack: x.require_ack, duration_s: x.asset_id ? lengthOf.get(x.asset_id) ?? null : null,
+        quiz: q ? { pass_pct: q.pass_pct, max_attempts: q.max_attempts, time_limit_minutes: q.time_limit_minutes, questions: q.questions, required: x.quiz_required } : null,
+      }
+    }) })),
     prerequisites: names || [], reviews: fb || [], mine: mine || null,
   }
+}
+
+/** A lesson HR marked as a free preview, opened from the course page before enrolling. Only a
+ *  published preview lesson of a course this person may see; nothing is recorded. */
+export async function previewLesson(l: Learner, courseId: string, lessonId: string, now = Date.now()) {
+  const { c, seen, mine } = await visibleCourse(l, courseId)
+  if (!seen && !mine) throw notFound('That course')
+  const { data: x } = await sb.from('lms_lessons').select('id, title, summary, kind, is_preview, asset_id, body, external_url').eq('id', lessonId).eq('version_id', c.published_version_id).maybeSingle()
+  if (!x || !x.is_preview || x.kind === 'ASSESSMENT') throw notFound('That preview')
+  let url: string | null = null, poster: string | null = null, mime: string | null = null, name: string | null = null
+  if (x.asset_id) {
+    const { data: a } = await sb.from('lms_assets').select('id, kind, storage_path, play_url, play_url_expires_at, poster_path, mime_type, original_name').eq('id', x.asset_id).maybeSingle()
+    if (a) {
+      url = a.kind === 'VIDEO' || a.kind === 'AUDIO' ? await mediaUrl(a as any, now) : await fileUrl(a.storage_path)
+      poster = await fileUrl(a.poster_path)
+      mime = a.mime_type; name = a.original_name
+    }
+  }
+  return { id: x.id, title: x.title, summary: x.summary, kind: x.kind, url, poster, mime, file_name: name, body: x.body, external_url: x.external_url }
 }
 
 /** Self-enrol, ask for approval, or retake. Being refused says why. */
@@ -151,7 +234,7 @@ export async function enrol(l: Learner, courseId: string, now = Date.now()) {
   const made = must(r) as any
   if (status === 'PENDING_APPROVAL' && l.employeeId) {
     const { data: me } = await sb.from('employees').select('l1_manager_id, full_name').eq('id', l.employeeId).maybeSingle()
-    if (me?.l1_manager_id) await notifyPerson(me.l1_manager_id, 'LMS_ENROL_REQUEST', 'Course request to approve', `${me.full_name} asked to take ${c.title}.`).catch(() => {})
+    if (me?.l1_manager_id) await notifyPerson(me.l1_manager_id, 'LMS_ENROL_REQUEST', 'Course request to approve', `${me.full_name} asked to take ${c.title}.`, '/learning/team').catch(() => {})
   }
   return made
 }

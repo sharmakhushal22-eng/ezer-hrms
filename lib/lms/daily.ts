@@ -4,10 +4,12 @@
 // fenced by lms_reminder_log's unique key, and a person gets one mail however much is due.
 import { daysUntil } from './core'
 import { allRows, audit, sb, settingsFor, type LmsSettings } from './server'
-import { appBase, digestHtml, mailLearner, notifyPerson, shell, type DigestLine } from './notify'
+import { digestHtml, learnUrl, mailLearner, notifyPerson, shell, teamOverdueHtml, type DigestLine, type OverdueLine } from './notify'
+import { contacts } from '@/lib/leave/notify'
 import { preboardingSweep } from './preboarding'
 import { publishProblems } from './core'
 import { settleAbandonedAttempts } from './engine'
+import { liveDaily } from './live'
 
 /** Mails per run. Gmail caps a day's sending, and what does not go today goes tomorrow. */
 const MAIL_BUDGET = 300
@@ -51,7 +53,7 @@ async function reminders(now: number) {
   const open = await allRows<Open>((f, t) => sb.from('lms_enrollments')
     .select('id, company_id, learner_id, course_id, due_at, mandatory, assignment_id, notified_at, source, status, last_escalated_at')
     .in('status', ['NOT_STARTED', 'IN_PROGRESS']).order('id').range(f, t) as any)
-  const out = { considered: open.length, due_soon: 0, overdue: 0, mailed: 0, escalated: 0, held_back: 0 }
+  const out = { considered: open.length, due_soon: 0, overdue: 0, mailed: 0, escalated: 0, manager_mailed: 0, held_back: 0 }
   if (!open.length) return out
 
   const companies = [...new Set(open.map(e => e.company_id))]
@@ -80,7 +82,7 @@ async function reminders(now: number) {
     const r = await sb.from('lms_reminder_log').upsert({ company_id: e.company_id, enrollment_id: e.id, kind }, { onConflict: 'enrollment_id,kind,day', ignoreDuplicates: true }).select('id')
     return (r.data || []).length > 0
   }
-  const managers = new Map<string, { name: string; lines: string[] }>()
+  const managers = new Map<string, { company: string; lines: OverdueLine[] }>()
   for (const e of open) {
     const s = settings.get(e.company_id)!
     if (!s.enabled) continue
@@ -98,8 +100,8 @@ async function reminders(now: number) {
     if (l?.employee_id && -left >= s.escalate_after_days && quiet && await claim(e, 'ESCALATION')) {
       const { data: emp } = await sb.from('employees').select('l1_manager_id').eq('id', l.employee_id).maybeSingle()
       if (emp?.l1_manager_id) {
-        const m = managers.get(emp.l1_manager_id) || { name: '', lines: [] }
-        m.lines.push(`${l.full_name}: ${C.get(e.course_id)}`)
+        const m = managers.get(emp.l1_manager_id) || { company: e.company_id, lines: [] }
+        m.lines.push({ name: l.full_name, course: String(C.get(e.course_id) || 'Course'), due: e.due_at })
         managers.set(emp.l1_manager_id, m)
         await sb.from('lms_enrollments').update({ last_escalated_at: new Date(now).toISOString() }).eq('id', e.id)
       }
@@ -120,7 +122,7 @@ async function reminders(now: number) {
     if (s.email_enabled) {
       if (budget <= 0) { out.held_back++; continue }
       budget--
-      const portal = l.employee_id ? `${appBase()}/ess/learning` : null
+      const portal = l.employee_id ? learnUrl() : null
       const sections = [
         { heading: 'Overdue', lines: b.late.map(toLine) }, { heading: 'Due soon', lines: b.soon.map(toLine) }, { heading: 'New for you', lines: b.fresh.map(toLine) },
       ]
@@ -135,9 +137,20 @@ async function reminders(now: number) {
     if (ids.length) await sb.from('lms_enrollments').update({ notified_at: new Date(now).toISOString() }).in('id', ids)
   }
 
+  // The manager hears once, with the whole team in one mail, not once per person.
+  const who = await contacts([...managers.keys()])
   for (const [managerId, m] of managers) {
-    await notifyPerson(managerId, 'LMS_TEAM_OVERDUE', 'Team training overdue', `${m.lines.length} overdue: ${m.lines.slice(0, 3).join('; ')}${m.lines.length > 3 ? '…' : ''}`).catch(() => {})
+    const said = m.lines.map(x => `${x.name}: ${x.course}`)
+    await notifyPerson(managerId, 'LMS_TEAM_OVERDUE', 'Team training overdue', `${m.lines.length} overdue: ${said.slice(0, 3).join('; ')}${said.length > 3 ? '…' : ''}`, '/learning/team').catch(() => {})
     out.escalated++
+    const boss = who.get(managerId)
+    if (!boss || !settings.get(m.company)?.email_enabled) continue
+    if (budget <= 0) { out.held_back++; continue }
+    budget--
+    const r = await mailLearner(boss.email, m.lines.length === 1 ? `${m.lines[0].name}'s training is overdue` : `${m.lines.length} people in your team are overdue on training`,
+      shell({ title: 'Team training overdue', body: teamOverdueHtml(boss.name, m.lines), cta: { label: 'Open My team', href: learnUrl('/team') } }),
+      `Overdue in your team: ${said.join('; ')}. ${learnUrl('/team')}`).catch(() => ({ sent: false }))
+    if ((r as any).sent) out.manager_mailed++
   }
   return out
 }
@@ -151,5 +164,7 @@ export async function runLmsDaily(now = Date.now()) {
   if (error) throw new Error(error.message)
   const abandoned = await settleAbandonedAttempts(now)
   const rem = await reminders(now)
-  return { scheduled, sweep, preboarding: pre, abandoned_attempts: abandoned, reminders: rem }
+  // Webinars need migration 211; until it is run their part reports why instead of failing the job.
+  const live = await liveDaily(now).catch(e => ({ skipped: String(e?.message || e) }))
+  return { scheduled, sweep, preboarding: pre, abandoned_attempts: abandoned, reminders: rem, live }
 }

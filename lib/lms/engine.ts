@@ -13,6 +13,9 @@ import {
 import { notFound, fileUrl, LmsError, mediaUrl, must, sb, settingsFor } from './server'
 import { issueCertificate } from './certificate'
 import { notifyPerson } from './notify'
+import { issueScormToken, nextRun, type SavedRun } from './scorm'
+import type { ScormVersion } from './scorm-core'
+import { liveForCourse } from './live'
 import type { Learner } from './learner'
 
 const LESSON_COLS = 'id, company_id, version_id, module_id, title, summary, kind, position, is_required, is_final, is_preview, est_minutes, asset_id, external_url, body, media_pct, allow_skip_ahead, min_seconds, require_ack, ack_text, quiz_id, quiz_required'
@@ -46,7 +49,9 @@ const progressMap = (rows: any[]) => new Map<string, ProgressLite>(rows.map(r =>
 
 /** An enrolment of THIS learner. Another person's id reads as not found. */
 export async function myEnrollment(l: Learner, enrollmentId: string): Promise<any> {
-  const { data } = await sb.from('lms_enrollments').select('*').eq('id', enrollmentId).maybeSingle()
+  const { data, error } = await sb.from('lms_enrollments').select('*').eq('id', enrollmentId).maybeSingle()
+  // The database not answering is not the same as the course not being there: say which.
+  if (error) throw new Error(error.message)
   if (!data || !l.allIds.includes(data.learner_id)) throw notFound('That course')
   return data
 }
@@ -114,13 +119,15 @@ function lessonForClient(l: any, lock: { locked: boolean; reason?: string; unloc
  *  when a lesson is actually opened. */
 export async function playerView(l: Learner, enrollmentId: string, now = Date.now()) {
   const e = await myEnrollment(l, enrollmentId)
-  const [tree, progress, attempts, opened, { data: course }, feedback] = await Promise.all([
+  const [tree, progress, attempts, opened, { data: course }, feedback, gate, { data: cert }] = await Promise.all([
     loadTree(e.version_id),
     loadProgress(e.id),
     sb.from('lms_quiz_attempts').select('lesson_id, submitted_at').eq('enrollment_id', e.id).neq('status', 'IN_PROGRESS').order('submitted_at', { ascending: false }),
     sb.from('lms_quiz_attempts').select('lesson_id, expires_at').eq('enrollment_id', e.id).eq('status', 'IN_PROGRESS'),
     sb.from('lms_courses').select('id, code, title, summary, description, certificate_enabled').eq('id', e.course_id).single(),
     sb.from('lms_feedback').select('rating, comment').eq('enrollment_id', e.id).maybeSingle(),
+    courseGate(e, l.allIds),
+    sb.from('lms_certificates').select('id, cert_no').eq('enrollment_id', e.id).maybeSingle(),
   ])
   const pm = progressMap(progress)
   const ordered = orderedLessons(tree.modules, tree.lessons)
@@ -132,7 +139,6 @@ export async function playerView(l: Learner, enrollmentId: string, now = Date.no
     .filter(a => !a.expires_at || new Date(a.expires_at).getTime() + SUBMIT_GRACE_S * 1000 >= now).map(a => a.lesson_id))
   const lessons = ordered.map(x => lessonForClient(x, locks.get(x.id), pm.get(x.id), x.quiz_id ? quizById.get(x.quiz_id) : null, lastByLesson.get(x.id) || null, now, openIds.has(x.id)))
   const state = courseState(tree.rules, tree.lessons, quizById, pm)
-  const { data: cert } = await sb.from('lms_certificates').select('id, cert_no').eq('enrollment_id', e.id).maybeSingle()
 
   return {
     enrollment: {
@@ -141,7 +147,7 @@ export async function playerView(l: Learner, enrollmentId: string, now = Date.no
       last_lesson_id: e.last_lesson_id,
     },
     course,
-    gate: await courseGate(e, l.allIds),
+    gate,
     rules: { order_mode: tree.rules.order_mode, completion_mode: tree.rules.completion_mode, completion_pct: tree.rules.completion_pct, require_final: tree.rules.require_final, min_overall_pct: tree.rules.min_overall_pct, version_no: tree.rules.version_no },
     modules: tree.modules.map(m => ({ id: m.id, title: m.title, summary: m.summary, position: m.position })),
     lessons,
@@ -178,48 +184,74 @@ async function touchEnrollment(e: any, lessonId: string, now: number) {
   }
 }
 
-/** Open a lesson: the only place a file URL is handed out. */
+/** Open a lesson: the only place a file URL is handed out.
+ *
+ *  Three rounds. The enrolment, the lesson and its downloads are read together; then the tree,
+ *  progress, course gate and files; then the writes and the signing. Nothing is returned, and
+ *  no URL is signed, until the enrolment is confirmed as this learner's and the lesson as one of
+ *  its version's, open to them. */
 export async function openLesson(l: Learner, enrollmentId: string, lessonId: string, now = Date.now()) {
-  const e = await myEnrollment(l, enrollmentId)
+  const [e, { data: lesson }, { data: res }] = await Promise.all([
+    myEnrollment(l, enrollmentId),
+    sb.from('lms_lessons').select(LESSON_COLS).eq('id', lessonId).maybeSingle(),
+    sb.from('lms_lesson_resources').select('id, title, url, asset_id, position').eq('lesson_id', lessonId).order('position'),
+  ])
   assertOpen(e)
-  const [tree, rows] = await Promise.all([loadTree(e.version_id), loadProgress(e.id)])
-  const lesson = await lessonOf(e, lessonId, tree)
+  if (!lesson || lesson.version_id !== e.version_id) throw notFound('That lesson')
+  const resAssets = ((res || []) as any[]).map(r => r.asset_id).filter(Boolean)
   // A finished course stays open for reference, whatever its lock order says.
-  if (e.status !== 'COMPLETED') await assertReachable(l, e, lessonId, tree, rows, now)
+  const checkLocks = e.status !== 'COMPLETED'
+  const [tree, rows, gate, { data: a }, { data: ra }] = await Promise.all([
+    loadTree(e.version_id),
+    loadProgress(e.id),
+    checkLocks ? courseGate(e, l.allIds) : Promise.resolve(null),
+    lesson.asset_id ? sb.from('lms_assets').select('id, kind, storage_path, play_url, play_url_expires_at, poster_path, duration_s, mime_type, original_name, status').eq('id', lesson.asset_id).maybeSingle() : Promise.resolve({ data: null as any }),
+    resAssets.length ? sb.from('lms_assets').select('id, storage_path, original_name').in('id', resAssets) : Promise.resolve({ data: [] as any[] }),
+  ])
+  if (checkLocks) {
+    if (gate) throw new LmsError(gate, 403)
+    const lock = lessonLocks(tree.rules, tree.modules, tree.lessons, progressMap(rows), e.started_at || e.enrolled_at, now).get(lessonId)
+    if (lock?.locked) throw new LmsError(lock.unlocksAt ? 'This lesson opens later.' : 'Finish the lessons before this one first.', 403)
+  }
 
   let row = rows.find(r => r.lesson_id === lessonId)
-  // Someone viewing this portal sees the lesson and leaves no mark on the learner's record.
-  if (!l.readOnly) {
-    if (!row) {
-      const made = await sb.from('lms_lesson_progress').upsert(
-        { company_id: e.company_id, enrollment_id: e.id, lesson_id: lessonId, opened_at: new Date(now).toISOString() },
-        { onConflict: 'enrollment_id,lesson_id', ignoreDuplicates: true },
-      ).select(PROGRESS_COLS)
-      row = (made.data || [])[0] || (await loadProgress(e.id)).find(r => r.lesson_id === lessonId)
-    }
-    await touchEnrollment(e, lessonId, now)
-  }
+  const resAsset = new Map(((ra || []) as any[]).map(x => [x.id, x]))
+  const [made, url, poster, resources] = await Promise.all([
+    // Someone viewing this portal sees the lesson and leaves no mark on the learner's record.
+    !l.readOnly && !row
+      ? sb.from('lms_lesson_progress').upsert(
+          { company_id: e.company_id, enrollment_id: e.id, lesson_id: lessonId, opened_at: new Date(now).toISOString() },
+          { onConflict: 'enrollment_id,lesson_id', ignoreDuplicates: true },
+        ).select(PROGRESS_COLS)
+      : Promise.resolve(null),
+    a ? (a.kind === 'VIDEO' || a.kind === 'AUDIO' ? mediaUrl(a as any, now) : fileUrl(a.storage_path)) : Promise.resolve(null),
+    a ? fileUrl(a.poster_path) : Promise.resolve(null),
+    Promise.all(((res || []) as any[]).map(async (r: any) => {
+      if (r.url) return { id: r.id, title: r.title, url: r.url, external: true }
+      const x = resAsset.get(r.asset_id)
+      return { id: r.id, title: r.title, url: await fileUrl(x?.storage_path, x?.original_name), external: false }
+    })),
+    !l.readOnly ? touchEnrollment(e, lessonId, now) : Promise.resolve(),
+  ])
+  if (made) row = ((made as any).data || [])[0] || (await loadProgress(e.id)).find(r => r.lesson_id === lessonId)
 
-  let url: string | null = null, poster: string | null = null, duration: number | null = null, mime: string | null = null, name: string | null = null
-  if (lesson.asset_id) {
-    const { data: a } = await sb.from('lms_assets').select('id, kind, storage_path, play_url, play_url_expires_at, poster_path, duration_s, mime_type, original_name, status').eq('id', lesson.asset_id).single()
-    if (a) {
-      url = a.kind === 'VIDEO' || a.kind === 'AUDIO' ? await mediaUrl(a as any, now) : await fileUrl(a.storage_path)
-      poster = await fileUrl(a.poster_path)
-      duration = a.duration_s != null ? Number(a.duration_s) : null
-      mime = a.mime_type
-      name = a.original_name
-    }
+  // A package plays from its own address, signed for this learner and this enrolment.
+  let scorm: { url: string; version: string; title: string; label: string; score_pct: number | null } | null = null
+  if (lesson.kind === 'SCORM' && lesson.asset_id) {
+    const [{ data: p }, { data: saved }] = await Promise.all([
+      sb.from('lms_assets').select('version:scorm->>version, launch:scorm->>launch, title:scorm->>title').eq('id', lesson.asset_id).maybeSingle(),
+      sb.from('lms_lesson_progress').select('label:scorm->>label, score:scorm->>score_pct').eq('enrollment_id', e.id).eq('lesson_id', lessonId).maybeSingle(),
+    ])
+    if (!p?.launch) throw new LmsError('This package has not finished processing. Ask HR to upload it again.', 409)
+    const token = issueScormToken({ a: lesson.asset_id, c: e.company_id, e: e.id, l: lessonId, u: e.learner_id, n: l.name, r: l.readOnly ? 1 : 0 }, now)
+    const [file, query] = String(p.launch).split('?')
+    scorm = { url: `/learn-scorm/${token}/${file.split('/').map(encodeURIComponent).join('/')}${query ? `?${query}` : ''}`, version: p.version, title: p.title, label: saved?.label || 'Not started', score_pct: saved?.score != null ? Number(saved.score) : null }
   }
-  const { data: res } = await sb.from('lms_lesson_resources').select('id, title, url, asset_id, position').eq('lesson_id', lessonId).order('position')
-  const resources = await Promise.all((res || []).map(async (r: any) => {
-    if (r.url) return { id: r.id, title: r.title, url: r.url, external: true }
-    const { data: a } = await sb.from('lms_assets').select('storage_path, original_name').eq('id', r.asset_id).maybeSingle()
-    return { id: r.id, title: r.title, url: await fileUrl(a?.storage_path, a?.original_name), external: false }
-  }))
+  const live = lesson.kind === 'LIVE' ? await liveForCourse(l, e.course_id, now) : null
 
   return {
-    lesson_id: lessonId, url, poster, duration_s: duration, mime, file_name: name,
+    scorm, live,
+    lesson_id: lessonId, url, poster, duration_s: a?.duration_s != null ? Number(a.duration_s) : null, mime: a?.mime_type || null, file_name: a?.original_name || null,
     body: lesson.body, external_url: lesson.external_url, resources,
     position_s: Number(row?.position_s || 0),
     watched_ranges: (row?.watched_ranges || []) as Range[],
@@ -231,12 +263,16 @@ export async function openLesson(l: Learner, enrollmentId: string, lessonId: str
 /** A player heartbeat. Duration comes from the stored file and the budget from the server's
  *  clock, so nothing in this request can claim more than time has allowed. */
 export async function heartbeat(l: Learner, enrollmentId: string, lessonId: string, body: { ranges?: unknown; position?: unknown }, now = Date.now()) {
-  const e = await myEnrollment(l, enrollmentId)
+  // Read together, checked before anything is used: the enrolment must be this learner's and the
+  // lesson one of its version's.
+  const [e, { data: lesson }, { data: row }] = await Promise.all([
+    myEnrollment(l, enrollmentId),
+    sb.from('lms_lessons').select('id, version_id, kind, asset_id, media_pct').eq('id', lessonId).maybeSingle(),
+    sb.from('lms_lesson_progress').select(PROGRESS_COLS).eq('enrollment_id', enrollmentId).eq('lesson_id', lessonId).maybeSingle(),
+  ])
   assertOpen(e)
-  const tree = await loadTree(e.version_id)
-  const lesson = await lessonOf(e, lessonId, tree)
+  if (!lesson || lesson.version_id !== e.version_id) throw notFound('That lesson')
   if (lesson.kind !== 'VIDEO' && lesson.kind !== 'AUDIO') throw new LmsError('This lesson has no playback to record.')
-  const { data: row } = await sb.from('lms_lesson_progress').select(PROGRESS_COLS).eq('enrollment_id', e.id).eq('lesson_id', lessonId).maybeSingle()
   if (!row) throw new LmsError('Open the lesson first.', 409)
   const { data: asset } = await sb.from('lms_assets').select('duration_s').eq('id', lesson.asset_id).maybeSingle()
   const durationS = Number(asset?.duration_s || 0)
@@ -261,6 +297,30 @@ export async function heartbeat(l: Learner, enrollmentId: string, lessonId: stri
   return { watched_s: credit.watchedS, content_done: !!row.content_done || reached, refused_s: credit.refusedS }
 }
 
+/** Where the learner is in a document or slide deck, and which pages they have looked at.
+ *  This is a bookmark for coming back, on any device. Completion still comes from markLesson
+ *  and the server's dwell clock, so nothing here can finish a lesson. */
+export async function pageMark(l: Learner, enrollmentId: string, lessonId: string, body: { page?: unknown; pages?: unknown; seen?: unknown }) {
+  const e = await myEnrollment(l, enrollmentId)
+  assertOpen(e)
+  const tree = await loadTree(e.version_id)
+  const lesson = await lessonOf(e, lessonId, tree)
+  if (lesson.kind !== 'DOCUMENT' && lesson.kind !== 'SLIDES') throw new LmsError('This lesson has no pages to record.')
+  const { data: row } = await sb.from('lms_lesson_progress').select('id, watched_ranges').eq('enrollment_id', e.id).eq('lesson_id', lessonId).maybeSingle()
+  if (!row) throw new LmsError('Open the lesson first.', 409)
+  const pages = Math.max(1, Math.min(5000, Math.floor(Number(body.pages) || 1)))
+  const page = Math.max(1, Math.min(pages, Math.floor(Number(body.page) || 1)))
+  // Pages are stored the way video seconds are, as [first, last] runs, so a 300-page manual
+  // stays a handful of pairs.
+  const claimed = Array.isArray(body.seen) ? (body.seen as unknown[]).slice(0, 5000).map(Number).filter(n => Number.isInteger(n) && n >= 1 && n <= pages) : []
+  const have = ((row.watched_ranges || []) as Range[]).flatMap(([a, b]) => Array.from({ length: Math.max(0, Math.min(pages, b) - a + 1) }, (_, i) => a + i))
+  const seen = [...new Set([...have, ...claimed, page])].sort((a, b) => a - b)
+  const runs: Range[] = []
+  for (const n of seen) { const last = runs[runs.length - 1]; if (last && n === last[1] + 1) last[1] = n; else runs.push([n, n]) }
+  await sb.from('lms_lesson_progress').update({ position_s: page, duration_s: pages, watched_ranges: runs, watched_s: seen.length }).eq('id', row.id)
+  return { page, pages, seen: seen.length }
+}
+
 /** Finish a document, article or link, or give the attestation. The dwell time is measured
  *  from when the server opened the lesson, not from anything the browser says. */
 export async function markLesson(l: Learner, enrollmentId: string, lessonId: string, body: { ack?: boolean; done?: boolean }, now = Date.now()) {
@@ -275,7 +335,7 @@ export async function markLesson(l: Learner, enrollmentId: string, lessonId: str
   const patch: Record<string, unknown> = {}
   if (body.ack && lesson.require_ack && !row.ack_at) patch.ack_at = new Date(now).toISOString()
   if (body.done) {
-    if (lesson.kind === 'VIDEO' || lesson.kind === 'AUDIO' || lesson.kind === 'ASSESSMENT')
+    if (['VIDEO', 'AUDIO', 'ASSESSMENT', 'SCORM', 'LIVE'].includes(lesson.kind))
       throw new LmsError('This lesson completes on its own.')
     const spent = (now - new Date(row.opened_at).getTime()) / 1000
     if (spent < lesson.min_seconds) throw new LmsError(`Spend a little longer on this first: ${Math.ceil(lesson.min_seconds - spent)} seconds to go.`, 409)
@@ -283,6 +343,43 @@ export async function markLesson(l: Learner, enrollmentId: string, lessonId: str
   }
   if (Object.keys(patch).length) must(await sb.from('lms_lesson_progress').update(patch).eq('id', row.id).select('id'))
   return recompute(e.id, now)
+}
+
+// ── SCORM ───────────────────────────────────────────────────────────────────
+/** A commit from the package. What it reports is stored as the package sent it, and the lesson
+ *  is done when the package says completed or passed (or a 1.2 score meets the mastery score).
+ *  Once done it stays done: a later run that fails does not take a completion away. */
+export async function scormCommit(l: Learner, enrollmentId: string, lessonId: string, body: { cmi?: unknown; launch?: unknown; session?: unknown }, now = Date.now()) {
+  const [e, { data: lesson }, { data: row }] = await Promise.all([
+    myEnrollment(l, enrollmentId),
+    sb.from('lms_lessons').select('id, version_id, kind, asset_id').eq('id', lessonId).maybeSingle(),
+    sb.from('lms_lesson_progress').select('id, content_done, scorm').eq('enrollment_id', enrollmentId).eq('lesson_id', lessonId).maybeSingle(),
+  ])
+  assertOpen(e)
+  if (!lesson || lesson.version_id !== e.version_id) throw notFound('That lesson')
+  if (lesson.kind !== 'SCORM' || !lesson.asset_id) throw new LmsError('This lesson is not a SCORM package.')
+  if (!row) throw new LmsError('Open the lesson first.', 409)
+  const { data: p } = await sb.from('lms_assets').select('version:scorm->>version, mastery:scorm->>mastery').eq('id', lesson.asset_id).maybeSingle()
+  const { run, outcome } = nextRun(row.scorm as SavedRun | null, (p?.version as ScormVersion) || '1.2', p?.mastery != null && p.mastery !== '' ? Number(p.mastery) : null, body, now)
+  const justDone = outcome.done && !row.content_done
+  must(await sb.from('lms_lesson_progress').update({
+    scorm: run, last_beat_at: new Date(now).toISOString(), dwell_s: Math.round(run.total_s),
+    ...(outcome.done ? { content_done: true } : {}),
+  }).eq('id', row.id).select('id'))
+  if (justDone) await recompute(e.id, now)
+  else await sb.from('lms_enrollments').update({ last_activity_at: new Date(now).toISOString() }).eq('id', e.id)
+  return { content_done: !!row.content_done || outcome.done, label: row.content_done && !outcome.done ? (row.scorm as any)?.label || 'Completed' : run.label, score_pct: run.score_pct }
+}
+
+/** Start the package again from the beginning. Not for a finished lesson: that is a record. */
+export async function scormReset(l: Learner, enrollmentId: string, lessonId: string) {
+  const e = await myEnrollment(l, enrollmentId)
+  assertOpen(e)
+  const { data: row } = await sb.from('lms_lesson_progress').select('id, content_done').eq('enrollment_id', enrollmentId).eq('lesson_id', lessonId).maybeSingle()
+  if (!row) throw new LmsError('Open the lesson first.', 409)
+  if (row.content_done) throw new LmsError('This lesson is complete. Its record stays as it is.', 409)
+  must(await sb.from('lms_lesson_progress').update({ scorm: null }).eq('id', row.id).select('id'))
+  return { ok: true }
 }
 
 // ── Quizzes ─────────────────────────────────────────────────────────────────

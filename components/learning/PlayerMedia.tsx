@@ -1,7 +1,7 @@
 'use client'
 // components/learning/PlayerMedia.tsx — a video or audio lesson.
 //
-// A plain HTML5 element with its own controls. What this file adds is the reporting: every
+// The picture and controls are VideoPlayer. What this file adds is the reporting: every
 // 15 seconds while playing, and on pause, end, leaving the lesson and hiding the page, it
 // tells the server which seconds were played. The server caps what it believes by the wall
 // clock (creditHeartbeat in lib/lms/core.ts), so progress on screen always comes from its
@@ -10,15 +10,15 @@
 // Reporting must never get in the way of watching: a failed beat is swallowed, and because
 // each beat repeats the whole set of ranges, the next one carries whatever the last lost.
 import { useEffect, useRef, useState } from 'react'
-import { C, F, S, R, Button, numeric, Select } from '@/lib/ui'
 import { lmsApi, lmsBeacon } from '@/lib/lms/client'
 import { MAX_PLAYBACK_RATE, mergeRanges, rangesLength, type Range } from '@/lib/lms/core'
-import { IconAudio, ProgressBar, errorWords, type OpenedLesson, type PlayerLesson } from './shared'
+import { Bar, errorWords, type OpenedLesson, type PlayerLesson } from './shared'
+import VideoPlayer, { type Caption } from './VideoPlayer'
+import { GCheckCircle, GClock } from './glyphs'
 
 const BEAT_MS = 15_000
 /** Room past the furthest watched point: a small nudge on the scrubber is not skipping. */
 const SKIP_LEEWAY_S = 2
-const RATES = [0.75, 1, 1.25, 1.5, 1.75, 2].filter(r => r <= MAX_PLAYBACK_RATE)
 /** Automatic reloads for a stale link or a dropped connection, before asking the learner. */
 const MAX_RELOADS = 2
 const MAX_RETRIES = 6
@@ -75,7 +75,7 @@ class BeatSender {
   }
 }
 
-export default function MediaLesson({ lesson, opened, path, readOnly, onFinished, reopen }: {
+export default function MediaLesson({ lesson, opened, path, readOnly, onFinished, reopen, captions, autoPlay }: {
   lesson: PlayerLesson
   opened: OpenedLesson
   path: string
@@ -84,17 +84,21 @@ export default function MediaLesson({ lesson, opened, path, readOnly, onFinished
   onFinished: () => void
   /** A fresh file URL. */
   reopen: () => Promise<OpenedLesson>
+  /** .vtt files attached to the lesson, shown as subtitles. */
+  captions?: Caption[]
+  /** The learner pressed "Next" on a playing lesson: carry on playing. */
+  autoPlay?: boolean
 }) {
   const isVideo = lesson.kind === 'VIDEO'
   const duration = Number(opened.duration_s || 0)
   const [src, setSrc] = useState(opened.url)
   const [reloadTick, setReloadTick] = useState(0)
-  const [rate, setRate] = useState(1)
   const [watched, setWatched] = useState(() => Math.min(rangesLength(mergeRanges(opened.watched_ranges || [])), duration || Infinity))
   const [finished, setFinished] = useState(lesson.content_done)
   const [note, setNote] = useState('')
   const [fault, setFault] = useState('')
   const noteTimer = useRef<ReturnType<typeof setTimeout> | null>(null)
+  const [seen] = useState<[number, number][]>(() => mergeRanges(opened.watched_ranges || []))
 
   // Everything that changes many times a second lives here, so the element never re-renders.
   const track = useRef({
@@ -188,7 +192,6 @@ export default function MediaLesson({ lesson, opened, path, readOnly, onFinished
       const d = m.duration
       // Close to the end means they finished it: start again rather than land on the last frame.
       if (t.resumeAt > 1 && (!Number.isFinite(d) || t.resumeAt < d - 3)) m.currentTime = t.resumeAt
-      m.playbackRate = rate
       if (t.wasPlaying) m.play().catch(() => {})
     },
     onPlaying: () => {
@@ -245,53 +248,30 @@ export default function MediaLesson({ lesson, opened, path, readOnly, onFinished
     },
   }
 
-  const chooseRate = (r: number) => {
-    setRate(r)
-    if (track.current.node) track.current.node.playbackRate = r
-  }
   const attach = (n: HTMLMediaElement | null) => { if (n) track.current.node = n }
   const pct = duration ? Math.min(100, (watched / duration) * 100) : 0
   const showPct = Math.min(100, Math.round(pct))
 
-  if (!src) return <div style={{ padding: S.lg, fontSize: F.small, color: C.muted, background: C.sunken, borderRadius: R.lg }}>This file is not available right now. Please tell HR.</div>
+  if (!src) return <div className="lx-gatecard"><p>This file is not available right now. Please tell HR.</p></div>
 
   return (
-    <div style={{ display: 'grid', gap: S.sm }}>
-      {isVideo ? (
-        <video ref={attach} src={src} poster={opened.poster || undefined} controls playsInline preload="metadata"
-          controlsList="nodownload noplaybackrate" disablePictureInPicture {...handlers}
-          style={{ width: '100%', aspectRatio: '16 / 9', display: 'block', background: C.dark, borderRadius: R.lg }} />
-      ) : (
-        <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg, padding: S.lg, display: 'grid', gap: S.md }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: S.md, color: C.brand }}>
-            <span style={{ width: 44, height: 44, borderRadius: R.md, background: C.brandTint, display: 'grid', placeItems: 'center' }}><IconAudio size={22} /></span>
-            <span style={{ fontSize: F.small, color: C.muted }}>Audio lesson</span>
-          </div>
-          <audio ref={attach} src={src} controls preload="metadata" controlsList="nodownload noplaybackrate" {...handlers} style={{ width: '100%', display: 'block' }} />
-        </div>
-      )}
-
-      {fault && (
-        <div role="alert" style={{ display: 'flex', gap: S.md, alignItems: 'center', flexWrap: 'wrap', fontSize: F.small, color: C.inkSoft, background: C.warningTint, border: `1px solid ${C.warningEdge}`, borderRadius: R.md, padding: `${S.sm + 2}px ${S.md}px` }}>
-          <span style={{ flex: 1, minWidth: 180 }}>{fault}</span>
-          <Button size="sm" onClick={() => { track.current.reloads = 0; setFault(''); void reload() }}>Try again</Button>
-        </div>
-      )}
-      {note && <div role="status" style={{ fontSize: F.small, color: C.inkSoft, background: C.infoTint, border: `1px solid ${C.infoEdge}`, borderRadius: R.md, padding: `${S.sm}px ${S.md}px` }}>{note}</div>}
-
-      <div style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: S.md, alignItems: 'center' }}>
-        <div style={{ minWidth: 0 }}>
-          {!!duration && <ProgressBar pct={finished ? 100 : pct} label="Watched so far" />}
-          <div style={{ marginTop: 5, fontSize: F.tiny, color: C.muted, ...numeric }}>
-            {finished ? 'Finished' : readOnly ? 'Viewing only' : duration ? `Watched ${showPct}%. ${lesson.media_pct}% needed to finish.` : 'Your progress saves as you watch.'}
-          </div>
-        </div>
-        <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: F.tiny, color: C.muted }}>
-          Speed
-          <Select aria-label="Playback speed" value={String(rate)} onChange={e => chooseRate(Number(e.target.value))} style={{ width: 82, height: 34, padding: '0 6px' }}>
-            {RATES.map(r => <option key={r} value={r}>{r}x</option>)}
-          </Select>
-        </label>
+    <div>
+      <VideoPlayer src={src} poster={opened.poster} kind={isVideo ? 'VIDEO' : 'AUDIO'} title={isVideo ? undefined : lesson.title} captions={captions}
+        maxRate={MAX_PLAYBACK_RATE} skipLocked={!lesson.allow_skip_ahead && !finished && !readOnly} furthest={track.current.furthest} seen={seen}
+        autoPlay={autoPlay} mediaRef={attach} handlers={handlers} fault={fault || null} note={note || undefined} globalKeys
+        onRetry={() => { track.current.reloads = 0; setFault(''); void reload() }} />
+      <div className="lx-media-meta" style={{ padding: '10px 16px', background: 'var(--lx-stage)', color: 'var(--lx-on-stage-soft)', borderTop: '1px solid var(--lx-on-stage-faint)' }}>
+        {finished
+          ? <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, color: 'var(--ez-positive)', fontWeight: 650 }}><GCheckCircle size={16} /> Watched. This part of the lesson is done.</span>
+          : readOnly ? <span>Viewing only. Nothing is recorded.</span>
+          : (
+            <>
+              <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}><GClock size={15} /> {duration ? `Watched ${showPct}%` : 'Your progress saves as you watch'}</span>
+              {!!duration && <Bar pct={pct} label="Watched so far" />}
+              {!!duration && <span>{lesson.media_pct}% needed to finish{lesson.allow_skip_ahead ? '' : ' · skip ahead after watching'}</span>}
+            </>
+          )}
+        <span style={{ marginLeft: 'auto', fontSize: 12, opacity: .7 }} className="lx-hide-sm">Space play · J/L 10s · M mute · F full screen{captions?.length ? ' · C captions' : ''}</span>
       </div>
     </div>
   )

@@ -1,5 +1,6 @@
 // End-to-end over the real Next.js routes, with invented people and a local database.
 import crypto from 'crypto'
+import zlib from 'node:zlib'
 import assert from 'node:assert/strict'
 
 const APP = 'http://127.0.0.1:3210', RIG = 'http://127.0.0.1:54400', SECRET = 'rig-ess-secret'
@@ -28,9 +29,9 @@ const t = async (name, fn) => {
 }
 const S = {}
 
-async function upload(who, kind, name, mime, bytes, duration) {
-  const b = await ok(who, '/api/lms/admin/assets', { kind, name, mime, size: bytes.length, duration_s: duration })
-  if (kind === 'VIDEO') {
+async function upload(who, kind, name, mime, bytes, duration, purpose) {
+  const b = await ok(who, '/api/lms/admin/assets', { kind, name, mime, size: bytes.length, duration_s: duration, purpose })
+  if (kind === 'VIDEO' || kind === 'SCORM') {
     const meta = `bucketName ${Buffer.from(b.bucket).toString('base64')},objectName ${Buffer.from(b.path).toString('base64')},contentType ${Buffer.from(mime).toString('base64')}`
     const c = await fetch(b.tus_endpoint, { method: 'POST', headers: { 'Tus-Resumable': '1.0.0', 'Upload-Length': String(bytes.length), 'Upload-Metadata': meta, 'x-signature': b.token } })
     assert.equal(c.status, 201, 'tus create')
@@ -656,6 +657,204 @@ await t('   a waived enrolment cannot be submitted to', async () => {
   const a = await quizStart('sale1', x.e, x.lesson)
   await ok('exec', `/api/lms/admin/enrollments/${x.e}`, { action: 'waive', reason: 'Prior experience' })
   await deny(409, 'sale1', `/api/lms/me/enrollments/${x.e}`, { event: 'quiz_submit', attempt_id: a.attempt_id, answers: {} })
+})
+
+// ── SCORM packages and live sessions (migration 211) ───────────────────────
+/** A real zip: deflated text files, and one stored file so ranges can be checked. */
+function zip(files) {
+  const parts = [], central = []
+  let offset = 0
+  for (const f of files) {
+    const raw = Buffer.isBuffer(f.data) ? f.data : Buffer.from(f.data, 'utf8')
+    const body = f.store ? raw : zlib.deflateRawSync(raw)
+    const name = Buffer.from(f.name, 'utf8')
+    const h = Buffer.alloc(30)
+    h.writeUInt32LE(0x04034b50, 0); h.writeUInt16LE(20, 4); h.writeUInt16LE(0x800, 6); h.writeUInt16LE(f.store ? 0 : 8, 8)
+    h.writeUInt32LE(body.length, 18); h.writeUInt32LE(raw.length, 22); h.writeUInt16LE(name.length, 26)
+    parts.push(h, name, body)
+    const c = Buffer.alloc(46)
+    c.writeUInt32LE(0x02014b50, 0); c.writeUInt16LE(20, 4); c.writeUInt16LE(20, 6); c.writeUInt16LE(0x800, 8); c.writeUInt16LE(f.store ? 0 : 8, 10)
+    c.writeUInt32LE(body.length, 20); c.writeUInt32LE(raw.length, 24); c.writeUInt16LE(name.length, 28); c.writeUInt32LE(offset, 42)
+    central.push(c, name)
+    offset += 30 + name.length + body.length
+  }
+  const cd = Buffer.concat(central), end = Buffer.alloc(22)
+  end.writeUInt32LE(0x06054b50, 0); end.writeUInt16LE(files.length, 8); end.writeUInt16LE(files.length, 10); end.writeUInt32LE(cd.length, 12); end.writeUInt32LE(offset, 16)
+  return Buffer.concat([...parts, cd, end])
+}
+const MANIFEST = `<?xml version="1.0"?><manifest identifier="m" xmlns:adlcp="http://www.adlnet.org/xsd/adlcp_rootv1p2"><metadata><schemaversion>1.2</schemaversion></metadata>
+<organizations default="o"><organization identifier="o"><title>Privacy practice</title><item identifier="i" identifierref="r"><title>Start</title><adlcp:masteryscore>80</adlcp:masteryscore></item></organization></organizations>
+<resources><resource identifier="r" type="webcontent" adlcp:scormtype="sco" href="index.html"/></resources></manifest>`
+const CLIP = crypto.randomBytes(200_000)
+const scormFile = (path, opened) => fetch(APP + opened.scorm.url.replace(/\/index\.html.*$/, '/') + path, path.startsWith('range:') ? {} : undefined)
+
+console.log('\nSCORM packages')
+await t('an author uploads a SCORM 1.2 zip; its manifest is read at upload', async () => {
+  const bytes = zip([{ name: 'imsmanifest.xml', data: MANIFEST }, { name: 'index.html', data: '<!doctype html><html><head><title>x</title></head><body>Hello</body></html>' },
+    { name: 'assets/style.css', data: 'body{color:red}' }, { name: 'media/clip.bin', data: CLIP, store: true }])
+  const a = await upload('mgr', 'SCORM', 'privacy.zip', 'application/x-zip-compressed', bytes)
+  assert.equal(a.status, 'READY'); assert.equal(a.scorm.version, '1.2'); assert.equal(a.scorm.launch, 'index.html'); assert.equal(Number(a.scorm.files), 4)
+  const r = await ok('mgr', '/api/lms/admin/courses', { title: 'Privacy SCORM' })
+  S.sc = { course: r.course.id, version: r.version.id }
+  const m = (await op('mgr', 'module.create', { version_id: r.version.id, title: 'Practice' })).result.id
+  S.sc.lesson = (await op('mgr', 'lesson.create', { module_id: m, kind: 'SCORM', title: 'Privacy practice', asset_id: a.id })).result.id
+  await ok('head', `/api/lms/admin/courses/${S.sc.course}`, { action: 'publish' })
+  await ok('exec', '/api/lms/admin/assignments', { items: [{ course_id: S.sc.course }], targets: [{ kind: 'EMPLOYEE', value: emp('dev1') }], due_mode: 'NONE' })
+  S.sc.e = (await enrolOf('dev1', S.sc.course)).id
+})
+await t('a zip with no imsmanifest.xml is refused in plain words, and marked failed', async () => {
+  const bytes = zip([{ name: 'index.html', data: 'x' }])
+  const b = await ok('mgr', '/api/lms/admin/assets', { kind: 'SCORM', name: 'notscorm.zip', mime: 'application/zip', size: bytes.length })
+  const meta = `bucketName ${Buffer.from(b.bucket).toString('base64')},objectName ${Buffer.from(b.path).toString('base64')},contentType ${Buffer.from('application/zip').toString('base64')}`
+  const c = await fetch(b.tus_endpoint, { method: 'POST', headers: { 'Tus-Resumable': '1.0.0', 'Upload-Length': String(bytes.length), 'Upload-Metadata': meta, 'x-signature': b.token } })
+  await fetch(c.headers.get('location'), { method: 'PATCH', headers: { 'Tus-Resumable': '1.0.0', 'Upload-Offset': '0', 'Content-Type': 'application/offset+octet-stream' }, body: bytes })
+  const r = await deny(400, 'mgr', '/api/lms/admin/assets', { asset_id: b.asset_id }, 'PATCH')
+  assert.match(r.error, /imsmanifest\.xml/)
+  assert.equal((await sql(`SELECT status FROM lms_assets WHERE id=$1`, [b.asset_id]))[0].status, 'FAILED')
+})
+await t('the learner opens the package: each page carries the SCORM API and who they are', async () => {
+  const o = await open('dev1', S.sc.e, S.sc.lesson)
+  S.sc.opened = o
+  assert.match(o.scorm.url, /^\/learn-scorm\/[^/]+\/index\.html$/)
+  const page = await fetch(APP + o.scorm.url)
+  assert.equal(page.status, 200)
+  const html = await page.text()
+  assert.match(html, /window\.API=/); assert.match(html, /window\.API_1484_11=/)
+  assert.match(html, /"cmi.core.student_name":"One, Dev"/)
+  assert.ok(html.indexOf('window.API=') < html.indexOf('<title>'), 'the API comes before the page\'s own scripts')
+  assert.equal(page.headers.get('access-control-allow-origin'), '*')
+  const css = await scormFile('assets/style.css', o)
+  assert.match(css.headers.get('content-type'), /text\/css/); assert.equal(await css.text(), 'body{color:red}')
+})
+await t('stored media in a package seeks with ranges; nothing outside it is served; a forged link is refused', async () => {
+  const o = S.sc.opened
+  const base = APP + o.scorm.url.replace(/index\.html$/, '')
+  const r = await fetch(base + 'media/clip.bin', { headers: { Range: 'bytes=1000-1999' } })
+  assert.equal(r.status, 206); assert.equal(r.headers.get('content-range'), `bytes 1000-1999/${CLIP.length}`)
+  assert.ok(Buffer.from(await r.arrayBuffer()).equals(CLIP.subarray(1000, 2000)))
+  assert.equal((await fetch(base + '..%2F..%2Fimsmanifest.xml')).status, 404)
+  const [, , tok] = o.scorm.url.split('/')
+  const forged = tok.slice(0, -2) + (tok.endsWith('AA') ? 'BB' : 'AA')
+  assert.equal((await fetch(`${APP}/learn-scorm/${forged}/index.html`)).status, 403)
+})
+await t('a commit saves progress; reopening resumes where the learner was', async () => {
+  const r = await ok('dev1', `/api/lms/me/enrollments/${S.sc.e}`, { event: 'scorm', lesson_id: S.sc.lesson, launch: 'L1', session: 120, cmi: { 'cmi.core.lesson_status': 'incomplete', 'cmi.core.lesson_location': 'page-3', 'cmi.suspend_data': 'abc', 'cmi.core.student_name': 'Forged' } })
+  assert.equal(r.content_done, false); assert.equal(r.label, 'In progress')
+  const html = await (await fetch(APP + S.sc.opened.scorm.url)).text()
+  assert.match(html, /"cmi.core.entry":"resume"/); assert.match(html, /"cmi.core.lesson_location":"page-3"/)
+  assert.match(html, /"cmi.core.student_name":"One, Dev"/, 'the package cannot rename the learner')
+  assert.match(html, /"cmi.core.total_time":"0000:02:00"/)
+})
+await t('a 1.2 score under the mastery score does not finish it; a pass does, and the course completes', async () => {
+  const send = cmi => ok('dev1', `/api/lms/me/enrollments/${S.sc.e}`, { event: 'scorm', lesson_id: S.sc.lesson, launch: 'L2', session: 60, cmi })
+  const f = await send({ 'cmi.core.lesson_status': 'completed', 'cmi.core.score.raw': '60' })
+  assert.equal(f.content_done, false); assert.equal(f.label, 'Not passed')
+  const p = await send({ 'cmi.core.lesson_status': 'passed', 'cmi.core.score.raw': '90' })
+  assert.equal(p.content_done, true); assert.equal(p.score_pct, 90)
+  assert.equal((await enrolOf('dev1', S.sc.course)).status, 'COMPLETED')
+  await deny(409, 'dev1', `/api/lms/me/enrollments/${S.sc.e}`, { event: 'scorm_reset', lesson_id: S.sc.lesson })
+})
+await t('nobody else can write to a learner\'s package, and Mark complete cannot shortcut it', async () => {
+  await deny(404, 'dev2', `/api/lms/me/enrollments/${S.sc.e}`, { event: 'scorm', lesson_id: S.sc.lesson, cmi: { 'cmi.core.lesson_status': 'failed' } })
+  await ok('exec', '/api/lms/admin/assignments', { items: [{ course_id: S.sc.course }], targets: [{ kind: 'EMPLOYEE', value: emp('dev2') }], due_mode: 'NONE' })
+  const e2 = (await enrolOf('dev2', S.sc.course)).id
+  await open('dev2', e2, S.sc.lesson)
+  const r = await deny(400, 'dev2', `/api/lms/me/enrollments/${e2}`, { event: 'mark', lesson_id: S.sc.lesson, done: true })
+  assert.match(r.error, /completes on its own/)
+})
+
+console.log('\nLive sessions')
+const at = (min) => new Date(Date.now() + min * 60_000).toISOString()
+await t('HR schedules a webinar for a course and invites two people; both are on the register', async () => {
+  const r = await ok('mgr', '/api/lms/admin/courses', { title: 'Privacy live' })
+  S.lv = { course: r.course.id }
+  const m = (await op('mgr', 'module.create', { version_id: r.version.id, title: 'Live' })).result.id
+  S.lv.lesson = (await op('mgr', 'lesson.create', { module_id: m, kind: 'LIVE', title: 'Q&A' })).result.id
+  await ok('head', `/api/lms/admin/courses/${S.lv.course}`, { action: 'publish' })
+  await ok('exec', '/api/lms/admin/assignments', { items: [{ course_id: S.lv.course }], targets: ['dev1', 'dev2', 'sale1'].map(k => ({ kind: 'EMPLOYEE', value: emp(k) })), due_mode: 'NONE' })
+  const s = await ok('exec', '/api/lms/admin/sessions', { title: 'DPDP Q&A', starts_at: at(2 * 24 * 60), duration_min: 60, join_url: 'https://meet.google.com/abc-defg-hij', course_id: S.lv.course, targets: [{ kind: 'EMPLOYEE', value: emp('dev1') }, { kind: 'EMPLOYEE', value: emp('dev2') }] })
+  S.lv.s = s.session.id
+  assert.equal(s.invited.invited, 2)
+  assert.match(s.session.checkin_code, /^[A-Z2-9]{6}$/)
+  const d = await ok('exec', `/api/lms/admin/sessions/${S.lv.s}`)
+  assert.equal(d.attendees.length, 2)
+  assert.ok((await sql(`SELECT 1 FROM ess_notifications WHERE employee_id=$1 AND notification_code='LMS_ASSIGNED' AND link LIKE '/learning/live/%'`, [emp('dev1')])).length, 'bell with a link to the session')
+})
+await t('a meeting link that is not https is refused; an uninvited person cannot see a closed session', async () => {
+  const r = await deny(400, 'exec', '/api/lms/admin/sessions', { title: 'Bad', starts_at: at(60), join_url: 'javascript:alert(1)' })
+  assert.match(r.error, /https/)
+  await deny(404, 'sale1', `/api/lms/me/sessions/${S.lv.s}`)
+  await deny(404, 'bdev', `/api/lms/me/sessions/${S.lv.s}`)
+})
+await t('the invitee sees it, registers, and gets a calendar file; Join is shut until 15 minutes before', async () => {
+  const mine = await ok('dev1', '/api/lms/me/sessions')
+  const s = mine.upcoming.find(x => x.id === S.lv.s)
+  assert.equal(s.me.invited, true); assert.equal(s.can_join, false); assert.equal(s.has_link, true)
+  assert.equal(JSON.stringify(mine).includes('meet.google.com'), false, 'the link is not handed out early')
+  await deny(409, 'dev1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'join' })
+  await ok('dev1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'register' })
+  const ics = await call('dev1', `/api/lms/me/sessions/${S.lv.s}?ics=1`)
+  assert.match(ics.ct, /text\/calendar/)
+  const text = ics.data.toString()
+  assert.match(text, /BEGIN:VCALENDAR/); assert.match(text, new RegExp(`UID:${S.lv.s}@ezer-learn`)); assert.match(text, /ATTENDEE;CN=Dev One/)
+})
+await t('seats run out: the last seat goes, the next person is told', async () => {
+  const s = await ok('exec', '/api/lms/admin/sessions', { title: 'Small room', starts_at: at(3000), duration_min: 30, location: 'Room 4', capacity: 1, open_registration: true })
+  await ok('sale1', `/api/lms/me/sessions/${s.session.id}`, { event: 'register' })
+  const r = await deny(409, 'dev2', `/api/lms/me/sessions/${s.session.id}`, { event: 'register' })
+  assert.match(r.error, /seat/)
+  await deny(404, 'bdev', `/api/lms/me/sessions/${s.session.id}`)
+})
+await t('changing the time sends the updated invitation (sequence goes up)', async () => {
+  const r = await ok('exec', `/api/lms/admin/sessions/${S.lv.s}`, { starts_at: at(2 * 24 * 60 + 30) }, 'PATCH')
+  assert.equal(r.session.sequence, 1)
+})
+await t('live: Join hands out the link and is noted; the attendance code completes the course\'s live lesson', async () => {
+  await sql(`UPDATE lms_sessions SET starts_at = now() - interval '5 minutes' WHERE id=$1`, [S.lv.s])
+  const j = await ok('dev1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'join' })
+  assert.equal(j.url, 'https://meet.google.com/abc-defg-hij')
+  await deny(400, 'dev1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'checkin', code: 'WRONG1' })
+  const code = (await sql(`SELECT checkin_code FROM lms_sessions WHERE id=$1`, [S.lv.s]))[0].checkin_code
+  await ok('dev1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'checkin', code: code.toLowerCase() })
+  const row = (await sql(`SELECT a.attended, a.attendance_by, a.joined_at FROM lms_session_attendees a JOIN lms_learners l ON l.id=a.learner_id WHERE a.session_id=$1 AND l.employee_id=$2`, [S.lv.s, emp('dev1')]))[0]
+  assert.equal(row.attended, true); assert.equal(row.attendance_by, 'CODE'); assert.ok(row.joined_at)
+  assert.equal((await enrolOf('dev1', S.lv.course)).status, 'COMPLETED')
+})
+await t('the host ticks attendance; someone uninvited who never came cannot check in', async () => {
+  const dev2 = (await sql(`SELECT id FROM lms_learners WHERE employee_id=$1`, [emp('dev2')]))[0].id
+  await ok('exec', `/api/lms/admin/sessions/${S.lv.s}`, { action: 'attendance', learners: [dev2], attended: true })
+  assert.equal((await enrolOf('dev2', S.lv.course)).status, 'COMPLETED')
+  await deny(404, 'sale1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'checkin', code: 'ABCDEF' })
+})
+await t('the recording counts instead of attending, but only as fast as the clock allows', async () => {
+  const vid = await upload('exec', 'VIDEO', 'recording.mp4', 'video/mp4', crypto.randomBytes(2048), 120, 'recording')
+  await deny(403, 'exec', '/api/lms/admin/assets', { kind: 'DOCUMENT', name: 'x.pdf', mime: 'application/pdf', size: 10, purpose: 'recording' })
+  await ok('exec', `/api/lms/admin/sessions/${S.lv.s}`, { action: 'recording', asset_id: vid.id })
+  await ok('exec', `/api/lms/admin/sessions/${S.lv.s}`, { action: 'complete' })
+  // sale1 is enrolled on the course but was never invited: an open session's recording would be
+  // theirs to watch; this one is closed, so add them as a self sign-up first.
+  await sql(`UPDATE lms_sessions SET open_registration = true WHERE id=$1`, [S.lv.s])
+  const rec = await ok('sale1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'recording' })
+  assert.ok(rec.url); assert.equal(rec.duration_s, 120)
+  const greedy = await ok('sale1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'beat', played_s: 600, position: 110 })
+  assert.ok(greedy.watched_s < 20, `credited ${greedy.watched_s}`); assert.equal(greedy.done, false)
+  await sql(`UPDATE lms_session_attendees SET recording_last_beat_at = now() - interval '2 minutes' WHERE session_id=$1 AND learner_id=(SELECT id FROM lms_learners WHERE employee_id=$2)`, [S.lv.s, emp('sale1')])
+  const fair = await ok('sale1', `/api/lms/me/sessions/${S.lv.s}`, { event: 'beat', played_s: 110, position: 120 })
+  assert.equal(fair.done, true)
+  assert.equal((await enrolOf('sale1', S.lv.course)).status, 'COMPLETED')
+})
+await t('the daily job runs the live-session mail without error; a cancelled session shuts Join', async () => {
+  const d = await ok(null, '/api/cron/lms-daily')
+  const live = d.result?.live || d.live || d
+  assert.ok(!live.skipped, JSON.stringify(live).slice(0, 200))
+  const s = await ok('exec', '/api/lms/admin/sessions', { title: 'To cancel', starts_at: at(-5), duration_min: 60, join_url: 'https://zoom.us/j/1', targets: [{ kind: 'EMPLOYEE', value: emp('dev1') }] })
+  const c = await ok('exec', `/api/lms/admin/sessions/${s.session.id}`, { action: 'cancel', reason: 'Speaker unwell' })
+  assert.equal(c.session.status, 'CANCELLED'); assert.equal(c.session.sequence, 1)
+  await deny(409, 'dev1', `/api/lms/me/sessions/${s.session.id}`, { event: 'join' })
+})
+await t('another company\'s HR cannot open or change this company\'s session', async () => {
+  await deny(404, 'bhead', `/api/lms/admin/sessions/${S.lv.s}`)
+  await deny(404, 'bhead', `/api/lms/admin/sessions/${S.lv.s}`, { action: 'complete' })
 })
 
 console.log(`\n${pass} passed, ${fail} failed`)

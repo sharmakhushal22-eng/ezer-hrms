@@ -2,7 +2,7 @@
 // event at a time. Everything sent here is a claim that lib/lms/engine.ts judges.
 import { NextRequest, NextResponse } from 'next/server'
 import { lmsLearner, refuseReadOnly } from '@/lib/lms/learner'
-import { heartbeat, markLesson, openLesson, playerView, saveFeedback, startQuiz, submitQuiz } from '@/lib/lms/engine'
+import { heartbeat, markLesson, openLesson, pageMark, playerView, saveFeedback, scormCommit, scormReset, startQuiz, submitQuiz } from '@/lib/lms/engine'
 import { errorResponse, LmsError } from '@/lib/lms/server'
 
 export const runtime = 'nodejs'
@@ -28,10 +28,13 @@ export async function POST(req: NextRequest, { params }: Ctx) {
     if (refused) return refused
     switch (b.event) {
       case 'beat': return NextResponse.json(await heartbeat(learner, id, String(b.lesson_id || ''), b))
+      case 'page': return NextResponse.json(await pageMark(learner, id, String(b.lesson_id || ''), b))
       case 'mark': return NextResponse.json(await markLesson(learner, id, String(b.lesson_id || ''), b))
       case 'quiz_start': return NextResponse.json(await startQuiz(learner, id, String(b.lesson_id || '')))
       case 'quiz_submit': return NextResponse.json(await submitQuiz(learner, id, String(b.attempt_id || ''), b.answers || {}))
       case 'feedback': await saveFeedback(learner, id, Number(b.rating), b.comment ?? null); return NextResponse.json({ ok: true })
+      case 'scorm': return NextResponse.json(await scormCommit(learner, id, String(b.lesson_id || ''), b))
+      case 'scorm_reset': return NextResponse.json(await scormReset(learner, id, String(b.lesson_id || '')))
       default: throw new LmsError('Unknown event.')
     }
   } catch (e) { return errorResponse(e) }

@@ -19,6 +19,7 @@
 // question, and conflating the two is how a recruiter ends up able to call a payroll
 // endpoint by hand.
 import { createClient } from '@supabase/supabase-js'
+import { resilientFetch } from '@/lib/resilient-fetch'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyEssToken } from '@/lib/ess-session'
 import { grantForRequest, LEGACY_SUPABASE_BRIDGE } from '@/lib/rms/server'
@@ -28,6 +29,9 @@ import type { AccessLevel, Module } from '@/lib/rms/modules'
 const admin = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
+  // Every signed-in request passes through here: a read stuck on a dead connection gives up
+  // after a few seconds and tries once more, instead of holding the request for a minute.
+  { global: { fetch: resilientFetch() } },
 )
 
 export interface ApiUser {

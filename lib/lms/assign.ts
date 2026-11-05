@@ -7,7 +7,7 @@
 import { audit, LmsError, must, notFound, sb, settingsFor, allRows } from './server'
 import { inScope, type LmsActor } from './access'
 import { recompute, refreshPaths } from './engine'
-import { mailLearner, notifyPerson, shell, appBase, digestHtml } from './notify'
+import { mailLearner, notifyPerson, shell, learnUrl, digestHtml } from './notify'
 
 export const TARGET_KINDS = ['COMPANY', 'EMPLOYEE', 'DEPARTMENT', 'DESIGNATION', 'LOCATION', 'TEAM', 'MANAGER', 'GRADE', 'EMPLOYMENT_TYPE', 'EMPLOYEE_CATEGORY', 'CONFIRMATION_STATUS']
 const PREBOARD_KINDS = ['COMPANY', 'DEPARTMENT', 'DESIGNATION']
@@ -140,8 +140,8 @@ async function mailNewEnrolments(assignmentId: string) {
       if (l.kind !== 'EMPLOYEE') continue
       const lines = rows.filter((r: any) => r.learner_id === l.id).map((r: any) => ({ title: String(title.get(r.course_id)), due: r.due_at, mandatory: r.mandatory }))
       await mailLearner(l.email, 'New learning assigned to you',
-        shell({ title: 'New learning for you', body: digestHtml(l.full_name, [{ heading: 'Assigned to you', lines }]), cta: { label: 'Open my learning', href: `${appBase()}/ess/learning` } }),
-        `New learning has been assigned to you: ${lines.map(x => x.title).join(', ')}. ${appBase()}/ess/learning`)
+        shell({ title: 'New learning for you', body: digestHtml(l.full_name, [{ heading: 'Assigned to you', lines }]), cta: { label: 'Open my learning', href: learnUrl() } }),
+        `New learning has been assigned to you: ${lines.map(x => x.title).join(', ')}. ${learnUrl()}`)
     }
   }
   await sb.from('lms_enrollments').update({ notified_at: new Date().toISOString() }).in('id', ids)
@@ -275,11 +275,21 @@ export async function enrollmentAction(a: LmsActor, id: string, action: string, 
       return { ok: true, id: made.id }
     }
     case 'remind': {
-      const { data: l } = await sb.from('lms_learners').select('employee_id, email, full_name').eq('id', e.learner_id).maybeSingle()
-      const { data: c } = await sb.from('lms_courses').select('title').eq('id', e.course_id).maybeSingle()
-      if (l?.employee_id) await notifyPerson(l.employee_id, 'LMS_DUE_SOON', 'Reminder from HR', c?.title || 'Your training')
-      await log('REMINDER_SENT')
-      return { ok: true }
+      const [{ data: l }, { data: c }, s] = await Promise.all([
+        sb.from('lms_learners').select('employee_id, email, full_name').eq('id', e.learner_id).maybeSingle(),
+        sb.from('lms_courses').select('title').eq('id', e.course_id).maybeSingle(),
+        settingsFor(e.company_id),
+      ])
+      const title = c?.title || 'Your training'
+      if (l?.employee_id) await notifyPerson(l.employee_id, 'LMS_DUE_SOON', 'Reminder from HR', title)
+      // The person pressed a button for this one learner, so it goes now, not in tomorrow's digest.
+      const mail = l?.employee_id && s.email_enabled
+        ? await mailLearner(l.email, `Reminder: ${title}`,
+            shell({ title: 'A reminder about your training', body: digestHtml(l.full_name, [{ heading: `${a.label} sent you a reminder about`, lines: [{ title, due: e.due_at, mandatory: e.mandatory }] }]), cta: { label: 'Continue learning', href: learnUrl() } }),
+            `${a.label} sent you a reminder about ${title}. ${learnUrl()}`).catch(() => ({ sent: false }))
+        : { sent: false }
+      await log('REMINDER_SENT', { mailed: !!(mail as any).sent })
+      return { ok: true, mailed: !!(mail as any).sent }
     }
     default:
       throw new LmsError('Unknown action.')

@@ -16,6 +16,7 @@
 //                  LEGACY_SUPABASE_BRIDGE to false to close it; nothing else depends on
 //                  it.
 import { createClient } from '@supabase/supabase-js'
+import { resilientFetch } from '@/lib/resilient-fetch'
 import { verifyEssToken } from '@/lib/ess-session'
 import { resolveGrant, emptyGrant, type Grant, type RoleRef } from '@/lib/rms/resolve'
 import { buildChain, type ManagerSlot, type ManagerRef, type Relationship, type RelationshipType } from '@/lib/rms/hierarchy'
@@ -28,6 +29,9 @@ export const LEGACY_SUPABASE_BRIDGE = true
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
+  // Every signed-in request passes through here: a read stuck on a dead connection gives up
+  // after a few seconds and tries once more, instead of holding the request for a minute.
+  { global: { fetch: resilientFetch() } },
 )
 
 export { sb as rmsServiceClient }

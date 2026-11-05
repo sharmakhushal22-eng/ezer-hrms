@@ -72,6 +72,7 @@ export const ASSIGN_STATUS: Record<string, Label> = {
 export const TRIGGER: Record<string, string> = { ONCE: 'One time', DYNAMIC: 'Keeps applying', ON_JOIN: 'New joiners', PREBOARD: 'Pre-joining' }
 export const LESSON_KIND: Record<string, string> = {
   VIDEO: 'Video', AUDIO: 'Audio', DOCUMENT: 'Document', SLIDES: 'Slides', ARTICLE: 'Article', LINK: 'Link', ASSESSMENT: 'Assessment',
+  SCORM: 'SCORM package', LIVE: 'Live session',
 }
 
 export function StatusBadge({ map, value }: { map: Record<string, Label>; value: string }) {

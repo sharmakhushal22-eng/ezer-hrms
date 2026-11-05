@@ -25,11 +25,12 @@ export async function teamIds(employeeId: string): Promise<string[]> {
 }
 
 export async function teamView(managerId: string, companyId: string) {
-  const ids = await teamIds(managerId)
-  const settings = await settingsFor(companyId)
+  const [ids, settings] = await Promise.all([teamIds(managerId), settingsFor(companyId)])
   if (!ids.length) return { is_manager: false, can_assign: false, people: [], rows: [], requests: [] }
-  const rows = await allRows<any>((f, t) => sb.rpc('lms_report_rows', { p_companies: [companyId], p_employees: ids }).range(f, t) as any)
-  const { data: people } = await sb.from('employees').select('id, emp_code, full_name, designation').in('id', ids).eq('employment_status', 'Active').order('full_name')
+  const [rows, { data: people }] = await Promise.all([
+    allRows<any>((f, t) => sb.rpc('lms_report_rows', { p_companies: [companyId], p_employees: ids }).range(f, t) as any),
+    sb.from('employees').select('id, emp_code, full_name, designation').in('id', ids).eq('employment_status', 'Active').order('full_name'),
+  ])
   const summary = (people || []).map((p: any) => {
     const mine = rows.filter(r => r.employee_id === p.id)
     return {

@@ -1,22 +1,27 @@
 'use client'
-// components/learning/Achievements.tsx — certificates, results, history and skills.
+// components/learning/Achievements.tsx — certificates, skills, quiz results and the record of
+// every course finished, all from /api/lms/me/achievements.
 import { useCallback, useEffect, useState } from 'react'
-import { C, F, W, S, R, Badge, Button, Card, Skeleton, numeric, IconAward, IconCheck, IconDownload, type Tone } from '@/lib/ui'
+import { IconDownload } from '@/lib/ui'
 import { lmsApi, lmsDownload } from '@/lib/lms/client'
-import { CalmMessage, IconExternal, Problem, SectionHead, STATUS, dayWords, errorWords, plural } from './shared'
+import { EmptyState, IconExternal, Oops, STATUS, Skel, dayWords, errorWords, plural } from './shared'
+import { GCert, GCheckCircle, GTarget, GTrophy } from './glyphs'
+import { cached, remember } from './app/cache'
+import { Aurora } from './motion/Aurora'
+import { CountUp } from './motion/CountUp'
 
 interface Cert { id: string; cert_no: string; verify_code: string; title: string; score_pct: number | null; issued_at: string; expires_at: string | null; revoked_at: string | null }
 interface Result { id: string; title: string; attempt_no: number; pct: number | null; pass_pct?: number; passed: boolean; submitted_at: string | null }
 interface History { id: string; title: string; status: string; score_pct: number | null; completed_at: string | null; cycle_no: number; mandatory: boolean }
 interface Data { certificates: Cert[]; results: Result[]; history: History[]; skills: string[] }
 
-function certState(c: Cert): { label: string; t: Tone } {
+function certState(c: Cert): { label: string; t: string } {
   if (c.revoked_at) return { label: 'Revoked', t: 'critical' }
   if (c.expires_at && new Date(c.expires_at).getTime() < Date.now()) return { label: 'Expired', t: 'warning' }
   return { label: 'Valid', t: 'positive' }
 }
 
-function CertRow({ c, first }: { c: Cert; first: boolean }) {
+function CertCard({ c }: { c: Cert }) {
   const [busy, setBusy] = useState(false)
   const [err, setErr] = useState('')
   const st = certState(c)
@@ -26,112 +31,122 @@ function CertRow({ c, first }: { c: Cert; first: boolean }) {
     catch (e) { setErr(errorWords(e)) } finally { setBusy(false) }
   }
   return (
-    <div style={{ display: 'grid', gridTemplateColumns: '40px minmax(0,1fr)', gap: S.md, padding: S.md, borderTop: first ? 0 : `1px solid ${C.line}` }}>
-      <span style={{ width: 38, height: 38, borderRadius: R.md, display: 'grid', placeItems: 'center', background: C.brandTint, color: C.brand }}><IconAward size={18} /></span>
-      <div style={{ minWidth: 0, display: 'grid', gap: 4 }}>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, alignItems: 'center' }}>
-          <span style={{ fontWeight: W.semi }}>{c.title}</span>
-          <Badge t={st.t} size="sm">{st.label}</Badge>
+    <div className="lx-cert lx-in" style={{ display: 'grid', gap: 14 }}>
+      <i className="lx-holo" aria-hidden />
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <span className="lx-cert-seal"><GCert size={22} /></span>
+        <div style={{ minWidth: 0, flex: 1 }}>
+          <div style={{ fontSize: 11.5, fontWeight: 750, letterSpacing: '.08em', textTransform: 'uppercase', color: 'var(--lx-gold)' }}>Certificate of completion</div>
+          <div className="lx-num" style={{ fontSize: 12.5, color: 'var(--ez-muted)' }}>{c.cert_no}</div>
         </div>
-        <div style={{ fontSize: F.tiny, color: C.muted, ...numeric }}>
-          {c.cert_no} · Issued {dayWords(c.issued_at)}{c.expires_at ? ` · Valid until ${dayWords(c.expires_at)}` : ''}{c.score_pct != null ? ` · ${Number(c.score_pct)}%` : ''}
-        </div>
-        <div style={{ display: 'flex', flexWrap: 'wrap', gap: S.md, alignItems: 'center', marginTop: 2 }}>
-          {!c.revoked_at && <Button size="sm" icon={<IconDownload size={14} />} disabled={busy} onClick={save}>{busy ? 'Preparing' : 'Download PDF'}</Button>}
-          <a className="ezl-linkbtn ezl-tap" style={{ fontSize: F.small }} href={`/learn/verify/${c.verify_code}`} target="_blank" rel="noopener noreferrer">Verify link <IconExternal size={13} /></a>
-        </div>
-        {err && <div role="alert" style={{ fontSize: F.tiny, color: C.critical }}>{err}</div>}
+        <span className={`lx-tag lx-tag--${st.t}`}>{st.label}</span>
       </div>
+      <div className="lx-display" style={{ fontSize: 21, lineHeight: 1.2 }}>{c.title}</div>
+      <div className="lx-num" style={{ fontSize: 13, color: 'var(--ez-muted)' }}>
+        Issued {dayWords(c.issued_at)}{c.expires_at ? ` · valid until ${dayWords(c.expires_at)}` : ''}{c.score_pct != null ? ` · score ${Number(c.score_pct)}%` : ''}
+      </div>
+      <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+        {!c.revoked_at && <button className="lx-btn lx-btn--sm lx-btn--primary" disabled={busy} onClick={save}><IconDownload size={14} /> {busy ? 'Preparing…' : 'Download PDF'}</button>}
+        <a className="lx-btn lx-btn--sm" href={`/learn/verify/${c.verify_code}`} target="_blank" rel="noopener noreferrer">Verification page <IconExternal size={13} /></a>
+      </div>
+      {err && <div role="alert" style={{ fontSize: 13, color: 'var(--ez-critical)' }}>{err}</div>}
     </div>
   )
 }
 
 export default function Achievements() {
-  const [data, setData] = useState<Data | null>(null)
+  const [d, setD] = useState<Data | null>(() => cached<Data>('achievements'))
   const [err, setErr] = useState('')
-  const [allHistory, setAllHistory] = useState(false)
-  const load = useCallback(() => {
-    setErr('')
-    lmsApi<Data>('/api/lms/me/achievements').then(setData).catch(e => setErr(errorWords(e)))
-  }, [])
+  const load = useCallback(() => { setErr(''); lmsApi<Data>('/api/lms/me/achievements').then(x => setD(remember('achievements', x))).catch(e => setErr(errorWords(e))) }, [])
   useEffect(() => { load() }, [load])
 
-  if (err) return <Problem message={err} onRetry={load} />
-  if (!data) return <div style={{ display: 'grid', gap: S.md }}><Skeleton h={90} r={R.lg} /><Skeleton h={160} r={R.lg} /></div>
-  const { certificates, results, history, skills } = data
-  if (!certificates.length && !results.length && !history.length) {
-    return <CalmMessage title="Nothing here yet" icon={<IconAward size={22} />}>Finish a course and your certificates, scores and skills will collect on this page.</CalmMessage>
-  }
-  const passed = history.filter(h => h.status === 'COMPLETED').length
-  const line = [plural(passed, 'course') + ' completed', plural(certificates.filter(c => !c.revoked_at).length, 'certificate'), plural(skills.length, 'skill')].join(' · ')
-  const shownHistory = allHistory ? history : history.slice(0, 6)
+  if (err && !d) return <Oops message={err} onRetry={load} />
+  if (!d) return <div style={{ display: 'grid', gap: 24 }}><Skel h={150} r={22} /><div className="lx-ach-top">{[0, 1, 2, 3].map(i => <Skel key={i} h={100} r={18} />)}</div><Skel h={220} r={18} /></div>
+
+  const completed = d.history.filter(h => h.status === 'COMPLETED')
+  const passed = d.results.filter(r => r.passed)
+  const scored = completed.filter(h => h.score_pct != null)
+  const avg = scored.length ? Math.round(scored.reduce((a, h) => a + Number(h.score_pct), 0) / scored.length) : null
+  const nothing = !d.certificates.length && !d.history.length && !d.results.length
 
   return (
-    <div className="ez-rise" style={{ display: 'grid', gap: S.xl }}>
-      <div style={{ fontSize: F.small, color: C.muted, ...numeric }}>{line}</div>
+    <div>
+      <header className="lx-ph lx-in">
+        <Aurora specks={10} />
+        <div className="lx-ph-row">
+          <div>
+            <h1>Achievements</h1>
+            <p>Your certificates, the skills you have built and the record of everything you have finished.</p>
+          </div>
+          <span className="lx-trophy" style={{ width: 72, height: 72 }}><GTrophy size={34} /></span>
+        </div>
+      </header>
 
-      {certificates.length > 0 && (
-        <section>
-          <SectionHead title="Certificates" count={certificates.length} />
-          <Card pad={0} elevation="flat" style={{ overflow: 'hidden' }}>
-            {certificates.map((c, i) => <CertRow key={c.id} c={c} first={!i} />)}
-          </Card>
-        </section>
-      )}
+      {nothing ? (
+        <EmptyState title="Your first achievement is one course away" icon={<GTrophy size={34} />}>Finish a course and its certificate, score and skills will be kept here for good.</EmptyState>
+      ) : (
+        <div className="lx-stack">
+          <div className="lx-ach-top" style={{ marginBottom: 0 }}>
+            <div className="lx-kpi" data-t="positive"><i><GCheckCircle size={20} /></i><b className="lx-num"><CountUp value={completed.length} /></b><span>Courses completed</span></div>
+            <div className="lx-kpi" data-t="gold"><i><GCert size={20} /></i><b className="lx-num"><CountUp value={d.certificates.filter(c => !c.revoked_at).length} /></b><span>Certificates earned</span></div>
+            <div className="lx-kpi"><i><GTarget size={20} /></i><b className="lx-num"><CountUp value={passed.length} /></b><span>Quizzes passed</span></div>
+            <div className="lx-kpi"><i><GTrophy size={20} /></i><b className="lx-num">{avg != null ? <CountUp value={avg} suffix="%" /> : '—'}</b><span>Average course score</span></div>
+          </div>
 
-      {skills.length > 0 && (
-        <section>
-          <SectionHead title="Skills gained" />
-          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6 }}>{skills.map(s => <Badge key={s} t="brand">{s}</Badge>)}</div>
-        </section>
-      )}
+          {d.certificates.length > 0 && (
+            <section>
+              <div className="lx-sec-head"><div><h2 className="lx-sec-title">Certificates</h2><div className="lx-sec-sub">Anyone can check a certificate is genuine from its verification page</div></div></div>
+              <div className="lx-certs">{d.certificates.map(c => <CertCard key={c.id} c={c} />)}</div>
+            </section>
+          )}
 
-      <div className="ezl-two" style={{ alignItems: 'start', gap: S.xl }}>
-        {results.length > 0 && (
-          <section style={{ minWidth: 0 }}>
-            <SectionHead title="Assessment results" />
-            <Card pad={0} elevation="flat" style={{ overflow: 'hidden' }}>
-              {results.slice(0, 12).map((r, i) => (
-                <div key={r.id} style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: S.sm, alignItems: 'center', padding: `${S.sm + 2}px ${S.md}px`, borderTop: i ? `1px solid ${C.line}` : 0 }}>
-                  <div style={{ minWidth: 0 }}>
-                    <div style={{ fontSize: F.small, fontWeight: W.medium }}>{r.title}</div>
-                    <div style={{ fontSize: F.tiny, color: C.muted, ...numeric }}>Attempt {r.attempt_no}{r.submitted_at ? ` · ${dayWords(r.submitted_at)}` : ''}{r.pass_pct != null ? ` · Pass mark ${r.pass_pct}%` : ''}</div>
-                  </div>
-                  <div style={{ textAlign: 'right' }}>
-                    <div style={{ fontWeight: W.semi, ...numeric }}>{r.pct != null ? `${Number(r.pct)}%` : '-'}</div>
-                    <div style={{ fontSize: F.tiny, color: r.passed ? C.positive : C.muted }}>{r.passed ? 'Passed' : 'Not passed'}</div>
-                  </div>
-                </div>
-              ))}
-            </Card>
-          </section>
-        )}
-        {history.length > 0 && (
-          <section style={{ minWidth: 0 }}>
-            <SectionHead title="Learning history" />
-            <Card pad={0} elevation="flat" style={{ overflow: 'hidden' }}>
-              {shownHistory.map((h, i) => {
-                const st = STATUS[h.status] || { label: h.status, t: 'neutral' as Tone }
-                return (
-                  <div key={h.id} style={{ display: 'grid', gridTemplateColumns: '26px minmax(0,1fr) auto', gap: S.sm, alignItems: 'center', padding: `${S.sm + 2}px ${S.md}px`, borderTop: i ? `1px solid ${C.line}` : 0 }}>
-                    <span style={{ color: h.status === 'COMPLETED' ? C.positive : C.muted }}><IconCheck size={15} /></span>
-                    <div style={{ minWidth: 0 }}>
-                      <div style={{ fontSize: F.small, fontWeight: W.medium }}>{h.title}</div>
-                      <div style={{ fontSize: F.tiny, color: C.muted, ...numeric }}>{h.completed_at ? dayWords(h.completed_at) : st.label}{h.score_pct != null ? ` · ${Number(h.score_pct)}%` : ''}</div>
+          {d.skills.length > 0 && (
+            <section>
+              <div className="lx-sec-head"><div><h2 className="lx-sec-title">Skills you have built</h2><div className="lx-sec-sub">From the courses you completed</div></div></div>
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>{d.skills.map(s => <span key={s} className="lx-skill"><i />{s}</span>)}</div>
+            </section>
+          )}
+
+          {d.history.length > 0 && (
+            <section>
+              <div className="lx-sec-head"><div><h2 className="lx-sec-title">Learning history</h2><div className="lx-sec-sub lx-num">{plural(d.history.length, 'course')}</div></div></div>
+              <div className="lx-timeline">
+                {d.history.map(h => {
+                  const st = STATUS[h.status] || { label: h.status, t: 'neutral' }
+                  return (
+                    <div key={h.id} className="lx-tl-item" data-t={st.t}>
+                      <div style={{ minWidth: 0 }}>
+                        <div style={{ fontWeight: 650 }}>{h.title}{h.cycle_no > 1 && <span style={{ color: 'var(--ez-muted)', fontWeight: 500 }}> · round {h.cycle_no}</span>}</div>
+                        <div className="lx-num" style={{ fontSize: 12.5, color: 'var(--ez-muted)', marginTop: 2 }}>{h.completed_at ? dayWords(h.completed_at) : st.label}{h.score_pct != null ? ` · ${Number(h.score_pct)}%` : ''}{h.mandatory ? ' · mandatory' : ''}</div>
+                      </div>
+                      <span className={`lx-tag ${st.t !== 'neutral' && st.t !== 'brand' ? `lx-tag--${st.t}` : ''}`}>{st.label}</span>
                     </div>
-                    {h.status !== 'COMPLETED' && <Badge t={st.t} size="sm">{st.label}</Badge>}
+                  )
+                })}
+              </div>
+            </section>
+          )}
+
+          {d.results.length > 0 && (
+            <section>
+              <div className="lx-sec-head"><div><h2 className="lx-sec-title">Quiz results</h2><div className="lx-sec-sub">Every attempt you handed in</div></div></div>
+              <div className="lx-panel">
+                {d.results.map((r, i) => (
+                  <div key={r.id} className="lx-path" style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', borderTop: i ? undefined : 0 }}>
+                    <span style={{ width: 34, height: 34, borderRadius: 10, display: 'grid', placeItems: 'center', background: r.passed ? 'var(--ez-positive-tint)' : 'var(--ez-warning-tint)', color: r.passed ? 'var(--ez-positive)' : 'var(--ez-warning)' }}><GTarget size={16} /></span>
+                    <span style={{ flex: '1 1 200px', minWidth: 0 }}>
+                      <span style={{ display: 'block', fontWeight: 650 }}>{r.title}</span>
+                      <span className="lx-num" style={{ display: 'block', fontSize: 12.5, color: 'var(--ez-muted)' }}>Attempt {r.attempt_no}{r.submitted_at ? ` · ${dayWords(r.submitted_at)}` : ''}{r.pass_pct != null ? ` · pass mark ${r.pass_pct}%` : ''}</span>
+                    </span>
+                    <b className="lx-num" style={{ fontSize: 16 }}>{r.pct != null ? `${Number(r.pct)}%` : '—'}</b>
+                    <span className={`lx-tag lx-tag--${r.passed ? 'positive' : 'warning'}`}>{r.passed ? 'Passed' : 'Not passed'}</span>
                   </div>
-                )
-              })}
-              {history.length > 6 && (
-                <div style={{ padding: `${S.sm}px ${S.md}px`, borderTop: `1px solid ${C.line}` }}>
-                  <button className="ezl-linkbtn" style={{ fontSize: F.small }} onClick={() => setAllHistory(a => !a)}>{allHistory ? 'Show fewer' : `Show all ${history.length}`}</button>
-                </div>
-              )}
-            </Card>
-          </section>
-        )}
-      </div>
+                ))}
+              </div>
+            </section>
+          )}
+        </div>
+      )}
     </div>
   )
 }

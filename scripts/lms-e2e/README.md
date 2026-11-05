@@ -4,10 +4,11 @@ Runs the real Next.js app and its real API routes against a throwaway local data
 contacts your Supabase project at run time, and every person in it is invented.
 
 - `db.mjs` builds real Postgres (PGlite) with the live schema's tables, applies migrations
-  206–208, and seeds two fictional companies.
+  206–208 and 211, and seeds two fictional companies.
 - `server.mjs` is a local stand-in for PostgREST, Supabase Storage and TUS. It keeps PostgREST's
   1,000-row cap and enforces the anon role, so RLS and grant failures are real failures.
-- `e2e.mjs` is the suite: the 17 brief scenarios plus the refusals.
+- `e2e.mjs` is the suite: the 17 brief scenarios plus the refusals, SCORM packages and live
+  sessions (92 checks).
 
 ## Run it
 
