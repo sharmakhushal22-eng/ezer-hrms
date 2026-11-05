@@ -16,6 +16,7 @@
 import { flagFor, queuePriority, daysToLwd, FLAG_LABEL,
          type Flag, type Employment, type FlagRules } from './employment.ts'
 import { canFinalise, blockedByRmL2, type Role, type Chain, type Finaliser } from './hierarchy.ts'
+import { type Stage } from './chain.ts'
 
 export interface TeamMember extends Employment {
   /**
@@ -152,7 +153,8 @@ function toneFor(f: Flag): RowTone {
  * reshuffle between renders for no reason.
  */
 export function teamQueue<T extends TeamMember>(
-  members: T[], today: string, rules?: FlagRules, chain?: Chain,
+  members: T[], today: string, rules?: FlagRules,
+  chain?: Chain | readonly Stage[],
 ): QueueRow<T>[] {
   return members
     .map(m => {
@@ -198,13 +200,14 @@ export function teamQueue<T extends TeamMember>(
  * available — with no chain either, there is nothing to claim is pending.
  * The only production loader (useRoster) always selects it.
  */
-export function hasRmL2(m: TeamMember, chain?: Chain): boolean {
+export function hasRmL2(m: TeamMember, chain?: Chain | readonly Stage[]): boolean {
   if (m.rmL2Id !== undefined) return m.rmL2Id !== null
   return chain ? blockedByRmL2(chain, false) : false
 }
 
 /** The one thing an RM owes on this person, or null when nothing is. */
-function nextForRm(m: TeamMember, flag: Flag, chain?: Chain): string | null {
+function nextForRm(m: TeamMember, flag: Flag,
+                   chain?: Chain | readonly Stage[]): string | null {
   if (m.finalised) return null
   if (flag === 'NEW_JOINER') return null
   if (m.kraCount === 0) return 'No KRAs written yet. They cannot be rated at all until there are.'
@@ -272,7 +275,8 @@ export interface FinaliseRow<T extends TeamMember = TeamMember> extends QueueRow
 export function finaliseQueue<T extends TeamMember>(
   members: T[], today: string,
   { role, chain, whoCanFinalise, rules, finalReviewRequired = false }: {
-    role: Role; chain: Chain; whoCanFinalise: Finaliser; rules?: FlagRules
+    role: Role; chain: Chain | readonly Stage[]; whoCanFinalise: Finaliser
+    rules?: FlagRules
     /** pms_policies.final_review_one_to_one. Defaults false so existing
      *  callers keep their behaviour; the live screen passes the real value. */
     finalReviewRequired?: boolean

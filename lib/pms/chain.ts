@@ -102,6 +102,76 @@ export function rungs(chain: Chain | readonly Stage[] | null | undefined): Stage
   return out.includes('HR') ? out : [...out, 'HR']
 }
 
+/**
+ * A policy as far as the chain is concerned: a preset, or a chain it points at.
+ *
+ * Shaped to match what PostgREST returns from
+ * `select('approval_chain, pms_chain(rungs)')` — the embed arrives as an
+ * object, or as a one-element array depending on how the relationship is
+ * inferred, so both are accepted. Reading only one of the two shapes is how a
+ * custom chain silently falls back to the preset.
+ */
+export interface ChainSource {
+  approval_chain?: string | null
+  chain_id?: string | null
+  pms_chain?: { rungs?: unknown } | { rungs?: unknown }[] | null
+}
+
+/**
+ * WHICH CHAIN THIS POLICY ACTUALLY RUNS (218).
+ *
+ * The one place the fallback is decided, so no screen can disagree with
+ * another about whether a company is on a composed chain or a preset.
+ *
+ * A RETIRED CHAIN STILL DECIDES. is_active governs whether a chain is offered
+ * for a NEW selection, not whether a chosen one runs — so it is deliberately
+ * not consulted here. The alternative is worse than it sounds: retiring a
+ * chain would silently re-appraise everybody on the preset, which is exactly
+ * the surprise the admin route refuses to allow by declining to retire a
+ * chain a policy still points at. The builder shows "(retired)" instead.
+ *
+ * AN EMPTY rungs[] FALLS BACK rather than producing a chain of HR alone. The
+ * CHECK in 218 makes that unreachable through the product; it is reachable by
+ * hand, and "the chain is the preset" beats "nobody approves anything".
+ */
+export function effectiveChain(
+  policy: ChainSource | null | undefined,
+): Chain | Stage[] {
+  const preset = (policy?.approval_chain as Chain | undefined) ?? 'SELF_RM1_RM2_HOD'
+  const embed = policy?.pms_chain
+  const row = Array.isArray(embed) ? embed[0] : embed
+  const composed = Array.isArray(row?.rungs) ? (row!.rungs as unknown[]) : null
+  if (!composed?.length) return preset
+  const known = composed
+    .map(r => String(r).trim().toUpperCase())
+    .filter((r): r is Stage => (STAGES as readonly string[]).includes(r))
+  return known.length ? known : preset
+}
+
+/**
+ * The chain named for a reader, preset or composed.
+ *
+ * CHAIN_LABEL has an entry per preset and none for a composed chain, so
+ * `CHAIN_LABEL[chain]` renders an empty string the moment a company moves to
+ * one — on the finalise banner, which exists to tell a manager what the chain
+ * IS before they finalise against it. That is a blank where the explanation
+ * should be, and TypeScript caught it as an index error rather than letting it
+ * ship, which is the only reason this function exists.
+ *
+ * A composed chain is named by its rungs, which is what a reader needs:
+ * "Self → L1 → Site HR → HOD → HR".
+ */
+export function chainLabel(
+  chain: Chain | readonly Stage[] | null | undefined,
+  presetLabel: Record<string, string>,
+): string {
+  if (!Array.isArray(chain)) {
+    const key = (chain as Chain | null | undefined) ?? 'SELF_RM1_RM2_HOD'
+    return presetLabel[key] ?? key
+  }
+  return ['Employee', ...rungs(chain).map(r => STAGE_SHORT[r])].join(' → ')
+}
+
 /** Where a fresh submission lands. */
 export function firstRung(chain: Chain | readonly Stage[]): Stage {
   return rungs(chain)[0]
@@ -207,7 +277,8 @@ export function isActorsTurn(stage: Stage | null, role: Role): boolean {
  * Approve button read "Approve & finalise" and ask for a rating.
  */
 export function approvalFinalises(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage,
+  held: (s: Stage) => boolean = ALL_HELD,
 ): boolean {
   return nextRung(chain, stage, held) === 'HR'
 }
@@ -224,7 +295,8 @@ export function mayReject(stage: Stage | null): boolean {
  * which one they are making before they type the remark.
  */
 export function rejectDestination(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage,
+  held: (s: Stage) => boolean = ALL_HELD,
 ): string {
   const back = prevRung(chain, stage, held)
   if (back === null) return 'nowhere — this stage is not part of the chain'

@@ -50,7 +50,7 @@ import {
 } from '@/components/pms/ManagerTabs'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Chain, type Finaliser } from '@/lib/pms/hierarchy'
-import { rungFor, heldBy, approvalFinalises } from '@/lib/pms/chain'
+import { rungFor, heldBy, approvalFinalises, effectiveChain } from '@/lib/pms/chain'
 import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFinal'
 import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
@@ -90,6 +90,12 @@ interface Period { id: string; period_code: string; status: string; policy_id?: 
  *  about. Widened from the CHECK constraints in 066 rather than from memory. */
 interface Policy {
   approval_chain: Chain
+  /** 218. The composed chain this policy points at, if any, with the chain
+   *  itself embedded. effectiveChain decides which of the two runs — never
+   *  read approval_chain directly now, or a company on a custom chain is
+   *  shown the preset's track. */
+  chain_id?: string | null
+  pms_chain?: { rungs?: unknown } | { rungs?: unknown }[] | null
   who_can_finalise: Finaliser
   final_review_one_to_one: boolean
   /** §8's NEW_JOINER cutoff. Configurable per policy and, until now,
@@ -209,10 +215,14 @@ function usePeriod(employeeId: string) {
     const pid = (p.data as { policy_id?: string }).policy_id
     if (pid) {
       const po = await supabase.from('pms_policies')
+        // 218: chain_id AND the chain it points at, in one read. A second
+        // round trip for the rungs would leave a window where the screen
+        // knows a custom chain is selected and not what is in it — and would
+        // draw the preset's track for that window.
         .select('approval_chain,who_can_finalise,final_review_one_to_one,'
               + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
               + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner,'
-              + 'one_to_one_mandatory')
+              + 'one_to_one_mandatory,chain_id,pms_chain(rungs)')
         .eq('id', pid).maybeSingle()
       if (po.error) logFail('could not read the policy', po.error)
       setPolicy(po.error ? null : (po.data as Policy | null))
@@ -2267,7 +2277,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                         onAcknowledge={acknowledge} onSendBack={sendBack}
                                         onAcknowledgeFinalReview={acknowledgeFinalReview}
                                         viewerId={employeeId}
-                                        chain={policy?.approval_chain as Chain | undefined ?? 'SELF_RM1_RM2_HOD'}
+                                        chain={effectiveChain(policy)}
                                         onApprove={approveInChain}
                                         onOpenKras={openKras}
                                         kraDetail={kraFor && rows.find(r => r.employeeId === kraFor)
@@ -2294,8 +2304,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
                                                     : rung === 'HOD' ? m.finalReviewMgrAcked === true
                                                     : m.rmL2ConfirmedOneToOne === true}
                                                   finalises={!!rung && approvalFinalises(
-                                                    (policy?.approval_chain as Chain | undefined) ?? 'SELF_RM1_RM2_HOD',
-                                                    rung, held)}
+                                                    effectiveChain(policy), rung, held)}
                                                   finalRating={kraFinal}
                                                   onFinalRating={setKraFinal}
                                                   overallComment={overall}
@@ -2603,7 +2612,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
       {tab === 'finalise' && (
         <FinaliseTab flagRules={flagRules} bands={bands.length ? bands : undefined}
                      members={rows} today={today} role="HOD"
-                     chain={policy?.approval_chain ?? 'SELF_RM1_RM2_HOD'}
+                     chain={effectiveChain(policy)}
                      whoCanFinalise={policy?.who_can_finalise ?? 'RM1_RM2_HOD'}
                      finalReviewRequired={policy?.final_review_one_to_one ?? false}
                      deptName="your department"

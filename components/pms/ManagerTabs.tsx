@@ -34,7 +34,7 @@ import { canPublishResult, CONFIRM_LABEL, CONFIRM_WHY,
 import { CHAIN_LABEL, FINALISER_LABEL, type Role, type Chain, type Finaliser }
   from '@/lib/pms/hierarchy'
 import { approvalFinalises, mayReject, rejectDestination, remarkOk, MIN_REMARK,
-         rungFor, heldBy, rungs, nextRung, STAGE_SHORT,
+         rungFor, heldBy, rungs, nextRung, STAGE_SHORT, chainLabel,
          type Stage } from '@/lib/pms/chain'
 import { checkTrainingBlock, TRAINING_CATEGORIES, TRAINING_CATEGORY_LABEL,
          TRAINING_EXAMPLE, scoreInvites, checkPip, checkRecognition,
@@ -230,7 +230,9 @@ function QueueTable({ rows, extraHead, extraCell, empty, rules = DEFAULT_RULES,
  * somewhere it will not.
  */
 function ChainTrack({ chain, held, now }: {
-  chain: Chain
+  /** A preset or a composed chain (218) — effectiveChain decides which, and
+   *  everything here walks whatever rungs() returns either way. */
+  chain: Chain | readonly Stage[]
   held: (s: Stage) => boolean
   /** The rung holding it — rendered as "you", because on this card it is. */
   now: Stage
@@ -420,8 +422,9 @@ function ChainApprovals({ members, today, flagRules, rules, viewerId, chain,
   /** The VIEWER's employee id. Their rung is worked out per row — see
    *  rungFor. Empty means nothing renders. */
   viewerId: string
-  /** The policy's chain, which decides which rung finalises. */
-  chain: Chain
+  /** The policy's chain, which decides which rung finalises. A preset or a
+   *  composed chain (218). */
+  chain: Chain | readonly Stage[]
   onApprove?: (id: string, rating?: number) => void
   onReject?: (id: string, remark: string) => void
   /** Open the employee's filled KRA form. See KraDetail. */
@@ -589,7 +592,7 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
    *  a call site that has not been updated renders the tab without the
    *  approval card rather than crashing. */
   viewerId?: string
-  chain?: Chain
+  chain?: Chain | readonly Stage[]
   onApprove?: (id: string, rating?: number) => void
   /** Open and render the employee's filled KRA form. The panel is rendered by
    *  the parent so one loader serves every surface that wants it. */
@@ -2508,7 +2511,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
    */
   flagRules?: FlagRules
   members: TeamMember[]; today: string
-  role: Role; chain: Chain; whoCanFinalise: Finaliser
+  role: Role; chain: Chain | readonly Stage[]; whoCanFinalise: Finaliser
   deptName: string
   /** pms_policies.final_review_one_to_one, so the queue blocks on the same
    *  condition pms_finalise does rather than discovering it on refusal. */
@@ -2539,7 +2542,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
       <div className="banner b-blue">
         <span aria-hidden="true">ℹ️</span>
         <div>
-          The chain is <b>{CHAIN_LABEL[chain]}</b>, and under this policy{' '}
+          The chain is <b>{chainLabel(chain, CHAIN_LABEL)}</b>, and under this policy{' '}
           <b>{FINALISER_LABEL[whoCanFinalise]}</b> may finalise. A row cannot
           be finalised while a step ahead of it is still open. That is not a nicety, it is
           the difference between a rating that went through the chain and one that skipped it.

@@ -185,8 +185,20 @@ export const CHAIN_STEPS: Record<Chain, Role[]> = {
  * a chain that HAS an RM L2 — on Self → RM L1 → HOD there is nobody to wait
  * for, and blocking there would deadlock the record forever.
  */
-export function blockedByRmL2(chain: Chain, rmL2Done: boolean): boolean {
-  return CHAIN_STEPS[chain].includes('RM_L2') && !rmL2Done
+/**
+ * 218: takes a composed chain too, and asks the same question of it — does
+ * this chain contain an RM L2 at all.
+ *
+ * Typed `readonly string[]` rather than `Stage[]` DELIBERATELY: Stage lives in
+ * chain.ts, which imports this file, so naming it here would be a cycle. The
+ * membership test is the same either way.
+ */
+export function blockedByRmL2(
+  chain: Chain | readonly string[], rmL2Done: boolean,
+): boolean {
+  const steps: readonly string[] = Array.isArray(chain)
+    ? chain : (CHAIN_STEPS[chain as Chain] ?? CHAIN_STEPS.SELF_RM1_RM2_HOD)
+  return steps.includes('RM_L2') && !rmL2Done
 }
 
 // ── the flow, §1 ─────────────────────────────────────────────────────────

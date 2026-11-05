@@ -110,8 +110,18 @@ test('the rating field appears only where approval finalises', () => {
   // AND IT MUST ASK ABOUT THE HOLDERS, not just the policy's chain. On a
   // collapsed line — 190 of 395 enrolments — RM L2 is unfilled, so the RM L1's
   // approval finalises.
-  assert.match(PERF, /approvalFinalises\(\s*\n?\s*\(policy\?\.approval_chain as Chain \| undefined\) \?\? 'SELF_RM1_RM2_HOD',\s*\n?\s*rung, held\)/,
-    'whether approval finalises is computed without the rung holders')
+  //
+  // 218: the chain now comes from effectiveChain rather than approval_chain
+  // directly, so a company on a composed chain gets its own last rung asked
+  // for the rating. Reading approval_chain here would put "Rate, confirm and
+  // finalise" on whichever rung the PRESET ends at — a manager asked to
+  // settle a rating they do not settle, and the real last rung refused for
+  // want of one.
+  assert.match(PERF, /approvalFinalises\(\s*\n?\s*effectiveChain\(policy\), rung, held\)/,
+    'whether approval finalises is computed without the rung holders, or '
+    + 'from the preset rather than the chain actually in force')
+  assert.ok(!/approvalFinalises\([^)]*approval_chain/.test(PERF),
+    'approval_chain is read directly, so a composed chain is ignored here')
 })
 
 test('the reject button names where the set is going', () => {
