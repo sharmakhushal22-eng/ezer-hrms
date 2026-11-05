@@ -27,6 +27,13 @@ const SQL = readFileSync(
 const SQL219 = readFileSync(
   join(process.cwd(),
        'supabase/migrations/219_pms_chain_rungs_really_checked.sql'), 'utf8')
+/** The script that asks the DATABASE rather than the migration's text. */
+const VERIFY = readFileSync(
+  join(process.cwd(), 'supabase/verify/219_pms_chain_rungs_verify.sql'), 'utf8')
+/** The same, with the prose removed. Six tests in this module have tripped
+ *  over their own comments; a file that explains itself at length must be
+ *  read as code when the assertion is about code. */
+const VERIFY_CODE = VERIFY.replace(/^\s*--.*$/gm, ' ')
 
 const ok = (r: string[]) => ({ name: 'A chain', rungs: r })
 
@@ -124,9 +131,7 @@ test('the two columns nothing in this repo can vouch for are verified in SQL', (
   // What keeps them honest from here is the verify script, which asks
   // information_schema. So what this test can check is that the script
   // actually asks about every rung on the menu — including these two.
-  const verify = readFileSync(join(process.cwd(),
-    'supabase/verify/219_pms_chain_rungs_verify.sql'), 'utf8')
-  const list = verify.match(/column_name IN \(([^)]*'regional_head_id'[^)]*)\)/)
+  const list = VERIFY.match(/column_name IN \(([^)]*'regional_head_id'[^)]*)\)/)
   assert.ok(list, 'the verify script no longer checks the rung columns')
   const checked = [...list[1].matchAll(/'([^']+)'/g)].map(m => m[1])
   assert.deepEqual(checked.slice().sort(), RUNG_CHOICES.map(c => c.column).slice().sort(),
@@ -154,13 +159,70 @@ test('the verify script tests the empty chain by trying to insert one', () => {
   // test that could have caught it is one where Postgres refuses the INSERT
   // — so the verify script must actually attempt an empty array, not merely
   // mention the constraint.
-  const verify = readFileSync(join(process.cwd(),
-    'supabase/verify/219_pms_chain_rungs_verify.sql'), 'utf8')
-  assert.match(verify, /INSERT INTO pms_chain[\s\S]{0,200}ARRAY\[\]::text\[\]/,
+  assert.match(VERIFY, /INSERT INTO pms_chain[\s\S]{0,200}ARRAY\[\]::text\[\]/,
     'the verify script does not try to insert an empty chain')
-  assert.match(verify, /EXCEPTION WHEN check_violation/,
+  assert.match(VERIFY, /EXCEPTION WHEN check_violation/,
     'the verify script does not expect the insert to be refused')
-  assert.match(verify, /ROLLBACK/, 'the verify script would leave its fixtures behind')
+  assert.match(VERIFY, /ROLLBACK/, 'the verify script would leave its fixtures behind')
+})
+
+test('the verify script reports every check in ONE result set', () => {
+  // ── LEARNED BY RUNNING IT ──────────────────────────────────────────────
+  //
+  // The first version was fifteen separate statements. The Supabase SQL
+  // editor returns the LAST statement's result and swallows RAISE NOTICE,
+  // so running it showed a single PASS and hid the other fourteen checks —
+  // including all four behavioural ones, which are the only reason the file
+  // exists. A verify script whose output you cannot read is worse than
+  // none: it looks like it passed.
+  //
+  // Every check therefore writes a row and one final SELECT returns them.
+  assert.match(VERIFY, /CREATE TEMP TABLE _verify \(/,
+    'the checks have nowhere to collect their results')
+  assert.match(VERIFY, /SELECT seq, check_name, result, detail FROM _verify ORDER BY seq;/,
+    'there is no single statement returning all the checks')
+
+  // Exactly one statement may return rows, or the editor hides the rest.
+  //
+  // Counted by looking at what PRECEDES each SELECT: every other query here
+  // is an `INSERT INTO _verify` whose SELECT begins the next line, and those
+  // return nothing. A first version matched /^SELECT /m and counted 13,
+  // because an INSERT's SELECT also starts a line.
+  const lines = VERIFY.split('\n')
+  const returnsRows = lines.filter((ln, i) => {
+    if (!/^SELECT /.test(ln)) return false
+    for (let j = i - 1; j >= 0; j--) {
+      const prev = lines[j].trim()
+      if (!prev) continue
+      return !prev.startsWith('INSERT INTO _verify')
+    }
+    return true
+  })
+  assert.equal(returnsRows.length, 1,
+    `${returnsRows.length} statements return rows; all but the last would be `
+    + `invisible in the SQL editor: ${returnsRows.map(l => l.slice(0, 40))}`)
+
+  // And the behavioural results must reach that table, not a NOTICE.
+  // Against the CODE, not the prose: the comment explaining why RAISE NOTICE
+  // was removed contains the words "RAISE NOTICE", and tripped this
+  // assertion the moment it was written. That is the seventh time a comment
+  // in this module has failed a test that reads source.
+  assert.ok(!/RAISE NOTICE/.test(VERIFY_CODE),
+    'a check reports through RAISE NOTICE, which the SQL editor swallows')
+  assert.match(VERIFY, /INSERT INTO _verify VALUES \(4, 'an empty chain is refused', 'PASS'/,
+    'the empty-chain result is not recorded as a row')
+})
+
+test('the verify script distinguishes a missing constraint from a wrong one', () => {
+  // `… FROM pg_constraint WHERE conname = …` returns NO ROW when the
+  // constraint is absent, and a check that prints nothing reads as a pass —
+  // the same ambiguity 218 shipped behind. Scalar subqueries yield NULL so
+  // the CASE can report it.
+  const nulls = [...VERIFY.matchAll(/WHEN d IS NULL THEN 'FAIL/g)]
+  assert.ok(nulls.length >= 5,
+    `only ${nulls.length} checks distinguish "absent" from "wrong"`)
+  assert.ok(!/UNION ALL SELECT NULL/.test(VERIFY),
+    'a UNION ALL with LIMIT has no guaranteed row order — the NULL could win')
 })
 
 test('218 is left alone and 219 is the correction', () => {
