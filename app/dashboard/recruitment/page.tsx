@@ -5787,6 +5787,8 @@ async function openAcceptanceFile(candidateId: string, which: 'signed_offer' | '
     const r = await fetch(`/api/recruitment/offer-response?candidate_id=${encodeURIComponent(candidateId)}`, { headers: await authHeaders() })
     const j = await r.json()
     const url = j.acceptance?.[which]?.view
+    // An e-signed acceptance (EZER Sign) has no mail screenshot: its proof is the certificate in the signed letter.
+    if (!url && which === 'mail_proof' && j.acceptance?.type === 'DIGITAL') { showNotify('Accepted by e-signature — the signed letter carries the Certificate of Completion instead of a mail proof.'); return }
     if (url) window.open(url, '_blank', 'noopener'); else showNotify('No file recorded for this acceptance.', 'error')
   } catch { showNotify('Could not open the file.', 'error') }
 }

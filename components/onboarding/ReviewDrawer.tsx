@@ -272,11 +272,12 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
   const [mgr, setMgr] = useState<Managers>({ l1: null, l2: null, hod: null })
   const [assigning, setAssigning] = useState(false)
 
-  /** A filled statutory form in a new tab. The route needs the session header, so it is fetched and shown as a blob. */
+  /** A filled statutory form (or the e-signed copy) in a new tab. The route needs the session header, so it is fetched and shown as a blob. */
   async function openForm(form: string, label: string) {
     setOpening(form)
     try {
-      const res = await fetch(`/api/onboarding/forms?form=${form}&onboarding_id=${onboardingId}`, { headers: await authHeaders() })
+      const url0 = form === 'signed' ? `/api/onboarding/esign?onboarding_id=${onboardingId}` : `/api/onboarding/forms?form=${form}&onboarding_id=${onboardingId}`
+      const res = await fetch(url0, { headers: await authHeaders() })
       if (!res.ok) throw new Error((await res.json().catch(() => ({}))).error || `Could not open ${label}`)
       const url = URL.createObjectURL(await res.blob())
       if (!window.open(url, '_blank')) onDone('The browser blocked the new tab — allow pop-ups for this site.', 'err')
@@ -392,6 +393,11 @@ export default function ReviewDrawer({ onboardingId, readOnly = false, onClose, 
               <h3 className="rv-h">01 <span>Documents</span><span style={{ marginLeft: 'auto', fontSize: 11, fontWeight: 600, color: TK.muted, letterSpacing: 0, textTransform: 'none' }}>{docs.length} file{docs.length === 1 ? '' : 's'}</span></h3>
               {docs.length === 0 && <div style={{ fontSize: 12, color: TK.muted, marginTop: 8 }}>No documents uploaded.</div>}
               <div className="rv-docs">{docs.map(doc => <DocCard key={doc.doc_code} doc={doc} on={!!marks[`doc:${doc.doc_code}`]} pick={canDecide} onPick={() => toggle({ key: `doc:${doc.doc_code}`, kind: 'doc', label: doc.label, doc_code: doc.doc_code })} />)}</div>
+              {/* What the joiner signed with EZER Sign: every form with their signature and the Certificate of Completion (lib/onboarding/esign.ts). */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
+                <span className="rv-sub" style={{ marginBottom: 0 }}>Signed by the joiner</span>
+                <button type="button" className="rv-view" disabled={!!opening} onClick={() => openForm('signed', 'the signed joining forms')} style={{ cursor: 'pointer', fontFamily: 'inherit' }}>{opening === 'signed' ? 'Opening…' : 'E-signed joining forms ↗'}</button>
+              </div>
               {/* The official forms, filled from this sheet — opened in a new tab (the call needs the session header). */}
               {item.hiring_track === 'OVERSEAS' ? <div style={{ fontSize: 12, color: TK.muted, marginTop: 14 }}>Overseas employee — no Indian statutory forms (PF, gratuity, ESIC) apply.</div> : (
               <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap', marginTop: 14 }}>
