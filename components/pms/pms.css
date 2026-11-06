@@ -2034,3 +2034,109 @@
   .pms .rung { align-items: flex-start; flex-wrap: wrap; }
   .pms .rung .btnrow { width: 100%; padding-left: 38px; }
 }
+
+/* ── the KPIs under a KRA (220) ────────────────────────────────────────────
+ *
+ * A KRA is the objective; these are how it is measured, and each is rated on
+ * its own by every rung. They sit INSIDE the KRA card, inset and on a sunken
+ * ground, because a KPI belongs to its KRA and a flat list of eleven rows
+ * across five objectives reads as eleven unrelated things.
+ *
+ * The balance figure is "15 of 30", never a bare percentage: the KPIs total
+ * their KRA's weightage, not 100, and the only number that tells somebody
+ * what to type next is the pair. */
+.pms .pms-kpis {
+  margin-top: 12px; padding: 10px 12px 12px;
+  background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+}
+.pms .pms-kpis-h {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.pms .pms-kpis-t {
+  font-size: 12px; font-weight: 600; color: var(--ez-muted);
+}
+/* The running total, coloured by state — and the words carry it too, for
+ * anyone who cannot use the colour. */
+.pms .pms-kpis-bal {
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 2px 9px; border-radius: 99px;
+  background: var(--ez-warning-tint); color: var(--ez-warning);
+}
+.pms .pms-kpis-bal.is-ok   { background: var(--ez-positive-tint); color: var(--ez-positive); }
+.pms .pms-kpis-bal.is-over { background: var(--ez-critical-tint); color: var(--ez-critical); }
+.pms .pms-kpis-h .btnrow { margin-top: 0; margin-left: auto; }
+
+.pms .pms-kpi {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 0.8fr) 104px 28px;
+  gap: 10px; align-items: end;
+  padding: 8px 0;
+  border-top: 1px dashed var(--ez-line);
+}
+/* :first-of-type WOULD BE WRONG HERE. It means the first element of its TYPE
+   among siblings, and every sibling in this box is a div — so it matched the
+   header, not the first KPI row, and every row ended up treated as "not
+   first": all the column labels vanished and row 1 kept a rule above it.
+   The adjacent sibling selector says what is actually meant: the row that
+   immediately follows the header. */
+.pms .pms-kpis-h + .pms-kpi { border-top: 0; padding-top: 2px; }
+.pms .pms-kpi.is-bad .pms-kra-wbox input { border-color: var(--ez-critical); }
+
+.pms .pms-kpi-no {
+  height: 24px; display: grid; place-items: center;
+  border-radius: 99px; background: var(--ez-surface);
+  border: 1px solid var(--ez-line);
+  font-size: 11px; font-weight: 700; color: var(--ez-muted);
+}
+.pms .pms-kpi label {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--ez-muted); margin-bottom: 4px;
+}
+/* Only the first row needs the column headings; repeating them down the list
+ * is five words of noise per KPI. Hidden from sight but NOT from assistive
+ * tech — every input keeps its own aria-label, and these stay in the
+ * accessibility tree so the association survives. */
+.pms .pms-kpi label {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.pms .pms-kpis-h + .pms-kpi label {
+  position: static; width: auto; height: auto; padding: 0; margin: 0 0 4px;
+  overflow: visible; clip-path: none; white-space: normal;
+}
+.pms .pms-kpi-x {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--ez-line); background: var(--ez-surface);
+  color: var(--ez-muted); font-size: 15px; line-height: 1;
+  transition: color .12s var(--ez-ease, ease), border-color .12s, background .12s;
+}
+.pms .pms-kpi-x:hover:not(:disabled) {
+  color: var(--ez-critical); border-color: var(--ez-critical-edge);
+  background: var(--ez-critical-tint);
+}
+.pms .pms-kpi-x:disabled { opacity: .4; cursor: not-allowed; }
+
+/* The set-level fault, under the rows it is about. */
+.pms .pms-kpis-f {
+  margin: 8px 0 0; font-size: 12px; line-height: 1.5;
+  color: var(--ez-warning);
+}
+
+.pms .pms-kra-cat { margin-top: 10px; max-width: 260px; }
+
+@media (max-width: 860px) {
+  /* The measure keeps the full width; target and weightage share the next
+   * line. The number badge and the remove button stay on the first row so
+   * the row is still identifiable as one KPI. */
+  .pms .pms-kpi { grid-template-columns: 22px minmax(0, 1fr) 28px; }
+  .pms .pms-kpi-t, .pms .pms-kpi-w { grid-column: 2 / 3; }
+  /* Stacked, every row needs its own headings — a label three rows above
+     is not a label. */
+  .pms .pms-kpi label {
+    position: static; width: auto; height: auto; margin: 0 0 4px;
+    clip-path: none; padding: 0; overflow: visible; white-space: normal;
+  }
+}

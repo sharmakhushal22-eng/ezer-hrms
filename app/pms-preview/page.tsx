@@ -36,12 +36,30 @@ import '@/components/pms/pms.css'
 const TODAY = '2026-09-04'
 
 const KRAS: Kra[] = [
-  { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25 },
-  { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20 },
-  { seq_no: 3, kra_title: 'Query resolution', kpi_metric: 'Turnaround', target_value: 'under 2 days', category: 'CUSTOMER', weightage: 20 },
-  { seq_no: 4, kra_title: 'Report automation', kpi_metric: 'Reports automated', target_value: '4 of 4', category: 'BUSINESS', weightage: 20 },
+  // 220: a KRA is measured by its KPIs, whose weightages total the KRA's.
+  // The first carries three, to show the case the single-metric form could
+  // not express; the rest carry one, which is how every KRA written before
+  // 220 was backfilled.
+  { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25,
+    kpis: [
+      { seq_no: 1, kpi_metric: 'Error rate per run', target_value: 'under 0.2%', weightage: 12 },
+      { seq_no: 2, kpi_metric: 'Reruns caused by input error', target_value: 'zero', weightage: 8 },
+      { seq_no: 3, kpi_metric: 'Payslips issued on the 1st', target_value: '100%', weightage: 5 },
+    ] },
+  { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20,
+    kpis: [
+      { seq_no: 1, kpi_metric: 'Filings on time', target_value: '100%', weightage: 14 },
+      { seq_no: 2, kpi_metric: 'Challans reconciled same month', target_value: '100%', weightage: 6 },
+    ] },
+  { seq_no: 3, kra_title: 'Query resolution', kpi_metric: 'Turnaround', target_value: 'under 2 days', category: 'CUSTOMER', weightage: 20,
+    kpis: [{ seq_no: 1, kpi_metric: 'Turnaround', target_value: 'under 2 days', weightage: 20 }] },
+  { seq_no: 4, kra_title: 'Report automation', kpi_metric: 'Reports automated', target_value: '4 of 4', category: 'BUSINESS', weightage: 20,
+    kpis: [{ seq_no: 1, kpi_metric: 'Reports automated', target_value: '4 of 4', weightage: 20 }] },
   // Deliberately below the per-KRA minimum, so the thin-row treatment shows.
-  { seq_no: 5, kra_title: 'Audit readiness', kpi_metric: 'Observations', target_value: 'zero', category: 'COMPLIANCE', weightage: 3 },
+  // Its KPI is deliberately SHORT of the KRA's 3, so the unbalanced state is
+  // visible too — the harness is where both are meant to be seen.
+  { seq_no: 5, kra_title: 'Audit readiness', kpi_metric: 'Observations', target_value: 'zero', category: 'COMPLIANCE', weightage: 3,
+    kpis: [{ seq_no: 1, kpi_metric: 'Observations', target_value: 'zero', weightage: 1 }] },
 ]
 
 const LINES: Line[] = [

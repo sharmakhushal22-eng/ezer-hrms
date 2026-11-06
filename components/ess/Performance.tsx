@@ -154,6 +154,10 @@ type Scope = 'me' | 'team' | 'dept'
 const blankKra = (seq: number): Kra => ({
   seq_no: seq, kra_title: '', kpi_metric: '', target_value: '',
   category: 'BUSINESS', weightage: 0,
+  // One blank KPI, because a KRA with no measure cannot be rated and making
+  // somebody press "add a KPI" before they can type one is a step with no
+  // decision in it.
+  kpis: [{ seq_no: 1, kpi_metric: '', target_value: '', weightage: 0 }],
 })
 
 /** The active period and this employee's row in it. Shared so that every view
@@ -803,12 +807,37 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   useEffect(() => { loadPeriodData() }, [loadPeriodData])
 
   const kras: Kra[] = draftKras ?? (goals.length
-    ? goals.map(g => ({
-        seq_no: Number(g.seq_no), kra_title: String(g.kra_title ?? ''),
-        kpi_metric: String(g.kpi_metric ?? ''), target_value: String(g.target_value ?? ''),
-        category: (String(g.category ?? 'BUSINESS')) as Category,
-        weightage: Number(g.weightage) || 0,
-      }))
+    ? goals.map(g => {
+        /**
+         * 220: the KRA's KPIs come with it.
+         *
+         * A KRA saved before 220 was backfilled with one KPI carrying its
+         * whole weightage, so this is never empty on a saved row. The
+         * fallback below is for a row written by something that does not
+         * know about KPIs — it keeps the form usable rather than showing a
+         * KRA with no measure and no way to add one.
+         */
+        const mine = kpis
+          .filter(x => String(x.goal_id) === String(g.id))
+          .map(x => ({
+            id: String(x.id), seq_no: Number(x.seq_no),
+            kpi_metric: String(x.kpi_metric ?? ''),
+            target_value: String(x.target_value ?? ''),
+            weightage: Number(x.weightage) || 0,
+          }))
+          .sort((a, b) => a.seq_no - b.seq_no)
+        return {
+          seq_no: Number(g.seq_no), kra_title: String(g.kra_title ?? ''),
+          kpi_metric: String(g.kpi_metric ?? ''), target_value: String(g.target_value ?? ''),
+          category: (String(g.category ?? 'BUSINESS')) as Category,
+          weightage: Number(g.weightage) || 0,
+          kpis: mine.length ? mine : [{
+            seq_no: 1, kpi_metric: String(g.kpi_metric ?? ''),
+            target_value: String(g.target_value ?? ''),
+            weightage: Number(g.weightage) || 0,
+          }],
+        }
+      })
     // The policy's minimum, not the constant: on a policy of 5 an employee
     // was handed 4 blank rows and had to notice the shortfall themselves.
     // Carried forward beats blank rows: last quarter's agreed set is a far
@@ -1088,6 +1117,55 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         .select('id,seq_no').eq('employee_id', employeeId).eq('period_id', period.id)
       const idBySeq = new Map((saved.data ?? [])
         .map(g => [Number((g as { seq_no: number }).seq_no), String((g as { id: string }).id)]))
+
+      /**
+       * THE KPIs, BETWEEN THE KRAs AND THE RATINGS (220).
+       *
+       * Order is forced, not stylistic. pms_goal_kpi.goal_id is a real
+       * reference so the KRAs must exist first; pms_reviews.kpi_id is NOT
+       * NULL so the KPIs must exist before any rating. A locked set is left
+       * alone here for the same reason the goals upsert skips it — the
+       * weightages are what the one-to-one agreed.
+       */
+      if (!kraLocked) {
+        const kpiRows = kras.flatMap(k => {
+          const goalId = idBySeq.get(k.seq_no)
+          if (!goalId) return []
+          return (k.kpis ?? []).map(x => ({
+            company_id: companyId, period_id: period.id, employee_id: employeeId,
+            goal_id: goalId, seq_no: x.seq_no,
+            kpi_metric: x.kpi_metric, target_value: x.target_value || null,
+            weightage: x.weightage,
+          }))
+        })
+        if (kpiRows.length) {
+          const kw = await supabase.from('pms_goal_kpi')
+            .upsert(kpiRows, { onConflict: 'goal_id,seq_no' })
+          if (kw.error) logFail('could not save the KPIs', kw.error)
+        }
+        // A SHORTER KPI LIST LEAVES A TAIL, exactly as a shorter KRA set does:
+        // dropping a KRA from three KPIs to two upserts 1 and 2 and leaves 3
+        // behind, still carrying weightage and still demanding a rating.
+        // Removed per KRA, after the write, so a failure leaves the old set.
+        for (const k of kras) {
+          const goalId = idBySeq.get(k.seq_no)
+          if (!goalId) continue
+          const keep = (k.kpis ?? []).length
+          const tail = await supabase.from('pms_goal_kpi').delete()
+            .eq('goal_id', goalId).gt('seq_no', keep)
+          if (tail.error) logFail('could not remove trailing KPIs', tail.error)
+        }
+      }
+
+      // Read the KPI ids back, for the ratings below. Same reason the goal
+      // ids are read back: a KPI being typed has no id until it is written.
+      const savedKpis = await supabase.from('pms_goal_kpi')
+        .select('id,goal_id,seq_no')
+        .eq('employee_id', employeeId).eq('period_id', period.id)
+      const kpiByGoalSeq = new Map((savedKpis.data ?? []).map(r => {
+        const x = r as { id: string; goal_id: string; seq_no: number }
+        return [`${x.goal_id}|${x.seq_no}`, String(x.id)]
+      }))
       // 220: a rating names its KPI. A KRA whose KPI cannot be resolved is
       // left out rather than written against a guess — see kpiIdFor.
       const rated = kras

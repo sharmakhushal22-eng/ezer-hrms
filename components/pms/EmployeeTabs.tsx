@@ -21,6 +21,8 @@ import { useState } from 'react'
 import './pms.css'
 import { checkKras, canAdd, canDelete, meter, suggestSplit,
          CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@/lib/pms/kra'
+import { balance, checkKpis, suggestKpiSplit, blankKpi, renumber,
+         type Kpi } from '@/lib/pms/kpi'
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
          type Log, type DiscussionType, type Mode, type WeightageChange } from '@/lib/pms/oneToOne'
@@ -337,6 +339,23 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
 
   const set = (i: number, patch: Partial<Kra>) =>
     onChange(kras.map((k, j) => j === i ? { ...k, ...patch } : k))
+
+  // ── editing the KPIs of one KRA ────────────────────────────────────────
+  // renumber() after every add or remove: 220 makes (goal_id, seq_no) unique,
+  // so a hole in the sequence is a write that fails.
+  const kpisOf = (k: Kra): Kpi[] => k.kpis ?? []
+  const setKpi = (i: number, j: number, patch: Partial<Kpi>) =>
+    set(i, { kpis: kpisOf(kras[i]).map((x, n) => n === j ? { ...x, ...patch } : x) })
+  const addKpi = (i: number) =>
+    set(i, { kpis: renumber([...kpisOf(kras[i]), blankKpi(kpisOf(kras[i]).length + 1)]) })
+  const removeKpi = (i: number, j: number) =>
+    set(i, { kpis: renumber(kpisOf(kras[i]).filter((_, n) => n !== j)) })
+  /** The even split of this KRA's weightage, offered rather than applied. */
+  const splitKpis = (i: number) => {
+    const list = kpisOf(kras[i])
+    const parts = suggestKpiSplit(kras[i].weightage, list.length)
+    set(i, { kpis: list.map((x, n) => ({ ...x, weightage: parts[n] ?? 0 })) })
+  }
   // Presentation: one shade of the brand per KRA, shared by its segment in
   // the weightage bar and its number badge, so the two read as one object.
   const shade = (i: number) => `color-mix(in oklab, var(--ez-brand) ${Math.max(30, 100 - i * 11)}%, var(--ez-brand-tint))`
@@ -472,27 +491,99 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                     )}
                   </div>
 
-                  <div className="pms-kra-fields">
-                    <div>
-                      <label htmlFor={`kra-${i}-metric`}>KPI metric</label>
-                      <input id={`kra-${i}-metric`} value={k.kpi_metric} readOnly={locked} aria-label={`KRA ${i + 1} metric`}
-                             placeholder="How it is measured"
-                             onChange={e => set(i, { kpi_metric: e.target.value })} />
-                    </div>
-                    <div>
-                      <label htmlFor={`kra-${i}-target`}>Target</label>
-                      <input id={`kra-${i}-target`} value={k.target_value} readOnly={locked} aria-label={`KRA ${i + 1} target`}
-                             placeholder="The number to hit"
-                             onChange={e => set(i, { target_value: e.target.value })} />
-                    </div>
-                    <div>
-                      <label htmlFor={`kra-${i}-cat`}>Category</label>
-                      <select id={`kra-${i}-cat`} value={k.category} disabled={locked} aria-label={`KRA ${i + 1} category`}
-                              onChange={e => set(i, { category: e.target.value as Category })}>
-                        {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
-                      </select>
-                    </div>
+                  <div className="pms-kra-cat">
+                    <label htmlFor={`kra-${i}-cat`}>Category</label>
+                    <select id={`kra-${i}-cat`} value={k.category} disabled={locked} aria-label={`KRA ${i + 1} category`}
+                            onChange={e => set(i, { category: e.target.value as Category })}>
+                      {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+                    </select>
                   </div>
+
+                  {/* ── THE KPIs (220) ───────────────────────────────────
+                      The KRA is the objective; these are how it is measured,
+                      and each is rated on its own by every rung. Their
+                      weightages total THIS KRA's weightage, not 100 — the
+                      balance line says which, because "15 of 30" is the only
+                      number that tells somebody what to type next. */}
+                  {(() => {
+                    const bal = balance({ seq_no: k.seq_no, kra_title: k.kra_title,
+                                          weightage: k.weightage, kpis: kpisOf(k) })
+                    const faults = checkKpis({ seq_no: k.seq_no, kra_title: k.kra_title,
+                                               weightage: k.weightage, kpis: kpisOf(k) })
+                    const setFault = faults.find(f => f.kpiSeq === null)
+                    return (
+                      <div className="pms-kpis">
+                        <div className="pms-kpis-h">
+                          <span className="pms-kpis-t">How it is measured</span>
+                          <span className={`pms-kpis-bal${bal.ok ? ' is-ok' : bal.left < 0 ? ' is-over' : ''}`}>
+                            {bal.total} of {k.weightage || 0}
+                          </span>
+                          {!locked && (
+                            <div className="btnrow">
+                              {kpisOf(k).length > 1 && (k.weightage || 0) > 0 && (
+                                <button type="button" className="btn ghost" onClick={() => splitKpis(i)}>
+                                  Split {k.weightage} evenly
+                                </button>
+                              )}
+                              <button type="button" className="btn ghost" onClick={() => addKpi(i)}>
+                                + Add KPI
+                              </button>
+                            </div>
+                          )}
+                        </div>
+
+                        {kpisOf(k).map((x, j) => {
+                          const rowFault = faults.find(f => f.kpiSeq === x.seq_no)
+                          return (
+                            <div key={j} className={`pms-kpi${rowFault ? ' is-bad' : ''}`}>
+                              <span className="pms-kpi-no" aria-hidden="true">{j + 1}</span>
+                              <div className="pms-kpi-m">
+                                <label htmlFor={`kra-${i}-kpi-${j}-m`}>KPI</label>
+                                <input id={`kra-${i}-kpi-${j}-m`} value={x.kpi_metric} readOnly={locked}
+                                       aria-label={`KRA ${i + 1} KPI ${j + 1} measure`}
+                                       placeholder="How it is measured"
+                                       onChange={e => setKpi(i, j, { kpi_metric: e.target.value })} />
+                              </div>
+                              <div className="pms-kpi-t">
+                                <label htmlFor={`kra-${i}-kpi-${j}-t`}>Target</label>
+                                <input id={`kra-${i}-kpi-${j}-t`} value={x.target_value} readOnly={locked}
+                                       aria-label={`KRA ${i + 1} KPI ${j + 1} target`}
+                                       placeholder="The number to hit"
+                                       onChange={e => setKpi(i, j, { target_value: e.target.value })} />
+                              </div>
+                              <div className="pms-kpi-w">
+                                <label htmlFor={`kra-${i}-kpi-${j}-w`}>Weightage</label>
+                                <div className="pms-kra-wbox">
+                                  <input id={`kra-${i}-kpi-${j}-w`} type="number" min={0} max={100}
+                                         value={x.weightage} readOnly={locked}
+                                         aria-label={`KRA ${i + 1} KPI ${j + 1} weightage`}
+                                         aria-invalid={rowFault ? true : undefined}
+                                         onChange={e => setKpi(i, j, { weightage: Number(e.target.value) || 0 })} />
+                                  <span aria-hidden="true">%</span>
+                                </div>
+                              </div>
+                              {/* The last KPI cannot go: a KRA with no measure
+                                  cannot be rated, and removing it would leave
+                                  a row nobody can fix from this screen. */}
+                              {!locked && (
+                                <button className="pms-kpi-x" type="button"
+                                        disabled={kpisOf(k).length <= 1}
+                                        title={kpisOf(k).length <= 1
+                                          ? 'A KRA needs at least one KPI'
+                                          : 'Remove this KPI'}
+                                        aria-label={`Remove KRA ${i + 1} KPI ${j + 1}`}
+                                        onClick={() => removeKpi(i, j)}>×</button>
+                              )}
+                            </div>
+                          )
+                        })}
+
+                        {setFault && !locked && (
+                          <p className="pms-kpis-f">{setFault.says}</p>
+                        )}
+                      </div>
+                    )
+                  })()}
 
                   {/* §3's merge: rated beside the KRA it belongs to, rather
                       than on a separate screen found afterwards. */}
