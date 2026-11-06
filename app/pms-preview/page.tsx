@@ -25,6 +25,7 @@ import { TeamTab, ApproveTab, RateTab, PipRequestTab, TeamAnalyticsTab,
 import { STAGES } from '@/lib/pms/cycle'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Kra } from '@/lib/pms/kra'
+import { shareOf } from '@/lib/pms/kpi'
 import { type Line } from '@/lib/pms/scoring'
 import { type Log } from '@/lib/pms/oneToOne'
 import Channel from '@/components/broadcast/Channel'
@@ -36,8 +37,9 @@ import '@/components/pms/pms.css'
 const TODAY = '2026-09-04'
 
 const KRAS: Kra[] = [
-  // 220: a KRA is measured by its KPIs, whose weightages total the KRA's.
+  // 220: a KRA is measured by its KPIs, each rated on its own.
   // 221: how many it may hold is policy, default 1 to 5.
+  // 222: a KPI has NO weightage — it carries an equal share of its KRA's.
   //
   // The first carries FIVE — the shipped maximum — so the harness shows the
   // state nothing else does: the + Add KPI button disabled, with its reason
@@ -46,26 +48,26 @@ const KRAS: Kra[] = [
   // disabled at the floor. Both ends of the range are therefore on screen.
   { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25,
     kpis: [
-      { seq_no: 1, kpi_metric: 'Error rate per run', target_value: 'under 0.2%', weightage: 8 },
-      { seq_no: 2, kpi_metric: 'Reruns caused by input error', target_value: 'zero', weightage: 6 },
-      { seq_no: 3, kpi_metric: 'Payslips issued on the 1st', target_value: '100%', weightage: 5 },
-      { seq_no: 4, kpi_metric: 'Arrears cleared within the cycle', target_value: '100%', weightage: 4 },
-      { seq_no: 5, kpi_metric: 'Full-and-final within 45 days', target_value: '100%', weightage: 2 },
+      { seq_no: 1, kpi_metric: 'Error rate per run', target_value: 'under 0.2%' },
+      { seq_no: 2, kpi_metric: 'Reruns caused by input error', target_value: 'zero' },
+      { seq_no: 3, kpi_metric: 'Payslips issued on the 1st', target_value: '100%' },
+      { seq_no: 4, kpi_metric: 'Arrears cleared within the cycle', target_value: '100%' },
+      { seq_no: 5, kpi_metric: 'Full-and-final within 45 days', target_value: '100%' },
     ] },
   { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20,
     kpis: [
-      { seq_no: 1, kpi_metric: 'Filings on time', target_value: '100%', weightage: 14 },
-      { seq_no: 2, kpi_metric: 'Challans reconciled same month', target_value: '100%', weightage: 6 },
+      { seq_no: 1, kpi_metric: 'Filings on time', target_value: '100%' },
+      { seq_no: 2, kpi_metric: 'Challans reconciled same month', target_value: '100%' },
     ] },
   { seq_no: 3, kra_title: 'Query resolution', kpi_metric: 'Turnaround', target_value: 'under 2 days', category: 'CUSTOMER', weightage: 20,
-    kpis: [{ seq_no: 1, kpi_metric: 'Turnaround', target_value: 'under 2 days', weightage: 20 }] },
+    kpis: [{ seq_no: 1, kpi_metric: 'Turnaround', target_value: 'under 2 days' }] },
   { seq_no: 4, kra_title: 'Report automation', kpi_metric: 'Reports automated', target_value: '4 of 4', category: 'BUSINESS', weightage: 20,
-    kpis: [{ seq_no: 1, kpi_metric: 'Reports automated', target_value: '4 of 4', weightage: 20 }] },
+    kpis: [{ seq_no: 1, kpi_metric: 'Reports automated', target_value: '4 of 4' }] },
   // Deliberately below the per-KRA minimum, so the thin-row treatment shows.
-  // Its KPI is deliberately SHORT of the KRA's 3, so the unbalanced state is
-  // visible too — the harness is where both are meant to be seen.
+  // There is no longer an unbalanced state to show alongside it: since 222 a
+  // KRA's KPIs always total it exactly, because they each take an equal cut.
   { seq_no: 5, kra_title: 'Audit readiness', kpi_metric: 'Observations', target_value: 'zero', category: 'COMPLIANCE', weightage: 3,
-    kpis: [{ seq_no: 1, kpi_metric: 'Observations', target_value: 'zero', weightage: 1 }] },
+    kpis: [{ seq_no: 1, kpi_metric: 'Observations', target_value: 'zero' }] },
 ]
 
 const LINES: Line[] = [
@@ -194,7 +196,9 @@ const CASES: [string, React.ReactNode][] = [
       rows={KRAS.flatMap(k => (k.kpis ?? []).map(x => ({
         goalId: String(k.seq_no), kpiId: `${k.seq_no}.${x.seq_no}`,
         title: `${k.kra_title} · ${x.kpi_metric}`,
-        weightage: x.weightage, category: k.category,
+        // 222: a KPI has no weightage — it carries an equal share of
+        // its KRA's, which is what the row shows.
+        weightage: shareOf(k.weightage, (k.kpis ?? []).length), category: k.category,
         achievement: '0.11% across 3 runs',
         rating: LINES.find(l => l.goalId === String(k.seq_no))?.self ?? null,
         comment: 'Pre-run validation checklist introduced' })))} />],

@@ -21,7 +21,7 @@ import { useState } from 'react'
 import './pms.css'
 import { checkKras, canAdd, canDelete, meter, suggestSplit,
          CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@/lib/pms/kra'
-import { balance, checkKpis, suggestKpiSplit, blankKpi, renumber, selfKey,
+import { checkKpis, blankKpi, renumber, selfKey, shareOf, submitGate,
          kraRating, ratedCount, canAddKpi, canRemoveKpi, type Kpi } from '@/lib/pms/kpi'
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
@@ -82,6 +82,16 @@ function Locked({ children }: { children: React.ReactNode }) {
 }
 
 const RATING_VALUES = [1, 2, 3, 4, 5]
+
+/**
+ * A KPI's share, for display.
+ *
+ * 10 stays "10"; 8.3333… becomes "8.33". A trailing ".00" on every whole
+ * number is noise on a line that repeats once per measure, and the exact
+ * value is never typed or stored — only the KRA's own weightage is, and
+ * shareOf() divides it afresh every render.
+ */
+const round2 = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2)
 
 /** The 1-5 chip row from the mockup. A radiogroup, not five buttons — arrow
  *  keys are how somebody rates seven KRAs without reaching for the mouse. */
@@ -343,12 +353,28 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
    * inside kra.ts, so there is no `DEFAULT_RULES.minKra` here to find.
    */
   const check = checkKras(kras, rules)
-  // How many KRAs still have no rating. Only a blocker once rateRequired —
-  // see the prop's note.
-  const unrated = rateRequired
-    ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) === null).length
-    : 0
-  const canGo = check.canSubmit && unrated === 0
+
+  /**
+   * ONE GATE, BECAUSE IT IS ONE QUESTION — 222.
+   *
+   * Requested: nothing can be submitted without the weightage at exactly 100,
+   * the minimum KRAs and KPIs written, and every KRA rated. Three rules that
+   * were enforced in three places and checked here by one of them:
+   * `check.canSubmit` comes from checkKras, which knows about weightage and
+   * nothing whatever about KPIs. A KRA with no measure under it sailed past.
+   *
+   * AND THE RATING COUNT WAS BROKEN. It read `self[k.seq_no]` — key `1` —
+   * while the draft ratings have been keyed `selfKey(kraSeq, kpiSeq)`, i.e.
+   * `"1.1"`, since the self rating moved onto the KPI. Every lookup missed,
+   * so with rateRequired on, every KRA counted as unrated and the button
+   * could never enable. selfKey is used on both sides here for that reason.
+   */
+  const tree = kras.map(k => ({ ...k, kpis: k.kpis ?? [] }))
+  const gate = submitGate(tree, rules, rateRequired
+    ? (kpi, kra) => self?.[selfKey(kra.seq_no, kpi.seq_no)]?.rating ?? null
+    : undefined)
+  const unrated = gate.of - gate.rated
+  const canGo = gate.ok
   const m = meter(check, rules)
   const add = canAdd(kras, rules)
   const del = canDelete(kras, rules)
@@ -373,12 +399,6 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   const removeKpi = (i: number, j: number) => {
     if (!canRemoveKpi(kpisOf(kras[i]), rules).allowed) return
     set(i, { kpis: renumber(kpisOf(kras[i]).filter((_, n) => n !== j)) })
-  }
-  /** The even split of this KRA's weightage, offered rather than applied. */
-  const splitKpis = (i: number) => {
-    const list = kpisOf(kras[i])
-    const parts = suggestKpiSplit(kras[i].weightage, list.length)
-    set(i, { kpis: list.map((x, n) => ({ ...x, weightage: parts[n] ?? 0 })) })
   }
   // Presentation: one shade of the brand per KRA, shared by its segment in
   // the weightage bar and its number badge, so the two read as one object.
@@ -537,28 +557,30 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                   {(() => {
                     const mine = { seq_no: k.seq_no, kra_title: k.kra_title,
                                    weightage: k.weightage, kpis: kpisOf(k) }
-                    // `rules` both times. balance() and checkKpis() default to
-                    // DEFAULT_RULES, so omitting it here would hold every KRA
-                    // to 1-to-5 whatever the policy says — the bug fixed at
-                    // the top of this component, in a second place.
-                    const bal = balance(mine, rules)
+                    // `rules`, not the default: omitting it would hold every
+                    // KRA to 1-to-5 whatever the policy says.
                     const faults = checkKpis(mine, rules)
                     const setFault = faults.find(f => f.kpiSeq === null)
                     const more = canAddKpi(kpisOf(k), rules)
+                    // 222: THE SHARE IS SHOWN, NOT TYPED. A KPI has no
+                    // weightage of its own — it takes an equal cut of its
+                    // KRA's. Saying so is worth a line, because "each 8.33%"
+                    // is the only thing that explains what adding a fourth
+                    // measure does to the three already there.
+                    const share = shareOf(k.weightage, kpisOf(k).length)
                     return (
                       <div className="pms-kpis">
                         <div className="pms-kpis-h">
                           <span className="pms-kpis-t">How it is measured</span>
-                          <span className={`pms-kpis-bal${bal.ok ? ' is-ok' : bal.left < 0 ? ' is-over' : ''}`}>
-                            {bal.total} of {k.weightage || 0}
-                          </span>
+                          {kpisOf(k).length > 0 && (k.weightage || 0) > 0 && (
+                            <span className="pms-kpis-bal is-ok">
+                              {kpisOf(k).length === 1
+                                ? `carries all ${k.weightage}%`
+                                : `${k.weightage}% split ${kpisOf(k).length} ways · ${round2(share)}% each`}
+                            </span>
+                          )}
                           {!locked && (
                             <div className="btnrow">
-                              {kpisOf(k).length > 1 && (k.weightage || 0) > 0 && (
-                                <button type="button" className="btn ghost" onClick={() => splitKpis(i)}>
-                                  Split {k.weightage} evenly
-                                </button>
-                              )}
                               {/* DISABLED AT THE CEILING, NOT HIDDEN. A button
                                   that disappears reads as a mis-click; one
                                   that greys out with the reason in its title
@@ -598,16 +620,16 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                                        placeholder="The number to hit"
                                        onChange={e => setKpi(i, j, { target_value: e.target.value })} />
                               </div>
+                              {/* 222: no weightage input. A KPI has none —
+                                  it carries an equal share of its KRA's, and
+                                  the share is stated in the header above
+                                  rather than typed into every row. The column
+                                  is kept as a read-only share so the grid
+                                  still lines up and the number is where the
+                                  reader last saw it. */}
                               <div className="pms-kpi-w">
-                                <label htmlFor={`kra-${i}-kpi-${j}-w`}>Weightage</label>
-                                <div className="pms-kra-wbox">
-                                  <input id={`kra-${i}-kpi-${j}-w`} type="number" min={0} max={100}
-                                         value={x.weightage} readOnly={locked}
-                                         aria-label={`KRA ${i + 1} KPI ${j + 1} weightage`}
-                                         aria-invalid={rowFault ? true : undefined}
-                                         onChange={e => setKpi(i, j, { weightage: Number(e.target.value) || 0 })} />
-                                  <span aria-hidden="true">%</span>
-                                </div>
+                                <span className="pms-kpi-share-l">Share</span>
+                                <span className="pms-kpi-share">{round2(share)}%</span>
                               </div>
                               {/* The KPI that would take the KRA under the
                                   policy's floor cannot go. Usually that is the
@@ -692,15 +714,20 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
           </div>
         )}
 
-        {check.faults.length > 0 && (
+        {/* EVERY REASON THE BUTTON IS OFF, not just the KRA-level ones.
+            This listed check.faults while the button increasingly refused for
+            reasons checkKras cannot see — a KRA with no KPI, a measure with
+            no name, a rating not given. A disabled button whose explanation
+            omits the actual blocker is worse than no explanation: the reader
+            fixes what is listed and it stays disabled. gate.faults is the
+            same list the button counts. */}
+        {gate.faults.length > 0 && (
           <div className="banner b-red" style={{ marginTop: 14, marginBottom: 0 }}>
             <span aria-hidden="true">!</span>
             <div>
               <b>Before this can be sent:</b>
               <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
-                {check.faults.map((f, i) => (
-                  <li key={i}>{f.seq !== null && <b>KRA {f.seq}: </b>}{f.says}</li>
-                ))}
+                {gate.faults.map((f, i) => <li key={i}>{f}</li>)}
               </ul>
             </div>
           </div>
@@ -754,11 +781,14 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                 // and the KRA validation no longer has anything to say.
                 : locked
                   ? (unrated > 0
-                      ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                      ? `Rate the last ${unrated} ${unrated === 1 ? 'measure' : 'measures'} first`
                       : 'Send my ratings to my manager')
-                : !check.canSubmit ? `Cannot send yet: ${check.faults.length} to fix`
-                : unrated > 0
-                  ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                // 222: the count comes from the gate, so the label cannot
+                // disagree with what the button does. It counted check.faults
+                // alone before, which left out every KPI fault — the button
+                // said "2 to fix" while refusing for a third reason it never
+                // named.
+                : !gate.ok ? `Cannot send yet: ${gate.faults.length} to fix`
                   : rateRequired ? 'Send KRAs and my ratings to my manager'
                   : 'Send to my manager'}
             </button>

@@ -2073,6 +2073,23 @@
  * what the policy allows. Deliberately quiet: it is a running count, not a
  * fault, and .pms-kpis-bal next to it is already carrying a colour. Reading
  * as a second status pill would make two neutral numbers compete. */
+/* 222: the KPI's share, shown not typed. A KPI has no weightage of its own —
+ * it takes an equal cut of its KRA's — so this column is a read-only number
+ * where an input used to be. Styled as text rather than as a disabled input:
+ * a greyed-out box invites a click that does nothing. It keeps the column so
+ * the grid still lines up with the header and with the rows above it. */
+/* Sized to match .pms-kpi label exactly — it sits in the same row as "KPI"
+ * and "Target" and is hidden by the same rule below, so a different size
+ * would show up as one column heading out of step with the other two. */
+.pms .pms-kpi-share-l {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--ez-muted); margin-bottom: 4px;
+}
+.pms .pms-kpi-share {
+  display: block; font-size: 13px; font-weight: 600; color: var(--ez-ink-soft);
+  font-variant-numeric: tabular-nums; padding: 9px 0;
+}
+
 .pms .pms-kpis-n {
   font-size: 11px; color: var(--ez-faint); font-variant-numeric: tabular-nums;
   white-space: nowrap; align-self: center;
@@ -2108,11 +2125,13 @@
  * is five words of noise per KPI. Hidden from sight but NOT from assistive
  * tech — every input keeps its own aria-label, and these stay in the
  * accessibility tree so the association survives. */
-.pms .pms-kpi label {
+.pms .pms-kpi label,
+.pms .pms-kpi-share-l {
   position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
-.pms .pms-kpis-h + .pms-kpi label {
+.pms .pms-kpis-h + .pms-kpi label,
+.pms .pms-kpis-h + .pms-kpi .pms-kpi-share-l {
   position: static; width: auto; height: auto; padding: 0; margin: 0 0 4px;
   overflow: visible; clip-path: none; white-space: normal;
 }

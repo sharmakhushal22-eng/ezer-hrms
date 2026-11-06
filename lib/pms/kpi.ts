@@ -1,35 +1,45 @@
-// lib/pms/kpi.ts — the KPIs under one KRA, and the weightage they share.
+// lib/pms/kpi.ts — the KPIs under one KRA, and the share of it they carry.
 //
-// Requested: a KRA can have several KPIs, each with its own rating; the KPIs
-// split the KRA's weightage; the total across KRAs stays exactly 100; every
-// rung rates every KPI.
+// Requested: a KRA can have several KPIs, each rated on its own. A KPI has NO
+// WEIGHTAGE of its own — only KRAs do — and the KRA weightages total no more
+// than 100, and exactly 100 before anything can be submitted. Every KRA must
+// be rated, by every rung, before the appraisal moves.
 //
-// ── TWO RULES, ONE TOTAL ─────────────────────────────────────────────────
+// ── ONE NUMBER, NOT TWO ──────────────────────────────────────────────────
 //
-//   Across KRAs      the weightages total EXACTLY 100 — kra.ts, unchanged.
-//   Inside a KRA     its KPIs total exactly that KRA's weightage — here.
+//   Across KRAs      the weightages total EXACTLY 100 to submit — kra.ts.
+//   Inside a KRA     its KPIs share that KRA's weightage equally — here.
 //
-// The second is what keeps the first true. A 30% KRA whose KPIs summed to 40
-// would make the real total 110 while checkKras still read 100 off the KRA
-// rows and said yes. Neither rule is sufficient alone.
+// 220 and 221 gave each KPI a stored weightage that had to sum to its KRA's.
+// That was a second balance to keep, on every screen, and it bought nothing:
+// the arithmetic below produces the same appraisal score without it. An equal
+// share CANNOT fail to add up, so there is no second rule to break.
 //
-// ── WHY SCORING DID NOT CHANGE ───────────────────────────────────────────
+// ── WHY SCORING STILL DID NOT CHANGE ─────────────────────────────────────
 //
 // score() in scoring.ts takes a flat list of weighted lines and returns the
 // weighted mean over the RATED ones. It never cared what a line represented.
-// So the KPI change is not a change to scoring at all: `lines()` below turns
-// the KRA tree into the same flat list, one entry per KPI instead of one per
-// KRA, and score() produces the right number without being touched.
+// `lines()` below turns the KRA tree into that flat list, one entry per KPI,
+// each carrying kra.weightage / n. score() is untouched.
 //
-// Migration 220 does exactly this on the SQL side, which is why it is
-// score-neutral: every existing KRA was given one KPI carrying its whole
-// weightage, so the flat list is identical to what it was.
+// And the change is SCORE-NEUTRAL for everything on record: for a KRA with
+// one KPI, w/1 is w, and 220's backfill gave every existing KRA exactly one
+// KPI carrying its whole weightage. Migration 222 does the same arithmetic in
+// SQL for the same reason.
 //
-// ENGINE COMPUTES, SQL DECIDES. The balance rule exists twice on purpose —
-// pms_validate_kpis refuses, this file explains before anybody is refused.
+// ── PARTLY RATED IS AN AVERAGE, NOT A ZERO ───────────────────────────────
+//
+// A KRA with three KPIs of which two are rated shows the average of those
+// two. An unrated KPI leaves the divisor rather than counting as zero — the
+// rule score() already applies to unrated KRAs. 4 and 5 with one blank is
+// 4.5, not 3.0; 3.0 is a verdict nobody gave.
+//
+// ENGINE COMPUTES, SQL DECIDES. The gates exist twice on purpose — 222's
+// pms_unrated_kpis and pms_validate_kpis refuse, this file explains before
+// anybody is refused.
 
 import type { Line } from './scoring.ts'
-import type { Category } from './kra.ts'
+import { checkKras, type Category, type Kra } from './kra.ts'
 import { DEFAULT_RULES, type Rules } from './cycle.ts'
 
 export interface Kpi {
@@ -40,16 +50,17 @@ export interface Kpi {
   kpi_metric: string
   target_value: string
   /**
-   * THIS KPI'S SHARE OF ITS KRA, not of the whole appraisal. The KPIs under
-   * one KRA add up to that KRA's weightage, and the KRAs add up to 100 — so
-   * a number here is directly comparable with a KRA weightage, which is what
-   * lets score() treat every KPI in the appraisal as one flat list.
+   * RETIRED by 222 and read by nothing. The column still exists and still
+   * holds whatever was written into it, so the field is kept to describe a
+   * row that comes back from the database — but a KPI's share is its KRA's
+   * weightage divided by how many KPIs the KRA has, and that is computed,
+   * never stored. Reading this is a bug; writing it is dead weight.
    */
-  weightage: number
+  weightage?: number
 }
 
 /** The shape this module needs from a KRA. Narrower than kra.ts's Kra on
- *  purpose: nothing here reads a title or a category. */
+ *  purpose: nothing here reads anything else off one. */
 export interface KraWithKpis {
   seq_no: number
   kra_title: string
@@ -59,21 +70,11 @@ export interface KraWithKpis {
 }
 
 /**
- * THE FLOOR AND CEILING ARE POLICY, NOT CONSTANTS — 221.
+ * THE FLOOR AND CEILING ARE POLICY — 221.
  *
- * This used to be `MIN_KPI_PER_KRA = 1`, read directly by balance() and
- * checkKpis(), with no ceiling at all. Requested: the minimum is 1 and the
- * maximum is 5 BY DEFAULT, both changed from Setup and Configuration.
- *
- * So every function here that cares takes `r: Rules = DEFAULT_RULES`, exactly
- * as kra.ts's checkKras/canAdd/canDelete do. The default is a FALLBACK for a
- * screen rendered before the policy loads — never the rule. Reading
- * DEFAULT_RULES.minKpi inside a component is the bug
- * lib/pms/__tests__/rules-from-policy.test.ts exists to catch, and it is the
- * same bug this constant was.
- *
- * Kept as a named export because the old name appears in tests and reads
- * well in prose, but it is now only the DEFAULT, which is why it says so.
+ * Every function here that cares takes `r: Rules = DEFAULT_RULES`, as
+ * kra.ts's checkKras/canAdd/canDelete do. The default is a FALLBACK for a
+ * screen rendered before the policy loads, never the rule.
  */
 export const DEFAULT_MIN_KPI_PER_KRA = DEFAULT_RULES.minKpi
 export const DEFAULT_MAX_KPI_PER_KRA = DEFAULT_RULES.maxKpi
@@ -86,42 +87,35 @@ export interface KpiFault {
   says: string
 }
 
-/** How a KRA's KPIs stand against the weightage they have to fill. */
-export interface KpiBalance {
-  total: number
-  target: number
-  /** Positive when there is still weightage to allocate, negative when over. */
-  left: number
-  count: number
-  ok: boolean
-}
-
-export function balance(kra: KraWithKpis, r: Rules = DEFAULT_RULES): KpiBalance {
-  const target = Number(kra.weightage) || 0
-  const total = (kra.kpis ?? []).reduce((s, k) => s + (Number(k.weightage) || 0), 0)
-  const count = (kra.kpis ?? []).length
-  return {
-    total, target, left: target - total, count,
-    // Both ends, not just the floor. A KRA holding six KPIs under a policy
-    // that allows five is not submittable, so `ok` must not say it is —
-    // trg_pms_kpi_count refuses the sixth write and pms_validate_kpis
-    // refuses the set.
-    ok: count >= r.minKpi && count <= r.maxKpi && total === target,
-  }
+/**
+ * THE SHARE ONE KPI CARRIES, as a percentage of the whole appraisal.
+ *
+ * Not stored anywhere and deliberately not rounded: a 10% KRA with three
+ * KPIs gives 3.333…% each, and rounding each to 3.33 would lose 0.01 of the
+ * KRA every time. The sum has to come back to the KRA's weightage exactly,
+ * because that is what keeps the appraisal total at 100.
+ */
+export function shareOf(kraWeightage: number, kpiCount: number): number {
+  const n = Math.max(0, Math.trunc(kpiCount))
+  if (n === 0) return 0
+  return (Number(kraWeightage) || 0) / n
 }
 
 /**
  * What is wrong with this KRA's KPIs, if anything.
  *
- * Returns a LIST, unlike chainFault's single sentence: these faults are
- * per-KPI and a reader fixing one wants to see the others. The order is the
- * order to deal with them — the set first, then the rows, because a row-level
- * complaint is noise while the KRA has no KPIs at all.
+ * Returns a LIST: these faults are per-KPI and somebody fixing one wants to
+ * see the others. The order is the order to deal with them — the set first,
+ * then the rows, because a row-level complaint is noise while the KRA has
+ * the wrong number of KPIs.
+ *
+ * There is no weightage fault any more. That is the point of 222: equal
+ * shares cannot fail to balance, so the only thing left to get wrong is how
+ * many there are and whether they say anything.
  */
 export function checkKpis(kra: KraWithKpis, r: Rules = DEFAULT_RULES): KpiFault[] {
   const out: KpiFault[] = []
   const kpis = kra.kpis ?? []
-  const b = balance(kra, r)
 
   if (kpis.length === 0) {
     out.push({ seq: kra.seq_no, kpiSeq: null,
@@ -131,10 +125,7 @@ export function checkKpis(kra: KraWithKpis, r: Rules = DEFAULT_RULES): KpiFault[
   }
 
   // A FLOOR ABOVE ONE NEEDS ITS OWN SENTENCE. "Add a KPI" is right for an
-  // empty KRA and useless at two-of-three: it does not say how many are
-  // wanted. Returning early on both keeps the weightage complaint out of the
-  // way until the set is the right size, since balancing a set you are about
-  // to add to is wasted work.
+  // empty KRA and useless at two of three: it does not say how many.
   if (kpis.length < r.minKpi) {
     out.push({ seq: kra.seq_no, kpiSeq: null,
       says: `This KRA has ${kpis.length} of the ${r.minKpi} KPIs the policy `
@@ -149,28 +140,10 @@ export function checkKpis(kra: KraWithKpis, r: Rules = DEFAULT_RULES): KpiFault[
     return out
   }
 
-  if (b.left > 0) {
-    out.push({ seq: kra.seq_no, kpiSeq: null,
-      says: `These KPIs come to ${b.total} of this KRA's ${b.target}. `
-          + `${b.left} still to share out.` })
-  } else if (b.left < 0) {
-    out.push({ seq: kra.seq_no, kpiSeq: null,
-      says: `These KPIs come to ${b.total}, which is ${-b.left} more than `
-          + `this KRA's ${b.target}.` })
-  }
-
   for (const k of kpis) {
     if (!String(k.kpi_metric ?? '').trim()) {
       out.push({ seq: kra.seq_no, kpiSeq: k.seq_no,
         says: 'Say how this one is measured.' })
-    }
-    // ZERO IS NOT A WEIGHTAGE, it is a KPI that cannot affect the rating.
-    // Worth refusing rather than quietly carrying: somebody wrote it down
-    // meaning it to count.
-    if ((Number(k.weightage) || 0) <= 0) {
-      out.push({ seq: kra.seq_no, kpiSeq: k.seq_no,
-        says: 'Give this a weightage, or remove it — at 0 it cannot move the '
-            + 'rating either way.' })
     }
   }
   return out
@@ -179,8 +152,7 @@ export function checkKpis(kra: KraWithKpis, r: Rules = DEFAULT_RULES): KpiFault[
 /** Every fault across a whole KRA set, in KRA order. */
 export function checkAllKpis(kras: KraWithKpis[], r: Rules = DEFAULT_RULES): KpiFault[] {
   // `kras.flatMap(checkKpis)` would pass the INDEX as the second argument,
-  // so KRA 0 would be checked against minKpi 0 and KRA 3 against minKpi 3.
-  // flatMap hands the callback three arguments and checkKpis now takes two.
+  // so KRA 0 would be checked against a "policy" of 0.
   return kras.flatMap(k => checkKpis(k, r))
 }
 
@@ -188,10 +160,8 @@ export function checkAllKpis(kras: KraWithKpis[], r: Rules = DEFAULT_RULES): Kpi
  * Whether the + button is live, and what to say when it is not.
  *
  * Same shape as kra.ts's canAdd/canDelete so the two forms behave alike: the
- * button is disabled rather than hidden, and the reason is the title, because
- * a control that vanishes at the limit leaves the reader wondering whether
- * they mis-clicked. The number comes from the policy, so the sentence changes
- * when an admin changes the setting.
+ * button is disabled rather than hidden, because a control that vanishes at
+ * the limit leaves the reader wondering whether they mis-clicked.
  */
 export function canAddKpi(kpis: Kpi[], r: Rules = DEFAULT_RULES):
   { allowed: boolean; reason?: string } {
@@ -223,46 +193,28 @@ export function canRemoveKpi(kpis: Kpi[], r: Rules = DEFAULT_RULES):
 }
 
 /**
- * Spread a KRA's weightage across n KPIs as evenly as whole numbers allow,
- * remainder on the first — the same rule suggestSplit uses for KRAs, so the
- * two screens behave the same way.
- *
- * Offered as a starting point, never applied silently.
- */
-export function suggestKpiSplit(kraWeightage: number, n: number): number[] {
-  if (n <= 0) return []
-  const total = Number(kraWeightage) || 0
-  const base = Math.floor(total / n)
-  const out = Array(n).fill(base)
-  out[0] += total - base * n
-  return out
-}
-
-/**
  * THE KRA'S OWN RATING, rolled up from its KPIs.
  *
- * Weighted by each KPI's share, over the RATED ones only — the same rule
- * score() applies to the appraisal as a whole. An unrated KPI is left out of
- * the denominator rather than counted as zero: a half-rated KRA shows the
- * average of what has been looked at, not a number dragged down by work
- * nobody has assessed yet.
+ * A PLAIN MEAN of the rated ones, because the KPIs under a KRA now carry
+ * equal share. Weighting by an equal weight is the same as not weighting —
+ * (4w + 5w) / 2w = (4 + 5) / 2 — so the weights cancel and are not computed.
  *
- * Null when nothing under it is rated, which is how a screen tells "not rated"
- * from "rated badly".
+ * Unrated KPIs leave the divisor rather than counting as zero. Null when
+ * nothing under it is rated, which is how a screen tells "not rated" from
+ * "rated badly".
  */
 export function kraRating(
   kpis: Kpi[],
   ratingOf: (kpi: Kpi) => number | null | undefined,
 ): number | null {
-  let num = 0, den = 0
+  let sum = 0, n = 0
   for (const k of kpis ?? []) {
     const v = ratingOf(k)
     if (v === null || v === undefined) continue
-    const w = Number(k.weightage) || 0
-    num += v * w
-    den += w
+    sum += v
+    n += 1
   }
-  return den === 0 ? null : Math.round((num / den) * 100) / 100
+  return n === 0 ? null : Math.round((sum / n) * 100) / 100
 }
 
 /** How many of a KRA's KPIs this rater has rated. For "3 of 5 rated". */
@@ -276,16 +228,34 @@ export function ratedCount(
   }).length, of: list.length }
 }
 
+/** Every KPI in the set, each with the KRA it belongs to. The order the
+ *  screens show them in, and the order faults are reported in. */
+export function allKpis<T extends KraWithKpis>(kras: T[]): { kra: T; kpi: Kpi }[] {
+  return (kras ?? []).flatMap(kra => (kra.kpis ?? []).map(kpi => ({ kra, kpi })))
+}
+
+/** How many measures across the whole set this rater has still not rated. */
+export function unratedCount(
+  kras: KraWithKpis[],
+  ratingOf: (kpi: Kpi, kra: KraWithKpis) => number | null | undefined,
+): { rated: number; of: number } {
+  const all = allKpis(kras)
+  const rated = all.filter(({ kra, kpi }) => {
+    const v = ratingOf(kpi, kra); return v !== null && v !== undefined
+  }).length
+  return { rated, of: all.length }
+}
+
 /**
  * The KRA tree flattened into the lines score() already consumes.
  *
- * ONE LINE PER KPI, carrying the KPI's weightage. This is the whole bridge
- * between the new shape and the existing scoring: score() is unchanged and
- * cannot tell the difference, because a weighted mean does not care whether
- * its weights came from four KRAs or from eleven KPIs that add up the same.
+ * ONE LINE PER KPI, carrying kra.weightage / n. This is the whole bridge
+ * between the shape and the existing scoring: score() is unchanged and cannot
+ * tell the difference, because a weighted mean does not care whether its
+ * weights came from four KRAs or from eleven KPIs that add up the same.
  *
  * `goalId` carries the KPI's identity rather than the KRA's, since that is
- * what a rating now belongs to. Where a caller needs the KRA back, the title
+ * what a rating belongs to. Where a caller needs the KRA back, the title
  * names both: "Reduce stock variance · Cycle-count variance".
  */
 export function lines(
@@ -294,12 +264,14 @@ export function lines(
 ): Line[] {
   const out: Line[] = []
   for (const kra of kras ?? []) {
-    for (const k of kra.kpis ?? []) {
+    const list = kra.kpis ?? []
+    const share = shareOf(kra.weightage, list.length)
+    for (const k of list) {
       out.push({
         goalId: k.id ?? `${kra.seq_no}.${k.seq_no}`,
         title: `${kra.kra_title} · ${k.kpi_metric}`.trim(),
         category: (kra.category ?? 'BUSINESS') as Category,
-        weightage: Number(k.weightage) || 0,
+        weightage: share,
         ...ratings(k, kra),
       })
     }
@@ -307,16 +279,9 @@ export function lines(
   return out
 }
 
-/**
- * A new KPI row, ready to type into.
- *
- * Weightage starts at 0 rather than guessing a share: a guess that happens to
- * balance is one nobody checks, and checkKpis refuses 0 with a sentence that
- * says what to do. suggestKpiSplit is there for when somebody wants the even
- * split, by asking for it.
- */
+/** A new KPI row, ready to type into. No weightage: it has none. */
 export function blankKpi(seq: number): Kpi {
-  return { seq_no: seq, kpi_metric: '', target_value: '', weightage: 0 }
+  return { seq_no: seq, kpi_metric: '', target_value: '' }
 }
 
 /** Renumber after an add or a remove, so seq_no stays 1..n with no holes.
@@ -335,8 +300,74 @@ export function renumber(kpis: Kpi[]): Kpi[] {
  *
  * Exported rather than spelled inline at each end, because the form writes
  * these keys and the save reads them: two places building the same string
- * slightly differently is a rating that silently fails to save. Matches the
- * fallback `lines()` uses for an unsaved row, so the two agree by
- * construction.
+ * slightly differently is a rating that silently fails to save.
  */
 export const selfKey = (kraSeq: number, kpiSeq: number) => `${kraSeq}.${kpiSeq}`
+
+// ── the one gate ─────────────────────────────────────────────────────────
+
+/** Everything standing between this KRA set and the next rung. */
+export interface SubmitGate {
+  ok: boolean
+  /** What to fix, in the order to fix it. Empty when ok. */
+  faults: string[]
+  /** The weightage total, and how far off 100 it is. */
+  total: number
+  short: number
+  /** Measures rated by this person, out of how many there are. */
+  rated: number
+  of: number
+}
+
+/**
+ * CAN THIS BE SENT? One function, because it is one question.
+ *
+ * Requested: "user can not proceed to submit kras without achieving 100%
+ * weightage and filling all the minimum kras and kpis", and every KRA must be
+ * rated. Three rules that were enforced in three places and checked by the
+ * screen in none of them consistently — the submit button read `canSubmit`
+ * off checkKras alone, which knows about weightage and nothing about KPIs.
+ *
+ * The order is the order somebody should deal with them. Weightage and KRA
+ * counts first (they change what else needs doing), then KPI counts, then the
+ * ratings — rating a set you are about to add a KRA to is wasted work.
+ *
+ * `ratingOf` is passed in rather than read, so the same function answers for
+ * the employee and for each manager. 222's pms_unrated_kpis asks exactly this
+ * in SQL, and refuses; this is the half that says so first.
+ */
+export function submitGate(
+  kras: KraWithKpis[],
+  r: Rules = DEFAULT_RULES,
+  ratingOf?: (kpi: Kpi, kra: KraWithKpis) => number | null | undefined,
+): SubmitGate {
+  const set = kras ?? []
+  const total = set.reduce((s, k) => s + (Number(k.weightage) || 0), 0)
+
+  // checkKras owns the KRA-level rules — count, exactly 100, minimum per KRA,
+  // blank titles. Restating them here would be a second copy to drift.
+  //
+  // THE KRA NUMBER IS PART OF THE SENTENCE, not a separate field. These are
+  // rendered as one flat list beside a form of eight or nine rows, and
+  // "Say how this one is measured" without a number sends the reader hunting.
+  // Set-level faults (seq null) carry no prefix because they are about the
+  // set, and "KRA null:" is worse than nothing.
+  const kra = checkKras(set as unknown as Kra[], r)
+  const faults = kra.faults.map(f => f.seq === null ? f.says : `KRA ${f.seq}: ${f.says}`)
+
+  for (const f of checkAllKpis(set, r)) {
+    faults.push(f.kpiSeq === null
+      ? `KRA ${f.seq}: ${f.says}`
+      : `KRA ${f.seq}, KPI ${f.kpiSeq}: ${f.says}`)
+  }
+
+  const { rated, of } = ratingOf
+    ? unratedCount(set, ratingOf)
+    : { rated: 0, of: 0 }
+  if (ratingOf && of > 0 && rated < of) {
+    faults.push(`${of - rated} of ${of} measures still need a rating. `
+      + 'Every KRA has to be rated before this can be sent.')
+  }
+
+  return { ok: faults.length === 0, faults, total, short: total - r.totalWeightage, rated, of }
+}

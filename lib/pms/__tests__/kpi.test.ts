@@ -14,8 +14,9 @@
 
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { balance, checkKpis, checkAllKpis, suggestKpiSplit, kraRating,
-         ratedCount, lines, blankKpi, renumber, canAddKpi, canRemoveKpi,
+import { checkKpis, checkAllKpis, kraRating, shareOf, submitGate,
+         ratedCount, unratedCount, lines, blankKpi, renumber,
+         canAddKpi, canRemoveKpi,
          DEFAULT_MIN_KPI_PER_KRA, DEFAULT_MAX_KPI_PER_KRA,
          type Kpi, type KraWithKpis } from '../kpi.ts'
 import { score } from '../scoring.ts'
@@ -26,8 +27,12 @@ import { DEFAULT_RULES, type Rules } from '../cycle.ts'
 const rules = (minKpi: number, maxKpi: number): Rules =>
   ({ ...DEFAULT_RULES, minKpi, maxKpi })
 
-const kpi = (seq: number, w: number, metric = `m${seq}`): Kpi =>
-  ({ seq_no: seq, kpi_metric: metric, target_value: 't', weightage: w })
+// 222: a KPI has no weightage. The fixture keeps its arity so the many
+// call sites below read unchanged, but the number is IGNORED — and that is
+// itself asserted, because a stored weightage silently being honoured again
+// is exactly the regression this migration has to not have.
+const kpi = (seq: number, _ignored = 0, metric = `m${seq}`): Kpi =>
+  ({ seq_no: seq, kpi_metric: metric, target_value: 't' })
 
 const kra = (w: number, kpis: Kpi[], seq = 1): KraWithKpis =>
   ({ seq_no: seq, kra_title: `KRA ${seq}`, category: 'BUSINESS', weightage: w, kpis })
@@ -69,42 +74,75 @@ test('an unrated KPI is left out, not counted as zero', () => {
   // The same rule score() applies to KRAs, and the same reason: a half-rated
   // KRA should show the average of what was looked at, not a number dragged
   // down by work nobody has assessed.
-  const ks = [kpi(1, 20), kpi(2, 10)]
+  const ks = [kpi(1), kpi(2)]
   assert.equal(kraRating(ks, k => (k.seq_no === 1 ? 4 : null)), 4)
-  assert.equal(kraRating(ks, k => (k.seq_no === 1 ? 4 : 1)), 3)
+  assert.equal(kraRating(ks, k => (k.seq_no === 1 ? 4 : 1)), 2.5)
   // Nothing rated at all is null, not 0 — "not rated" and "rated badly" are
   // different answers and a screen shows them differently.
   assert.equal(kraRating(ks, () => null), null)
   assert.equal(kraRating([], () => 5), null)
 })
 
-test('a KRA rating is weighted by its KPIs, not averaged flat', () => {
-  // The worked example from the request: 15/10/5 rated 4/3/5.
-  const ks = [kpi(1, 15), kpi(2, 10), kpi(3, 5)]
+test('a KRA rating is the plain mean of its rated KPIs', () => {
+  // 222: the KPIs under a KRA carry EQUAL share, so weighting by that share
+  // is the same as not weighting — (4w + 3w + 5w) / 3w = (4 + 3 + 5) / 3.
+  const ks = [kpi(1), kpi(2), kpi(3)]
   const r = { 1: 4, 2: 3, 3: 5 } as Record<number, number>
-  assert.equal(kraRating(ks, k => r[k.seq_no]), 3.83)
-  // A flat average would say 4.00, which is a different and wrong answer.
-  assert.notEqual(kraRating(ks, k => r[k.seq_no]), 4)
+  assert.equal(kraRating(ks, k => r[k.seq_no]), 4)
 })
 
-// ── the balance rule ─────────────────────────────────────────────────────
+// ── 222: a KPI has no weightage of its own ───────────────────────────────
 
-test('KPIs must total their KRA, not 100', () => {
-  // The rule that keeps the across-KRA total honest. A 30% KRA's KPIs total
-  // 30; they have nothing to do with the 100.
-  assert.equal(balance(kra(30, [kpi(1, 15), kpi(2, 10), kpi(3, 5)])).ok, true)
-  assert.equal(balance(kra(30, [kpi(1, 15), kpi(2, 15), kpi(3, 15)])).ok, false)
-  const b = balance(kra(30, [kpi(1, 10)]))
-  assert.deepEqual([b.total, b.target, b.left, b.count], [10, 30, 20, 1])
+test('a stored KPI weightage is ignored, whatever it says', () => {
+  // THE REGRESSION THIS MIGRATION MUST NOT HAVE. pms_goal_kpi.weightage is
+  // retired, not dropped, so rows still come back carrying the old numbers.
+  // If anything here started reading them again, a KRA whose KPIs were
+  // written 20/10 would score differently from one written 15/15 — which is
+  // the whole thing 222 removed.
+  const lopsided: Kpi[] = [
+    { seq_no: 1, kpi_metric: 'a', target_value: 't', weightage: 29 },
+    { seq_no: 2, kpi_metric: 'b', target_value: 't', weightage: 1 },
+  ]
+  const even: Kpi[] = [
+    { seq_no: 1, kpi_metric: 'a', target_value: 't', weightage: 15 },
+    { seq_no: 2, kpi_metric: 'b', target_value: 't', weightage: 15 },
+  ]
+  const r = { 1: 5, 2: 1 } as Record<number, number>
+  assert.equal(kraRating(lopsided, k => r[k.seq_no]), 3)
+  assert.equal(kraRating(even, k => r[k.seq_no]), 3,
+    'the stored weightage changed the answer — it is being read again')
+  // And the same through lines(), which is what actually feeds score().
+  const a = lines([kra(30, lopsided)], k => ({ final: r[k.seq_no] }))
+  const b = lines([kra(30, even)], k => ({ final: r[k.seq_no] }))
+  assert.deepEqual(a.map(x => x.weightage), b.map(x => x.weightage))
+  assert.equal(score(a, 'final'), score(b, 'final'))
 })
 
-test('a short set says how much is left; an over set says how much too many', () => {
-  const short = checkKpis(kra(30, [kpi(1, 10), kpi(2, 5)]))
-  assert.match(short[0].says, /come to 15 of this KRA's 30/)
-  assert.match(short[0].says, /15 still to share out/)
-  const over = checkKpis(kra(30, [kpi(1, 25), kpi(2, 20)]))
-  assert.match(over[0].says, /come to 45/)
-  assert.match(over[0].says, /15 more than this KRA's 30/)
+test('a KPI carries its KRA weightage divided by how many there are', () => {
+  assert.equal(shareOf(30, 3), 10)
+  assert.equal(shareOf(25, 2), 12.5)
+  assert.equal(shareOf(100, 1), 100)
+  // NOT ROUNDED. A 10% KRA across three KPIs is 3.333…; rounding each to
+  // 3.33 would lose 0.01 of the KRA and the appraisal would stop totalling
+  // 100. The sum has to come back exactly.
+  const share = shareOf(10, 3)
+  assert.equal(share * 3, 10)
+  assert.notEqual(share, 3.33)
+  // Degenerate inputs give 0 rather than Infinity or NaN.
+  assert.equal(shareOf(30, 0), 0)
+  assert.equal(shareOf(0, 3), 0)
+})
+
+test('however a KRA is split, it carries the same total weight', () => {
+  // The property that replaces the balance rule: equal shares CANNOT fail to
+  // add up, so there is nothing left to validate.
+  for (const n of [1, 2, 3, 4, 5, 7]) {
+    const ks = Array.from({ length: n }, (_, i) => kpi(i + 1))
+    const l = lines([kra(30, ks)], () => ({ final: 4 }))
+    const total = l.reduce((t, x) => t + x.weightage, 0)
+    assert.ok(Math.abs(total - 30) < 1e-9,
+      `${n} KPIs totalled ${total}, not 30`)
+  }
 })
 
 test('a KRA with no KPI is refused, and told what a KPI is for', () => {
@@ -151,15 +189,12 @@ test('a set over the ceiling is refused, and says how many to lose', () => {
   assert.deepEqual(checkKpis(kra(30, six), rules(1, 6)), [])
 })
 
-test('balance().ok respects both ends of the policy range', () => {
-  const six = [kpi(1, 5), kpi(2, 5), kpi(3, 5), kpi(4, 5), kpi(5, 5), kpi(6, 5)]
-  // Balanced at 30, but one too many: not ok, or the form would enable a
-  // submit the database refuses.
-  assert.equal(balance(kra(30, six)).ok, false)
-  assert.equal(balance(kra(30, six), rules(1, 6)).ok, true)
-  // And the floor, read from the policy rather than assumed to be 1.
-  assert.equal(balance(kra(30, [kpi(1, 30)]), rules(2, 5)).ok, false)
-  assert.equal(balance(kra(30, [kpi(1, 30)])).ok, true)
+test('the count rules still bite after the balance rule went', () => {
+  const six = [kpi(1), kpi(2), kpi(3), kpi(4), kpi(5), kpi(6)]
+  assert.equal(checkKpis(kra(30, six)).length, 1, 'six under a max of five')
+  assert.deepEqual(checkKpis(kra(30, six), rules(1, 6)), [])
+  assert.equal(checkKpis(kra(30, [kpi(1)]), rules(2, 5)).length, 1, 'one under a floor of two')
+  assert.deepEqual(checkKpis(kra(30, [kpi(1)])), [])
 })
 
 test('the add button closes at the ceiling and says why', () => {
@@ -202,21 +237,15 @@ test('checkAllKpis passes the policy down, not the array index', () => {
   assert.deepEqual(strict.map(f => f.seq), [1, 2, 3])
 })
 
-test('a KPI with no measure, or no weightage, is named individually', () => {
-  const f = checkKpis(kra(20, [kpi(1, 20, ''), { ...kpi(2, 0), kpi_metric: 'x' }]))
-  const blank = f.find(x => x.kpiSeq === 1)
-  const zero = f.find(x => x.kpiSeq === 2)
-  assert.match(blank?.says ?? '', /how this one is measured/)
-  assert.match(zero?.says ?? '', /cannot move the rating/)
+test('a KPI with no measure is named individually', () => {
+  // The only per-row fault left. "No weightage" is gone with the column —
+  // a KPI cannot have a weightage to be missing.
+  const f = checkKpis(kra(20, [kpi(1, 0, ''), kpi(2, 0, 'x')]))
+  assert.equal(f.length, 1)
+  assert.equal(f[0].kpiSeq, 1)
+  assert.match(f[0].says, /how this one is measured/)
   // Each fault names its KRA as well, so a list across KRAs is navigable.
   assert.ok(f.every(x => x.seq === 1))
-})
-
-test('zero weightage is refused rather than quietly carried', () => {
-  // Somebody wrote the KPI down meaning it to count. Carrying it at 0 is a
-  // row on the screen that cannot affect the rating either way.
-  const f = checkKpis(kra(10, [kpi(1, 10), kpi(2, 0)]))
-  assert.ok(f.some(x => x.kpiSeq === 2 && /remove it/.test(x.says)))
 })
 
 test('a balanced, measured set has nothing to say', () => {
@@ -227,39 +256,33 @@ test('faults across a whole set come back in KRA order', () => {
   const all = checkAllKpis([
     kra(50, [kpi(1, 50)], 1),            // fine
     kra(30, [], 2),                      // no KPI
-    kra(20, [kpi(1, 5)], 3),             // short
+    kra(20, [kpi(1)], 3),                // fine
   ])
-  assert.deepEqual(all.map(f => f.seq), [2, 3])
+  // Only the empty KRA is a fault now: 222 removed the weightage balance, so
+  // a KRA with one measure is complete whatever the numbers used to say.
+  assert.deepEqual(all.map(f => f.seq), [2])
 })
 
 // ── helpers ──────────────────────────────────────────────────────────────
 
-test('the suggested split fills the KRA exactly, remainder first', () => {
-  // Same rule as suggestSplit uses for KRAs, so the two screens behave alike.
-  assert.deepEqual(suggestKpiSplit(30, 3), [10, 10, 10])
-  assert.deepEqual(suggestKpiSplit(10, 3), [4, 3, 3])
-  assert.deepEqual(suggestKpiSplit(25, 2), [13, 12])
-  for (const [w, n] of [[30, 3], [10, 3], [25, 2], [7, 4], [100, 7]] as const) {
-    assert.equal(suggestKpiSplit(w, n).reduce((a, b) => a + b, 0), w,
-      `split of ${w} across ${n} does not fill the KRA`)
-  }
-  assert.deepEqual(suggestKpiSplit(30, 0), [])
-})
-
-test('a new KPI starts at zero rather than guessing a share', () => {
-  // A guess that happens to balance is one nobody checks. checkKpis refuses
-  // 0 with a sentence saying what to do, which is the honest prompt.
+test('a new KPI carries no weightage at all', () => {
+  // 222: not zero, ABSENT. A blank row writing weightage: 0 would put a
+  // number back into pms_goal_kpi.weightage, which is retired — and the next
+  // person to read that column would find a mixture of real old splits and
+  // meaningless zeroes.
   const b = blankKpi(3)
-  assert.equal(b.weightage, 0)
+  assert.equal(b.weightage, undefined)
+  assert.ok(!('weightage' in b), 'blankKpi still writes a weightage field')
   assert.equal(b.seq_no, 3)
   assert.equal(b.kpi_metric, '')
 })
 
 test('renumbering leaves 1..n with no holes', () => {
   // 220 makes (goal_id, seq_no) unique, so a hole is a write that fails.
-  const after = renumber([kpi(1, 5), kpi(4, 5), kpi(9, 5)])
+  const after = renumber([kpi(1), kpi(4), kpi(9)])
   assert.deepEqual(after.map(k => k.seq_no), [1, 2, 3])
-  assert.deepEqual(after.map(k => k.weightage), [5, 5, 5], 'renumber changed a weightage')
+  assert.deepEqual(after.map(k => k.kpi_metric), ['m1', 'm4', 'm9'],
+    'renumber moved a measure onto the wrong row')
   assert.deepEqual(renumber([]), [])
 })
 
@@ -289,4 +312,149 @@ test('an empty tree produces no lines rather than throwing', () => {
   assert.deepEqual(lines([], () => ({})), [])
   assert.deepEqual(lines([kra(10, [], 1)], () => ({})), [])
   assert.equal(score(lines([], () => ({})), 'final'), null)
+})
+
+// ── 222: the one submit gate ─────────────────────────────────────────────
+//
+// Requested: "user can not proceed to submit kras without achieving 100%
+// weightage and filling all the minimum kras and kpis", and every KRA must be
+// rated before it moves.
+//
+// Three rules enforced in three places, and the screen checked one of them:
+// the button read checkKras alone, which knows about weightage and nothing
+// whatever about KPIs. A KRA with no measure under it sailed past.
+
+/** Four KRAs totalling exactly 100, one measure each — the minimum valid set
+ *  under the shipped policy. Each test below breaks one thing about it. */
+const valid = (): KraWithKpis[] => [
+  kra(25, [kpi(1)], 1), kra(25, [kpi(1)], 2),
+  kra(25, [kpi(1)], 3), kra(25, [kpi(1)], 4),
+]
+const allRated = () => 4
+
+test('a complete set passes the gate', () => {
+  const g = submitGate(valid(), DEFAULT_RULES, allRated)
+  assert.deepEqual(g.faults, [])
+  assert.equal(g.ok, true)
+  assert.equal(g.total, 100)
+  assert.equal(g.short, 0)
+  assert.deepEqual([g.rated, g.of], [4, 4])
+})
+
+test('under 100 is refused, and says how far short', () => {
+  const set = valid()
+  set[0].weightage = 15                      // 90 total
+  const g = submitGate(set, DEFAULT_RULES, allRated)
+  assert.equal(g.ok, false)
+  assert.equal(g.total, 90)
+  assert.equal(g.short, -10)
+  assert.ok(g.faults.some(f => /10 short of 100/.test(f)), g.faults.join(' | '))
+})
+
+test('over 100 is refused too — it is a state you can type, not send', () => {
+  // The chosen behaviour: the form ALLOWS going over while rebalancing, so
+  // the gate is what stops it leaving. A hard cap on the input would mean
+  // you could not raise one KRA before lowering another.
+  const set = valid()
+  set[0].weightage = 40                      // 115 total
+  const g = submitGate(set, DEFAULT_RULES, allRated)
+  assert.equal(g.ok, false)
+  assert.equal(g.total, 115)
+  assert.equal(g.short, 15)
+  assert.ok(g.faults.some(f => /15 over 100/.test(f)), g.faults.join(' | '))
+})
+
+test('too few KRAs is refused even at exactly 100', () => {
+  // 100% spread over three KRAs is still three KRAs. The weightage rule and
+  // the count rule are independent, and passing one is not passing the other.
+  const g = submitGate([kra(40, [kpi(1)], 1), kra(30, [kpi(1)], 2),
+                        kra(30, [kpi(1)], 3)], DEFAULT_RULES, allRated)
+  assert.equal(g.ok, false)
+  assert.equal(g.total, 100)
+  assert.ok(g.faults.some(f => /Add 1 more/.test(f)), g.faults.join(' | '))
+})
+
+test('a KRA with no KPI is refused — the gap checkKras could not see', () => {
+  // THE BUG THIS GATE EXISTS FOR. checkKras returns canSubmit: true here —
+  // four KRAs, exactly 100, every title filled — and the button believed it.
+  const set = valid()
+  set[2].kpis = []
+  const g = submitGate(set, DEFAULT_RULES, allRated)
+  assert.equal(g.ok, false)
+  assert.ok(g.faults.some(f => /^KRA 3: Add a KPI/.test(f)), g.faults.join(' | '))
+  // And the fault names which KRA, because the list sits beside a form of
+  // nine rows and "add a KPI" alone sends the reader hunting.
+  assert.ok(g.faults.some(f => f.startsWith('KRA 3:')))
+})
+
+test('a KPI with no measure written is refused, and named', () => {
+  const set = valid()
+  set[1].kpis = [{ seq_no: 1, kpi_metric: '  ', target_value: '' }]
+  const g = submitGate(set, DEFAULT_RULES, allRated)
+  assert.equal(g.ok, false)
+  assert.ok(g.faults.some(f => /^KRA 2, KPI 1:/.test(f)), g.faults.join(' | '))
+})
+
+test('an unrated measure is refused, and counted', () => {
+  const set = valid()
+  const g = submitGate(set, DEFAULT_RULES, (_k, k) => k.seq_no === 3 ? null : 4)
+  assert.equal(g.ok, false)
+  assert.deepEqual([g.rated, g.of], [3, 4])
+  assert.ok(g.faults.some(f => /1 of 4 measures still need a rating/.test(f)),
+    g.faults.join(' | '))
+})
+
+test('every KPI counts, not every KRA', () => {
+  // A KRA with three measures of which two are rated is NOT a rated KRA.
+  // Counting KRAs would call it done with a third of it untouched.
+  const set: KraWithKpis[] = [
+    kra(25, [kpi(1), kpi(2), kpi(3)], 1), kra(25, [kpi(1)], 2),
+    kra(25, [kpi(1)], 3), kra(25, [kpi(1)], 4),
+  ]
+  const g = submitGate(set, DEFAULT_RULES,
+    (k, kr) => (kr.seq_no === 1 && k.seq_no === 3) ? null : 4)
+  assert.equal(g.ok, false)
+  assert.deepEqual([g.rated, g.of], [5, 6])
+})
+
+test('without a ratingOf, the gate judges the set and not the ratings', () => {
+  // The KRA tab before the self rating is required: weightage and structure
+  // must hold, but there is nothing to have rated yet.
+  const g = submitGate(valid(), DEFAULT_RULES)
+  assert.equal(g.ok, true)
+  assert.deepEqual([g.rated, g.of], [0, 0])
+})
+
+test('the faults are ordered set, then KPIs, then ratings', () => {
+  // The order to deal with them in. Rating a set you are about to add a KRA
+  // to is wasted work, so the counts come first.
+  const set = valid()
+  set[0].weightage = 15     // short
+  set[2].kpis = []          // no KPI
+  const g = submitGate(set, DEFAULT_RULES, (_k, k) => k.seq_no === 4 ? null : 4)
+  const weight = g.faults.findIndex(f => /short of 100/.test(f))
+  const kpis = g.faults.findIndex(f => /Add a KPI/.test(f))
+  const rating = g.faults.findIndex(f => /need a rating/.test(f))
+  assert.ok(weight >= 0 && kpis >= 0 && rating >= 0, g.faults.join(' | '))
+  assert.ok(weight < kpis, 'the KPI fault is listed before the weightage one')
+  assert.ok(kpis < rating, 'the rating fault is listed before the KPI one')
+})
+
+test('the policy decides the gate, not the shipped defaults', () => {
+  // A total of 80 under a policy whose total is 80 is complete, and four KRAs
+  // under a policy asking for six is not.
+  const eighty: Rules = { ...DEFAULT_RULES, totalWeightage: 80, minKra: 4 }
+  const set = [kra(20, [kpi(1)], 1), kra(20, [kpi(1)], 2),
+               kra(20, [kpi(1)], 3), kra(20, [kpi(1)], 4)]
+  assert.equal(submitGate(set, eighty, allRated).ok, true)
+  assert.equal(submitGate(set, DEFAULT_RULES, allRated).ok, false)
+  const six: Rules = { ...DEFAULT_RULES, minKra: 6 }
+  assert.equal(submitGate(valid(), six, allRated).ok, false)
+})
+
+test('unratedCount walks every KPI in order', () => {
+  const set: KraWithKpis[] = [kra(50, [kpi(1), kpi(2)], 1), kra(50, [kpi(1)], 2)]
+  assert.deepEqual(unratedCount(set, () => 4), { rated: 3, of: 3 })
+  assert.deepEqual(unratedCount(set, () => null), { rated: 0, of: 3 })
+  assert.deepEqual(unratedCount([], () => 4), { rated: 0, of: 0 })
 })

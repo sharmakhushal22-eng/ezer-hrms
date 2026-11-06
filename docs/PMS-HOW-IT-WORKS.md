@@ -185,17 +185,23 @@ The other 27 are triggers and helpers enforcing the rules regardless of caller
 
 ## 5. THE MATHEMATICS
 
-### 5.1 Weightage — two rules, one total
+### 5.1 Weightage — one number, one total
 
 ```
-Across KRAs      Σ w_kra  =  100          exactly  (policy.total_weightage)
-Within a KRA     Σ w_kpi  =  w_kra        exactly
-Therefore        Σ w_kpi  =  100          across the whole appraisal
+Across KRAs      Σ w_kra  =  100     exactly, to submit  (policy.total_weightage)
+                 Σ w_kra  ≤  100     while still being typed
+Within a KRA     each KPI gets  w_kra / n      — computed, never stored
+Therefore        Σ shares =  100     across the whole appraisal, always
 ```
 
-The second rule is what keeps the first true. Without it a 30% KRA whose KPIs
-summed to 40 would make the real total 110 while the KRA-level check still
-read 100 and said yes.
+**There is only one number to balance.** 220 and 221 gave each KPI a stored
+weightage that had to sum to its KRA's; 222 removed it. An equal share
+*cannot* fail to add up, so the second rule stopped being a rule and became
+arithmetic.
+
+Going over 100 while typing is **allowed** — the total turns red and says by
+how much, and the submit stays shut. A hard cap on the input would mean you
+could not raise one KRA before lowering another.
 
 Also enforced: `count` between `min_kra_count` and `max_kra_count` (4 and 10),
 and every KRA ≥ `min_weightage_per_kra` (5).
@@ -220,14 +226,14 @@ drops to three — only a *sixth* is refused. `pms_policies_kpi_range` refuses a
 inverted pair (min 5 / max 3), which would otherwise make every KRA
 simultaneously too small and too large.
 
-### 5.2 The score
+### 5.2 The appraisal score
 
 For a given rater role, over **rated, submitted** KPIs only:
 
 ```
-                Σ ( rating_kpi × weightage_kpi )
-  score    =    ───────────────────────────────         rounded to 2 dp
-                      Σ weightage_kpi
+                Σ ( rating_kpi × share_kpi )                    weightage_kra
+  score    =    ────────────────────────────   where  share  =  ─────────────
+                      Σ share_kpi                               n_kpis_in_kra
 ```
 
 Computed independently for `self`, `rm_l1`, `rm_l2`, `hod`, and `final`.
@@ -237,34 +243,75 @@ Computed independently for `self`, `rm_l1`, `rm_l2`, `hod`, and `final`.
 > toward zero by work nobody has looked at yet. `null` when nothing is rated —
 > *"not rated"* and *"rated badly"* are different answers.
 
-**This formula did not change when KPIs arrived.** It is a weighted mean and
-cannot tell whether its weights came from 4 KRAs or 11 KPIs that add up the
-same. Migration 220 gave every existing KRA one KPI carrying its whole
-weightage, so every score on record stayed identical — verified across 23
-appraisal/rater combinations, largest difference **0**.
+**This formula did not change when KPIs arrived, nor when their weightage
+left.** It is a weighted mean and cannot tell whether its weights came from 4
+KRAs or 11 KPIs that add up the same.
+
+- **220** gave every existing KRA one KPI carrying its whole weightage — every
+  score on record stayed identical, verified across 23 appraisal/rater
+  combinations, largest difference **0**.
+- **222** replaced the stored `weightage_kpi` with `weightage_kra / n`. For a
+  KRA with one KPI, `w/1 = w`, so the two are the same number and every score
+  stayed identical again. Only a KRA somebody had built with *uneven* KPI
+  weightages moves, and `222_pms_kpi_share_verify.sql` names each one.
+
+> **A KPI has no weightage of its own.** Only KRAs do. `pms_goal_kpi.weightage`
+> still exists and still holds whatever was written into it before 222 — it is
+> **retired, not dropped**, and read by nothing. The share is computed afresh
+> on every read, which is why it cannot fail to add up.
 
 ### 5.3 A KRA's own rating, rolled up from its KPIs
 
 ```
-                   Σ ( rating_kpi × weightage_kpi )
-  rating_kra  =    ───────────────────────────────    over that KRA's rated KPIs
-                         Σ weightage_kpi
+                      Σ rating_kpi
+  rating_kra  =    ─────────────────      over that KRA's RATED KPIs
+                   count of rated KPIs
 ```
+
+A **plain mean**, because the KPIs under a KRA carry equal share — weighting
+by an equal weight is the same as not weighting, and `(4w + 3w + 5w) / 3w`
+reduces to `(4 + 3 + 5) / 3`.
 
 **Worked example** — a 30% KRA with three KPIs:
 
-| KPI | Weightage | Rating |
+| KPI | Share | Rating |
 |---|---|---|
-| Cycle-count variance | 15 | 4 |
+| Cycle-count variance | 10 | 4 |
 | Shrinkage value | 10 | 3 |
-| Count completion on time | 5 | 5 |
+| Count completion on time | 10 | 5 |
 
 ```
-  (4×15 + 3×10 + 5×5) / 30  =  (60 + 30 + 25) / 30  =  115 / 30  =  3.83
+  (4 + 3 + 5) / 3  =  12 / 3  =  4.00
 ```
 
-A flat average would say **4.00**, which is a different and wrong answer — the
-15% KPI must count three times the 5% one.
+**Part-rated is an average, not a zero.** With the third KPI unrated, the KRA
+shows `(4 + 3) / 2 = 3.50` — the unrated measure leaves the divisor. Counting
+it as zero would show `2.33`, a verdict nobody gave.
+
+> **The share is not rounded.** A 10% KRA across three KPIs is 3.333…% each;
+> rounding to 3.33 would lose 0.01 of the KRA every time and the appraisal
+> would stop totalling 100. Only the *display* rounds.
+
+### 5.3a What stops a submission
+
+Three rules, one gate — `submitGate()` in `lib/pms/kpi.ts`, and
+`pms_chain_submit` / `pms_chain_approve` in SQL (222):
+
+| | Rule | Refused by |
+|---|---|---|
+| 1 | Weightage totals **exactly 100**, KRA count within the policy, none below the minimum | `pms_validate_kras` → `pms_lock_kras` |
+| 2 | Every KRA has its **minimum KPIs**, none over the maximum, each with a measure written | `pms_validate_kpis` → `pms_lock_kras`; `trg_pms_kpi_count` on the write |
+| 3 | **Every KPI is rated** — by the employee to submit, and by each rung to approve | `pms_unrated_kpis` → both chain gates |
+
+> **Every rung rates every KPI.** `pms_chain_submit` previously checked only
+> that *some* self score existed, and `pms_chain_approve` checked nothing at
+> all — a manager could pass an appraisal on having rated none of it, and the
+> finaliser would average whatever happened to be there. HR is exempt,
+> because HR's move at that stage is publication and changes no rating.
+
+The screen shows **every** reason the button is off, in the order to fix them:
+weightage and counts first, then KPIs, then ratings — rating a set you are
+about to add a KRA to is wasted work.
 
 ### 5.4 Score → rating band
 
@@ -284,7 +331,7 @@ Live scale (Sharma Retail Solutions, 5-point):
 | 2 | NI | Needs Improvement | 1.51 – 2.50 | 200 | **✓** | **✓** | — |
 | 1 | U | Unsatisfactory | 1.00 – 1.50 | 200 | **✓** | **✓** | — |
 
-So the 3.83 above lands in **EE — Exceeds Expectations**.
+So the 4.00 from §5.3 lands in **EE — Exceeds Expectations**.
 
 A score outside every window **clamps** rather than returning nothing: a
 rounding artefact of 5.01 must not leave a rating nameless.
@@ -316,9 +363,12 @@ the **first**:
   out[0] += total − base × n         the remainder
 ```
 
-`suggestSplit(100, 3) = [34, 33, 33]` · `suggestKpiSplit(10, 3) = [4, 3, 3]`.
-Always sums to the total exactly. Offered as a starting point, **never applied
-silently**.
+`suggestSplit(100, 3) = [34, 33, 33]`. Always sums to the total exactly.
+Offered as a starting point, **never applied silently**.
+
+> This applies to **KRAs only**. `suggestKpiSplit` went with 222: a KPI has
+> no weightage to suggest, and its share is `w_kra / n` whether anybody asks
+> for it or not.
 
 ### 5.7 Rung coverage
 
@@ -526,7 +576,7 @@ able to build a chain whose results can never be published.
 
 ### Built and verified
 
-Everything above. 1,077 PMS tests, migrations through 221, production build
+Everything above. 1,107 PMS tests, migrations through 222, production build
 compiles, `tsc` at the project's 39-error baseline.
 
 ### Not finished

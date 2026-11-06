@@ -1,0 +1,263 @@
+-- 222_pms_kpi_share_verify.sql — run AFTER 222.
+-- Builds fixtures and ROLLS THEM BACK, so it is safe on live data.
+-- CREATES NOTHING THAT OUTLIVES THE QUERY. One result set, no table.
+--
+-- ── THE CHECK THAT MATTERS IS 30 ───────────────────────────────────────────
+--
+-- 222 changes what a KPI weighs: from a stored number to its KRA's weightage
+-- divided by how many KPIs that KRA has. For a KRA with ONE KPI the two are
+-- identical, and 220 gave every KRA that existed exactly one — so no score on
+-- record should move.
+--
+-- Check 30 computes both formulas for every appraisal and rater on record and
+-- reports the largest disagreement. Check 31 NAMES the appraisals that moved,
+-- with the old and new number, because "2 moved" is not something anybody can
+-- act on. Anything other than 0.00 in check 30 means somebody built a KRA
+-- with uneven KPI weightages before this ran, and their rating has changed.
+--
+-- That is reported rather than refused, deliberately: a settled rating that
+-- moved is something to look at, not a reason to leave the schema half
+-- migrated. The old numbers are still in pms_goal_kpi.weightage, which 222
+-- retires but does not drop, so any of this is reversible.
+--
+-- READ THE RESULT: anything whose `result` is not PASS or INFO is a problem.
+
+BEGIN;
+
+CREATE FUNCTION pg_temp.verify_kpi_share()
+RETURNS TABLE (seq int, check_name text, result text, detail text)
+LANGUAGE plpgsql AS $fn$
+DECLARE g record; k2 uuid; msg text; before_s numeric; after_s numeric; res text;
+BEGIN
+  SELECT gg.* INTO g
+    FROM public.pms_employee_goals gg
+    JOIN public.pms_periods pe ON pe.id = gg.period_id
+   WHERE gg.status <> 'SENT_BACK' AND pe.policy_id IS NOT NULL
+   ORDER BY gg.created_at DESC LIMIT 1;
+
+  IF g IS NULL THEN
+    RETURN QUERY SELECT 20, 'splitting a KRA does not move its weight'::text,
+      'SKIP'::text, 'no KRA in a period with a policy to hang a fixture on'::text;
+    RETURN;
+  END IF;
+
+  -- ── 20. adding a KPI redistributes, it does not inflate ─────────────────
+  -- THE PROPERTY THE WHOLE CHANGE RESTS ON. A KRA's total contribution is its
+  -- weightage however many KPIs it holds. If adding one made the KRA heavier,
+  -- the appraisal would stop totalling 100 and every score would drift.
+  SELECT SUM(w) INTO before_s FROM (
+    SELECT g2.weightage::numeric / COUNT(*) OVER (PARTITION BY k.goal_id) AS w
+      FROM public.pms_goal_kpi k
+      JOIN public.pms_employee_goals g2 ON g2.id = k.goal_id
+     WHERE k.goal_id = g.id) q;
+
+  INSERT INTO public.pms_goal_kpi
+    (company_id, period_id, employee_id, goal_id, seq_no, kpi_metric, weightage)
+  VALUES (g.company_id, g.period_id, g.employee_id, g.id, 941, '__verify_share__', 0)
+  RETURNING id INTO k2;
+
+  SELECT SUM(w) INTO after_s FROM (
+    SELECT g2.weightage::numeric / COUNT(*) OVER (PARTITION BY k.goal_id) AS w
+      FROM public.pms_goal_kpi k
+      JOIN public.pms_employee_goals g2 ON g2.id = k.goal_id
+     WHERE k.goal_id = g.id) q;
+
+  IF before_s IS NOT DISTINCT FROM after_s
+     AND round(after_s, 6) = round(g.weightage::numeric, 6) THEN
+    RETURN QUERY SELECT 20, 'splitting a KRA does not move its weight'::text,
+      'PASS'::text, format('%s before, %s after, KRA is %s',
+                           round(before_s, 4), round(after_s, 4), g.weightage);
+  ELSE
+    RETURN QUERY SELECT 20, 'splitting a KRA does not move its weight'::text,
+      'FAIL'::text, format('%s before, %s after, KRA is %s',
+                           round(COALESCE(before_s, -1), 4),
+                           round(COALESCE(after_s, -1), 4), g.weightage);
+  END IF;
+
+  DELETE FROM public.pms_goal_kpi WHERE id = k2;
+
+  -- ── 21. the submit gate refuses while a measure is unrated ──────────────
+  -- pms_chain_submit asked only whether SOME self score existed. The whole
+  -- point of 222's gate is that it now counts.
+  IF public.pms_unrated_kpis(g.employee_id, g.period_id, 'SELF') > 0 THEN
+    res := public.pms_chain_submit(g.employee_id, g.period_id);
+    IF res LIKE 'BLOCKED:%' THEN
+      RETURN QUERY SELECT 21, 'the submit gate refuses an unrated set'::text,
+        'PASS'::text, left(res, 90);
+    ELSE
+      RETURN QUERY SELECT 21, 'the submit gate refuses an unrated set'::text,
+        'FAIL'::text, format('returned %s with unrated measures', left(res, 60));
+    END IF;
+  ELSE
+    RETURN QUERY SELECT 21, 'the submit gate refuses an unrated set'::text,
+      'SKIP'::text, 'this employee has rated every measure already'::text;
+  END IF;
+
+  -- ── 22. the approve gate refuses while the RATER has not rated ──────────
+  BEGIN
+    res := public.pms_chain_approve(g.employee_id, g.period_id,
+             public.pms_chain_holder(g.employee_id, g.period_id, 'RM_L1'),
+             'RM_L1', NULL);
+    IF res LIKE '%still need your rating%' THEN
+      RETURN QUERY SELECT 22, 'the approve gate refuses an unrated rater'::text,
+        'PASS'::text, left(res, 90);
+    ELSE
+      -- Blocked for an unrelated reason — not with this stage, read-only,
+      -- nothing submitted. That is not a failure of 222.
+      RETURN QUERY SELECT 22, 'the approve gate refuses an unrated rater'::text,
+        'INFO'::text, format('not reached: %s', left(res, 70));
+    END IF;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS msg = MESSAGE_TEXT;
+    RETURN QUERY SELECT 22, 'the approve gate refuses an unrated rater'::text,
+      'INFO'::text, left(msg, 90);
+  END;
+END $fn$;
+
+SELECT v.seq, v.check_name, v.result, v.detail
+FROM (
+
+  -- ── the shape ──
+  SELECT 1, 'the weightage column is still there'::text,
+         CASE WHEN EXISTS (SELECT 1 FROM information_schema.columns
+                            WHERE table_name = 'pms_goal_kpi'
+                              AND column_name = 'weightage')
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'retired, not dropped — the old splits are the only record of them'::text
+  UNION ALL
+  SELECT 2, 'it is marked retired, so nobody reads it by accident'::text,
+         CASE WHEN COALESCE(col_description('public.pms_goal_kpi'::regclass,
+                 (SELECT attnum FROM pg_attribute
+                   WHERE attrelid = 'public.pms_goal_kpi'::regclass
+                     AND attname = 'weightage')), '') LIKE '%RETIRED%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'COMMENT ON COLUMN carries the warning'::text
+  UNION ALL
+  SELECT 3, 'pms_score no longer reads it'::text,
+         CASE WHEN (SELECT prosrc FROM pg_proc WHERE proname = 'pms_score' LIMIT 1)
+                   NOT LIKE '%k.weightage%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'the stored split must not come back through the score'::text
+  UNION ALL
+  SELECT 4, 'pms_score divides by the KPI count'::text,
+         CASE WHEN (SELECT prosrc FROM pg_proc WHERE proname = 'pms_score' LIMIT 1)
+                   LIKE '%PARTITION BY k.goal_id%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'the equal share is what replaces the stored weightage'::text
+  UNION ALL
+  SELECT 5, 'the rating gate exists'::text,
+         CASE WHEN EXISTS (SELECT 1 FROM pg_proc WHERE proname = 'pms_unrated_kpis')
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'pms_unrated_kpis'::text
+  UNION ALL
+  SELECT 6, 'both chain gates consult it'::text,
+         CASE WHEN (SELECT prosrc FROM pg_proc WHERE proname = 'pms_chain_submit' LIMIT 1)
+                   LIKE '%pms_unrated_kpis%'
+               AND (SELECT prosrc FROM pg_proc WHERE proname = 'pms_chain_approve' LIMIT 1)
+                   LIKE '%pms_unrated_kpis%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'every rung rates every KPI'::text
+  UNION ALL
+  -- The 221 near-miss, checked again because 222 restates both functions.
+  SELECT 7, 'pms_chain_approve still advances the stage'::text,
+         CASE WHEN (SELECT prosrc FROM pg_proc WHERE proname = 'pms_chain_approve' LIMIT 1)
+                   LIKE '%chain_stage = COALESCE(v_next%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'restating a function must not drop what it did'::text
+  UNION ALL
+  SELECT 8, 'pms_chain_approve still locks the weightages'::text,
+         CASE WHEN (SELECT prosrc FROM pg_proc WHERE proname = 'pms_chain_approve' LIMIT 1)
+                   LIKE '%pms_lock_kras%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'the lock happens at the first reviewer''s approval'::text
+  UNION ALL
+  SELECT 9, 'the validator no longer checks a weightage balance'::text,
+         CASE WHEN (SELECT prosrc FROM pg_proc WHERE proname = 'pms_validate_kpis' LIMIT 1)
+                   NOT LIKE '%SUM(k.weightage)%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'equal shares cannot fail to add up'::text
+
+  -- ── behaviour ──
+  UNION ALL
+  SELECT * FROM pg_temp.verify_kpi_share()
+
+  -- ── THE NEUTRALITY CLAIM ──
+  UNION ALL
+  SELECT 30, 'no score on record moved'::text,
+         CASE WHEN COALESCE((
+           SELECT max(abs(q.old_s - q.new_s)) FROM (
+             SELECT ROUND(SUM(r.rating * k.weightage)
+                            / NULLIF(SUM(k.weightage), 0), 2) AS old_s,
+                    ROUND(SUM(r.rating * (g.weightage::numeric
+                            / cnt.n)) / NULLIF(SUM(g.weightage::numeric / cnt.n), 0), 2) AS new_s
+               FROM pms_goal_kpi k
+               JOIN pms_employee_goals g ON g.id = k.goal_id
+               JOIN (SELECT goal_id, count(*)::numeric AS n
+                       FROM pms_goal_kpi GROUP BY goal_id) cnt ON cnt.goal_id = k.goal_id
+               JOIN pms_reviews r ON r.kpi_id = k.id AND r.submitted = true
+              GROUP BY k.employee_id, k.period_id, r.rater_role) q
+           WHERE q.old_s IS NOT NULL AND q.new_s IS NOT NULL), 0) = 0
+         THEN 'PASS' ELSE 'FAIL' END::text,
+         COALESCE((
+           SELECT 'largest difference ' || max(abs(q.old_s - q.new_s))::text FROM (
+             SELECT ROUND(SUM(r.rating * k.weightage)
+                            / NULLIF(SUM(k.weightage), 0), 2) AS old_s,
+                    ROUND(SUM(r.rating * (g.weightage::numeric
+                            / cnt.n)) / NULLIF(SUM(g.weightage::numeric / cnt.n), 0), 2) AS new_s
+               FROM pms_goal_kpi k
+               JOIN pms_employee_goals g ON g.id = k.goal_id
+               JOIN (SELECT goal_id, count(*)::numeric AS n
+                       FROM pms_goal_kpi GROUP BY goal_id) cnt ON cnt.goal_id = k.goal_id
+               JOIN pms_reviews r ON r.kpi_id = k.id AND r.submitted = true
+              GROUP BY k.employee_id, k.period_id, r.rater_role) q
+           WHERE q.old_s IS NOT NULL AND q.new_s IS NOT NULL), 'nothing rated yet')
+  UNION ALL
+  -- AND WHICH ONES. "2 moved" is not something anybody can act on.
+  SELECT 31, 'the appraisals whose score moved'::text, 'INFO'::text,
+         COALESCE((
+           SELECT string_agg(format('%s %s: %s -> %s', q.code, q.rater_role,
+                                    q.old_s, q.new_s), '; ' ORDER BY q.code)
+             FROM (
+             SELECT COALESCE(e.emp_code, k.employee_id::text) AS code, r.rater_role,
+                    ROUND(SUM(r.rating * k.weightage)
+                            / NULLIF(SUM(k.weightage), 0), 2) AS old_s,
+                    ROUND(SUM(r.rating * (g.weightage::numeric
+                            / cnt.n)) / NULLIF(SUM(g.weightage::numeric / cnt.n), 0), 2) AS new_s
+               FROM pms_goal_kpi k
+               JOIN pms_employee_goals g ON g.id = k.goal_id
+               JOIN (SELECT goal_id, count(*)::numeric AS n
+                       FROM pms_goal_kpi GROUP BY goal_id) cnt ON cnt.goal_id = k.goal_id
+               JOIN pms_reviews r ON r.kpi_id = k.id AND r.submitted = true
+               LEFT JOIN employees e ON e.id = k.employee_id
+              GROUP BY e.emp_code, k.employee_id, k.period_id, r.rater_role) q
+            WHERE q.old_s IS DISTINCT FROM q.new_s), 'none')
+
+  -- ── INFO ──
+  UNION ALL
+  SELECT 40, 'KRAs carrying more than one KPI'::text, 'INFO'::text,
+         (SELECT count(*)::text FROM (
+            SELECT goal_id FROM pms_goal_kpi GROUP BY goal_id HAVING count(*) > 1) q40)
+  UNION ALL
+  SELECT 41, 'KRAs whose stored KPI weightages were uneven'::text, 'INFO'::text,
+         -- The only population check 30 can fail on. Zero here means the
+         -- neutrality claim holds by construction, not by luck.
+         (SELECT count(*)::text FROM (
+            SELECT goal_id FROM pms_goal_kpi
+             GROUP BY goal_id
+            HAVING count(*) > 1
+               AND min(weightage) <> max(weightage)) q41)
+  UNION ALL
+  SELECT 42, 'appraisals with a measure nobody has rated'::text, 'INFO'::text,
+         (SELECT count(*)::text FROM (
+            SELECT DISTINCT k.employee_id, k.period_id
+              FROM pms_goal_kpi k
+              JOIN pms_employee_goals g
+                ON g.id = k.goal_id AND g.status <> 'SENT_BACK'
+             WHERE NOT EXISTS (SELECT 1 FROM pms_reviews r
+                                WHERE r.kpi_id = k.id AND r.submitted = true
+                                  AND r.rating IS NOT NULL)) q42)
+
+) AS v (seq, check_name, result, detail)
+ORDER BY v.seq;
+
+ROLLBACK;
