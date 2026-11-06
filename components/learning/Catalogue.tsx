@@ -9,7 +9,6 @@ import { navigate, to } from './app/router'
 import { CourseCard, isNew, type CatCourse } from './CourseCard'
 import { CourseArt, EmptyState, IconStar, KIND_WORD, LEVEL, Oops, Skel, durationWords, errorWords, hueOf, plural, type LearnPath } from './shared'
 import { GArrowRight, GClock, GCompass, GLayers, GSort, GSparkle, GUsers } from './glyphs'
-import { Aurora } from './motion/Aurora'
 import { Carousel } from './motion/Carousel'
 import { CountUp } from './motion/CountUp'
 import { Scroller } from './motion/Scroller'
@@ -200,7 +199,6 @@ export default function Catalogue({ cat: given, err: givenErr, myPaths, query, r
   return (
     <div>
       <header className="lx-ph lx-in">
-        <Aurora specks={8} />
         <div className="lx-ph-row">
           <div>
             <h1>Explore courses</h1>

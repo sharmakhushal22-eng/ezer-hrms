@@ -13,7 +13,7 @@ import { IconCheck, IconPlus } from '@/lib/ui'
 import { ActionNotes, LoadError, NeedCompany, Toggle, plural, useAction, useLoad, withCompany, type Ctx, type Target } from '../admin/shared'
 import { ASSIGN_KINDS, AudienceEditor } from '../admin/AudienceEditor'
 import { Skel } from '../shared'
-import { GArrowLeft, GCalendar, GClock, GLive, GPlay, GUsers } from '../glyphs'
+import { GArrowLeft, GCalendar, GClock, GLayers, GLive, GPlay, GUsers } from '../glyphs'
 import { linkProps, navigate, to } from '../app/router'
 import '../live.css'
 
@@ -292,12 +292,13 @@ function SessionRow({ s, onOpen }: { s: any; onOpen: () => void }) {
         <i>{new Date(s.starts_at).toLocaleDateString('en-GB', { timeZone: IST, month: 'short' })}</i>
       </div>
       <div className="lx-lv-body">
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}><PhaseTag phase={s.phase} />{s.course_title && <span className="lx-tag">Part of {s.course_title}</span>}{s.recording_asset_id && <span className="lx-tag"><GPlay size={11} /> Recording</span>}</div>
+        <div className="lx-lv-tags"><PhaseTag phase={s.phase} />{s.recording_asset_id && <span className="lx-tag"><GPlay size={11} /> Recording</span>}</div>
         <div className="lx-lv-title">{s.title}</div>
         <div className="lx-lv-meta">
           <span><GClock size={14} /> {when(s.starts_at)} · {s.duration_min} min</span>
           <span><GUsers size={14} /> {s.counts.invited} invited · {s.counts.registered} registered{s.phase === 'ended' ? ` · ${s.counts.attended} attended` : ''}</span>
         </div>
+        {s.course_title && <div className="lx-lv-course"><GLayers size={14} /><span className="lx-clamp1">Part of <b>{s.course_title}</b></span></div>}
       </div>
     </button>
   )

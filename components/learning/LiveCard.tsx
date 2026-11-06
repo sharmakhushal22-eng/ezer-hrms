@@ -9,7 +9,7 @@ import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconCheck } from '@/lib/ui'
 import { lmsApi, lmsDownload } from '@/lib/lms/client'
 import { errorWords, plural, type LiveSession } from './shared'
-import { GCalendar, GClock, GExit, GLive, GPlay, GUsers } from './glyphs'
+import { GCalendar, GClock, GExit, GLayers, GLive, GPlay, GUsers } from './glyphs'
 import VideoPlayer from './VideoPlayer'
 import './live.css'
 
@@ -74,27 +74,38 @@ export function SessionActions({ s, onChanged, onWatch, big }: { s: LiveSession;
   const sm = big ? '' : ' lx-btn--sm'
   const upcoming = s.phase === 'upcoming' || s.phase === 'joinable'
   return (
-    <>
+    <div className="lx-lv-actions" data-big={big ? '1' : '0'}>
       <div className="lx-lv-acts">
         {s.can_join && <button className={`lx-btn lx-btn--primary${sm}`} disabled={!!busy} onClick={join}><GExit size={15} /> {busy === 'join' ? 'Opening…' : 'Join now'}</button>}
         {upcoming && !s.me?.registered && <button className={`lx-btn${s.can_join ? '' : ' lx-btn--primary'}${sm}`} disabled={!!busy || s.seats_left === 0}
           onClick={() => act('reg', () => lmsApi(sessionApi(s.id), { event: 'register' }))}>{busy === 'reg' ? 'Saving…' : s.seats_left === 0 ? 'Full' : s.me?.invited ? 'Accept' : 'Register'}</button>}
-        {upcoming && s.me && (s.me.registered || (s.me.invited && s.me.status !== 'DECLINED')) && <button className={`lx-btn lx-btn--ghost${sm}`} disabled={!!busy}
-          onClick={() => act('unreg', () => lmsApi(sessionApi(s.id), { event: 'unregister' }))}>{busy === 'unreg' ? 'Saving…' : 'Can’t make it'}</button>}
-        {upcoming && s.me && <button className={`lx-btn lx-btn--ghost${sm}`} disabled={!!busy}
+        {upcoming && s.me && <button className={`lx-btn${sm}`} disabled={!!busy}
           onClick={() => act('ics', () => lmsDownload(`${sessionApi(s.id)}?ics=1`, `${s.title.replace(/[^\w-]+/g, '-').slice(0, 60)}.ics`))}><GCalendar size={15} /> Add to calendar</button>}
+        {upcoming && s.me && (s.me.registered || (s.me.invited && s.me.status !== 'DECLINED')) && <button className={`lx-btn lx-btn--quiet${sm}`} disabled={!!busy}
+          onClick={() => act('unreg', () => lmsApi(sessionApi(s.id), { event: 'unregister' }))}>{busy === 'unreg' ? 'Saving…' : 'Can’t make it'}</button>}
         {s.has_recording && s.phase === 'ended' && <button className={`lx-btn${s.me?.recording_done || s.me?.attended ? '' : ' lx-btn--primary'}${sm}`} onClick={() => onWatch(s)}><GPlay size={14} /> {s.me?.recording_pct ? 'Continue the recording' : 'Watch the recording'}</button>}
-        {s.has_recording && s.phase === 'ended' && !!s.me?.recording_pct && !s.me.recording_done && <span className="lx-lv-bar" style={{ width: 120 }} title={`${s.me.recording_pct}% watched`}><i style={{ width: `${s.me.recording_pct}%` }} /></span>}
       </div>
+      {s.has_recording && s.phase === 'ended' && !!s.me?.recording_pct && !s.me.recording_done && (
+        <div className="lx-lv-watched"><span className="lx-lv-bar"><i style={{ width: `${s.me.recording_pct}%` }} /></span><span className="lx-num">{s.me.recording_pct}% watched</span></div>
+      )}
       {s.can_check_in && (
         <form className="lx-lv-code" onSubmit={e => { e.preventDefault(); if (code.trim()) void act('code', () => lmsApi(sessionApi(s.id), { event: 'checkin', code })) }}>
-          <input aria-label="Attendance code" placeholder="CODE" maxLength={9} value={code} onChange={e => setCode(e.target.value)} />
-          <button className={`lx-btn${sm}`} disabled={!!busy || !code.trim()}>{busy === 'code' ? 'Checking…' : 'Record my attendance'}</button>
+          <label htmlFor={`code-${s.id}${big ? '-b' : ''}`}>Attendance code<small>The host reads it out during the session</small></label>
+          <div>
+            <input id={`code-${s.id}${big ? '-b' : ''}`} placeholder="CODE" maxLength={9} autoComplete="off" value={code} onChange={e => setCode(e.target.value)} />
+            <button className={`lx-btn${sm}`} disabled={!!busy || !code.trim()}>{busy === 'code' ? 'Checking…' : 'Record attendance'}</button>
+          </div>
         </form>
       )}
       {err && <div className="lx-lv-err" role="alert">{err}</div>}
-    </>
+    </div>
   )
+}
+
+/** Which course a session counts for, on a line of its own so a long title cannot push the
+ *  card wider than its column. */
+function CourseLine({ title }: { title: string }) {
+  return <div className="lx-lv-course"><GLayers size={14} /><span className="lx-clamp1">Part of <b>{title}</b></span></div>
 }
 
 export function SessionCard({ s, onChanged, onWatch, showCourse = true }: { s: LiveSession; onChanged: () => void; onWatch: (s: LiveSession) => void; showCourse?: boolean }) {
@@ -104,12 +115,11 @@ export function SessionCard({ s, onChanged, onWatch, showCourse = true }: { s: L
     <article className="lx-lv lx-in" data-phase={s.phase}>
       <div className="lx-lv-date" aria-hidden><b>{p.wd}</b><span>{p.day}</span><i>{p.mon}</i></div>
       <div className="lx-lv-body">
-        <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', alignItems: 'center' }}>
+        <div className="lx-lv-tags">
           <StatusTag s={s} />
-          {showCourse && s.course_title && <span className="lx-tag">Part of {s.course_title}</span>}
           {s.seats_left != null && s.phase !== 'ended' && s.phase !== 'cancelled' && <span className="lx-tag lx-num">{s.seats_left ? `${plural(s.seats_left, 'seat')} left` : 'No seats left'}</span>}
         </div>
-        <div className="lx-lv-title">{s.title}</div>
+        <h3 className="lx-lv-title">{s.title}</h3>
         <div className="lx-lv-meta">
           <span><GClock size={14} /> {clockWords(s.starts_at)} – {clockWords(s.ends_at)} IST</span>
           {s.phase === 'upcoming' && <span className="lx-lv-count">{untilWords(s.starts_at, now)}</span>}
@@ -117,34 +127,55 @@ export function SessionCard({ s, onChanged, onWatch, showCourse = true }: { s: L
           {s.location && <span>{s.location}</span>}
           {!s.has_link && !s.location && <span>Link to follow</span>}
         </div>
-        {s.phase === 'cancelled' && s.cancel_reason && <div className="lx-lv-desc">{s.cancel_reason}</div>}
-        {s.description && s.phase !== 'cancelled' && <div className="lx-lv-desc">{s.description.length > 260 ? `${s.description.slice(0, 260)}…` : s.description}</div>}
-        {s.phase !== 'cancelled' && <SessionActions s={s} onChanged={onChanged} onWatch={onWatch} />}
+        {showCourse && s.course_title && <CourseLine title={s.course_title} />}
+        {s.phase === 'cancelled' && s.cancel_reason && <p className="lx-lv-desc">{s.cancel_reason}</p>}
+        {s.description && s.phase !== 'cancelled' && <p className="lx-lv-desc lx-clamp2" title={s.description}>{s.description}</p>}
       </div>
+      {s.phase !== 'cancelled' && <div className="lx-lv-side"><SessionActions s={s} onChanged={onChanged} onWatch={onWatch} /></div>}
     </article>
   )
 }
 
-/** The large countdown for the next session. */
+/** The next session, large: what it is and the buttons on the left, the countdown (or "live
+ *  now") on the right. */
 export function NextSession({ s, onChanged, onWatch }: { s: LiveSession; onChanged: () => void; onWatch: (s: LiveSession) => void }) {
   const now = useNow(1000)
   const left = Math.max(0, new Date(s.starts_at).getTime() - now)
   const d = Math.floor(left / 86_400_000), h = Math.floor((left % 86_400_000) / 3_600_000), m = Math.floor((left % 3_600_000) / 60_000), sec = Math.floor((left % 60_000) / 1000)
   const on = s.phase === 'live' || s.phase === 'joinable'
+  const p = dayParts(s.starts_at)
   return (
-    <section className="lx-lv-next lx-in" aria-label="Your next live session">
-      <span className="lx-lv-kicker">{on ? <><span className="lx-live-dot" /> {s.phase === 'live' ? 'Live now' : 'Starting soon'}</> : <><GLive size={15} /> Your next live session</>}</span>
-      <h2>{s.title}</h2>
-      <p>{dayParts(s.starts_at).wd} {dayParts(s.starts_at).day} {dayParts(s.starts_at).mon}, {clockWords(s.starts_at)} IST · {s.duration_min} min{s.host_name ? ` · with ${s.host_name}` : ''}</p>
-      {!on && (
-        <div className="lx-lv-clock" role="timer" aria-label={`Starts ${untilWords(s.starts_at, now)}`}>
-          {d > 0 && <div><b>{d}</b><span>{d === 1 ? 'day' : 'days'}</span></div>}
-          <div><b>{String(h).padStart(2, '0')}</b><span>hours</span></div>
-          <div><b>{String(m).padStart(2, '0')}</b><span>min</span></div>
-          {d === 0 && <div><b>{String(sec).padStart(2, '0')}</b><span>sec</span></div>}
+    <section className="lx-lv-next lx-in" data-on={on ? '1' : '0'} aria-label="Your next live session">
+      <div className="lx-lv-next-main">
+        <span className="lx-lv-kicker">{on ? <><span className="lx-live-dot" /> {s.phase === 'live' ? 'Live now' : 'Starting soon'}</> : <><GLive size={15} /> Your next live session</>}</span>
+        <h2>{s.title}</h2>
+        <div className="lx-lv-meta">
+          <span><GCalendar size={14} /> {p.wd} {p.day} {p.mon}</span>
+          <span><GClock size={14} /> {clockWords(s.starts_at)} – {clockWords(s.ends_at)} IST · {s.duration_min} min</span>
+          {s.host_name && <span><GUsers size={14} /> {s.host_name}</span>}
+          {s.location && <span>{s.location}</span>}
         </div>
-      )}
-      <div style={{ marginTop: on ? 18 : 0 }}><SessionActions s={s} onChanged={onChanged} onWatch={onWatch} big /></div>
+        {s.course_title && <CourseLine title={s.course_title} />}
+        {s.description && <p className="lx-lv-desc lx-clamp2" title={s.description}>{s.description}</p>}
+        <SessionActions s={s} onChanged={onChanged} onWatch={onWatch} big />
+      </div>
+      <div className="lx-lv-next-aside">
+        {on ? (
+          <div className="lx-lv-now" role="status">
+            <span className="lx-live-dot" />
+            <b>{s.phase === 'live' ? 'Happening now' : `Starts ${untilWords(s.starts_at, now)}`}</b>
+            <span>{s.phase === 'live' ? `Ends at ${clockWords(s.ends_at)} IST` : 'The room is open: you can join now'}</span>
+            {s.me?.attended && <span className="lx-tag lx-tag--positive"><IconCheck size={12} /> Attendance recorded</span>}
+          </div>
+        ) : (
+          <div className="lx-lv-clock" role="timer" aria-label={`Starts ${untilWords(s.starts_at, now)}`}>
+            {d > 0 && <div><b>{d}</b><span>{d === 1 ? 'day' : 'days'}</span></div>}
+            <div><b>{String(h).padStart(2, '0')}</b><span>hours</span></div>
+            <div><b>{String(m).padStart(2, '0')}</b><span>min</span></div>
+            {d === 0 && <div><b>{String(sec).padStart(2, '0')}</b><span>sec</span></div>}
+          </div>
+        )}
+      </div>
     </section>
   )
 }

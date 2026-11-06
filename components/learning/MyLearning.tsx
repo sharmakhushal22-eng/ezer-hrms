@@ -10,7 +10,6 @@ import { linkProps, navigate, to } from './app/router'
 import { LearnCard } from './CourseCard'
 import { EmptyState, Oops, Ring, Skel, dueWords, firstName, plural, type Dashboard, type LearnItem } from './shared'
 import { GBook, GCompass, GLayers } from './glyphs'
-import { Aurora } from './motion/Aurora'
 import { CountUp } from './motion/CountUp'
 
 type Tab = 'todo' | 'going' | 'done' | 'requests' | 'paths'
@@ -113,14 +112,13 @@ export default function MyLearning({ data, err, tab: asked, onReload, onOpen, on
   return (
     <div>
       <header className="lx-ph lx-in">
-        <Aurora specks={8} />
         <div className="lx-ph-row">
           <div>
             <h1>{candidate ? `Welcome${firstName(data.name) ? `, ${firstName(data.name)}` : ''}` : 'My learning'}</h1>
             <p>{n.assigned ? `${plural(n.assigned, 'course')} to finish${n.overdue ? `, ${n.overdue} overdue` : ''}. Everything you have been given and everything you chose, in one place.` : 'Everything you have been given and everything you chose, in one place.'}</p>
           </div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-            <Ring pct={pct} size={78} stroke={7} track="rgba(255,255,255,.18)" color="var(--lx-hero-c)" text={<span style={{ color: 'var(--ez-on-dark)', fontSize: 19 }}>{pct}%</span>} label={`${pct}% of your assigned learning complete`} />
+            <Ring pct={pct} size={72} stroke={7} text={<span style={{ color: 'var(--ez-ink)', fontSize: 17 }}>{pct}%</span>} label={`${pct}% of your assigned learning complete`} />
             <div className="lx-hero-stat lx-num"><b><CountUp value={n.completed} /><span style={{ display: 'inline', fontSize: 16, opacity: .7, margin: 0 }}> / {total}</span></b><span>courses completed</span></div>
           </div>
         </div>

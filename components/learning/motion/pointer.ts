@@ -8,7 +8,7 @@
 // --lx-tx/--lx-ty, its offset from the centre from -1 to 1), plus data-tilt while it is there.
 // motion.css turns those into the light and the lean, only for a real mouse and only without
 // reduced motion. Touch never triggers it. Installed once, on first import, in the browser.
-const CARDS = '.lx-cc,.lx-wc,.lx-kpi,.lx-cert,.lx-hero-card,.lx-feature,.lx-cat,.lx-bb'
+const CARDS = '.lx-cc,.lx-wc,.lx-kpi,.lx-cert,.lx-feature,.lx-cat'
 
 let current: HTMLElement | null = null
 let frame = 0

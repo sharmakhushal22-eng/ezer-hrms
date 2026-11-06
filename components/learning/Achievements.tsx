@@ -7,7 +7,6 @@ import { lmsApi, lmsDownload } from '@/lib/lms/client'
 import { EmptyState, IconExternal, Oops, STATUS, Skel, dayWords, errorWords, plural } from './shared'
 import { GCert, GCheckCircle, GTarget, GTrophy } from './glyphs'
 import { cached, remember } from './app/cache'
-import { Aurora } from './motion/Aurora'
 import { CountUp } from './motion/CountUp'
 
 interface Cert { id: string; cert_no: string; verify_code: string; title: string; score_pct: number | null; issued_at: string; expires_at: string | null; revoked_at: string | null }
@@ -72,7 +71,6 @@ export default function Achievements() {
   return (
     <div>
       <header className="lx-ph lx-in">
-        <Aurora specks={10} />
         <div className="lx-ph-row">
           <div>
             <h1>Achievements</h1>

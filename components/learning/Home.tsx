@@ -1,20 +1,19 @@
 'use client'
 // components/learning/Home.tsx — the first screen of EZER Learn: a welcome that says what needs
-// doing, the course to pick up where you left off, and shelves of courses worth opening next.
+// doing, the course to pick up where you left off, the next deadlines, and rows of courses that
+// glide along on their own, one card at a time, like a streaming service's shelves.
 //
 // Everything here comes from two reads the app already holds: the learner's dashboard (what is
-// assigned, in progress, due) and the catalogue (what they may take). Shelves with nothing in
-// them are left out rather than shown empty.
+// assigned, in progress, due) and the catalogue (what they may take). Rows with nothing in them
+// are left out rather than shown empty.
 import { useMemo, type ReactNode } from 'react'
 import { IconCheck } from '@/lib/ui'
 import { linkProps, navigate, to } from './app/router'
 import type { Catalog } from './Catalogue'
-import { CourseCard, LearnCard, isNew, type CatCourse } from './CourseCard'
-import { CourseArt, DueTag, EmptyState, IconStar, Oops, Ring, Skel, dueWords, durationWords, firstName, hueOf, plural, shortDay, type Dashboard, type LearnItem } from './shared'
-import { GArrowRight, GClock, GCompass, GFlame, GLayers, GPlay, GSparkle, GTrophy, GUsers } from './glyphs'
+import { CourseCard, LearnCard, isNew } from './CourseCard'
+import { CourseArt, DueTag, EmptyState, Oops, Ring, Skel, dueWords, durationWords, firstName, hueOf, plural, shortDay, LEVEL, type Dashboard, type LearnItem } from './shared'
+import { GArrowRight, GBook, GCheckCircle, GClock, GCompass, GFlame, GLayers, GPlay, GTrophy } from './glyphs'
 import { keys, paths, prefetch } from './app/cache'
-import { Aurora } from './motion/Aurora'
-import { Carousel } from './motion/Carousel'
 import { CountUp } from './motion/CountUp'
 import { Scroller } from './motion/Scroller'
 
@@ -23,102 +22,109 @@ function greeting() {
   return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening'
 }
 
-/** A shelf that scrolls sideways, with arrows on a desktop and a swipe on a phone. */
-function Rail({ title, sub, more, children, n }: { title: string; sub?: string; more?: { label: string; href: string }; children: ReactNode; n: number }) {
+/** A row of courses that scrolls sideways: arrows on a desktop, a swipe on a phone, and, given
+ *  `auto`, a slow glide of its own. */
+function Rail({ title, sub, more, children, n, auto }: { title: string; sub?: string; more?: { label: string; href: string }; children: ReactNode; n: number; auto?: number }) {
   return (
-    <section>
+    <section className="lx-row">
       <div className="lx-sec-head">
         <div><h2 className="lx-sec-title">{title}</h2>{sub && <div className="lx-sec-sub">{sub}</div>}</div>
         {more && <a className="lx-sec-link" {...linkProps(more.href)}>{more.label} <GArrowRight size={14} /></a>}
       </div>
-      <Scroller className="lx-rail" n={n} progress>{children}</Scroller>
+      <Scroller className="lx-rail" n={n} progress auto={auto} label={title}>{children}</Scroller>
     </section>
   )
 }
 
-/** One slide of the spotlight: the course's picture full-bleed, its pitch over the dark side. */
-function Billboard({ c, why, category }: { c: CatCourse; why: string; category?: string }) {
-  const going = c.mine && ['IN_PROGRESS', 'NOT_STARTED', 'FAILED'].includes(c.mine.status)
-  return (
-    <article className="lx-bb">
-      <div className="lx-bb-art lx-kb"><CourseArt src={c.thumbnail} id={c.id} title={c.title} word={false} /></div>
-      <div className="lx-bb-shade" />
-      <Aurora specks={6} />
-      <div className="lx-bb-body">
-        <span className="lx-bb-kick lx-car-rise">
-          <span className="lx-tag lx-tag--gold"><GSparkle size={12} /> {why}</span>
-          {category && <span className="lx-tag lx-tag--glass">{category}</span>}
-          {c.is_compliance && <span className="lx-tag lx-tag--glass">Compliance</span>}
-        </span>
-        <h3 className="lx-clamp2 lx-car-rise">{c.title}</h3>
-        {c.summary && <p className="lx-clamp2 lx-car-rise-2">{c.summary}</p>}
-        <div className="lx-cc-meta lx-num lx-car-rise-2">
-          {c.rating != null && <span className="lx-rating"><IconStar size={13} filled />{c.rating.toFixed(1)}</span>}
-          {!!c.est_minutes && <span><GClock size={13} />{durationWords(c.est_minutes)}</span>}
-          {!!c.lesson_count && <span><GLayers size={13} />{plural(c.lesson_count, 'lesson')}</span>}
-          {!!c.learners && <span><GUsers size={13} />{plural(c.learners, 'learner')}</span>}
-        </div>
-        <div className="lx-bb-ctas lx-car-rise-2">
-          {going && c.mine
-            ? <a className="lx-btn lx-btn--white" {...linkProps(to.play(c.mine.id))}><GPlay size={15} /> {c.mine.status === 'IN_PROGRESS' ? 'Resume' : 'Start'}</a>
-            : <a className="lx-btn lx-btn--white" {...linkProps(to.course(c.id))} onPointerEnter={() => prefetch(keys.course(c.id), paths.course(c.id))}>View the course <GArrowRight size={15} /></a>}
-          {going && <a className="lx-btn lx-btn--light" {...linkProps(to.course(c.id))}>About this course</a>}
-        </div>
-      </div>
-    </article>
-  )
-}
-
-function Hero({ dash, lead, cat }: { dash: Dashboard; lead: LearnItem | null; cat: Catalog | null }) {
+/** The greeting, one sentence on where things stand, and the counts as tiles that open the list
+ *  they count. */
+function Welcome({ dash, cat }: { dash: Dashboard; cat: Catalog | null }) {
   const n = dash.counts || { assigned: 0, mandatory: 0, overdue: 0, in_progress: 0, completed: 0 }
   const name = firstName(dash.name)
   const line = n.overdue ? `${plural(n.overdue, 'course')} past ${n.overdue === 1 ? 'its' : 'their'} due date. Let’s get ${n.overdue === 1 ? 'it' : 'them'} done today.`
     : n.assigned ? `You have ${plural(n.assigned, 'course')} to finish${n.mandatory ? `, ${n.mandatory} of them mandatory` : ''}. A few minutes today keeps you on track.`
     : n.completed ? 'You are all caught up. Pick something new to learn whenever you like.'
     : 'Your learning starts here. Explore courses picked for your role and team.'
-  const pct = Math.round(Number(lead?.progress_pct) || 0)
+  const today = new Date().toLocaleDateString('en-GB', { weekday: 'long', day: 'numeric', month: 'long', timeZone: 'Asia/Kolkata' })
+  const tiles = [
+    { k: 'todo', v: n.assigned, label: 'To finish', href: to.my('todo'), icon: <GBook size={17} /> },
+    { k: 'going', v: n.in_progress, label: 'In progress', href: to.my('going'), icon: <GPlay size={15} /> },
+    { k: 'late', v: n.overdue, label: 'Overdue', href: to.my('todo'), icon: <GClock size={17} />, hot: n.overdue > 0 },
+    { k: 'done', v: n.completed, label: 'Completed', href: to.my('done'), icon: <GCheckCircle size={17} /> },
+    ...(cat ? [{ k: 'cat', v: cat.courses.length, label: 'In the catalogue', href: to.catalog(), icon: <GCompass size={17} /> }] : []),
+  ]
   return (
-    <section className="lx-hero lx-in">
-      <Aurora />
-      <div className="lx-hero-grid">
+    <section className="lx-welcome lx-in" aria-label="Welcome">
+      <div className="lx-welcome-head">
         <div style={{ minWidth: 0 }}>
-          <span className="lx-hero-kicker"><GSparkle size={14} /> EZER Learn</span>
-          <h1>{greeting()}{name ? <>, <em>{name}</em></> : ''}.</h1>
-          <p className="lx-hero-line">{line}</p>
-          <div className="lx-hero-ctas">
-            {lead
-              ? <a className="lx-btn lx-btn--white lx-btn--lg" {...linkProps(to.play(lead.id))}><GPlay size={16} /> {lead.status === 'IN_PROGRESS' ? 'Resume learning' : 'Start learning'}</a>
-              : <a className="lx-btn lx-btn--white lx-btn--lg" {...linkProps(to.catalog())}><GCompass size={17} /> Explore courses</a>}
-            {lead && <a className="lx-btn lx-btn--light lx-btn--lg" {...linkProps(to.catalog())}>Explore courses</a>}
-            {!lead && n.completed > 0 && <a className="lx-btn lx-btn--light lx-btn--lg" {...linkProps(to.achievements())}><GTrophy size={16} /> My achievements</a>}
-          </div>
-          <div className="lx-hero-stats lx-num">
-            <div className="lx-hero-stat"><b><CountUp value={n.assigned} /></b><span>to finish</span></div>
-            <div className="lx-hero-stat"><b><CountUp value={n.in_progress} /></b><span>in progress</span></div>
-            <div className="lx-hero-stat" data-hot={n.overdue ? '1' : '0'}><b><CountUp value={n.overdue} /></b><span>overdue</span></div>
-            <div className="lx-hero-stat"><b><CountUp value={n.completed} /></b><span>completed</span></div>
-            {cat && <div className="lx-hero-stat"><b><CountUp value={cat.courses.length} /></b><span>in the catalogue</span></div>}
-          </div>
+          <div className="lx-eyebrow">{today}</div>
+          <h1 className="lx-welcome-h">{greeting()}{name ? <>, <em>{name}</em></> : ''}</h1>
+          <p className="lx-welcome-line">{line}</p>
         </div>
-        {lead && (
-          <a className="lx-hero-card" {...linkProps(to.play(lead.id))} aria-label={`${lead.status === 'IN_PROGRESS' ? 'Resume' : 'Start'} ${lead.course?.title || 'course'}`}>
-            <CourseArt src={lead.course?.thumbnail} id={lead.course_id} title={lead.course?.title} />
-            <span className="lx-hero-card-play" aria-hidden><GPlay size={22} /></span>
-            <span style={{ display: 'grid', gap: 10, padding: '14px 4px 2px' }}>
-              <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
-                <span className="lx-tag lx-tag--glass">{lead.status === 'IN_PROGRESS' ? 'Continue where you left off' : lead.mandatory ? 'Mandatory' : 'Up next'}</span>
-                <DueTag dueAt={lead.due_at} overdue={lead.overdue} status={lead.status} />
-              </span>
-              <span style={{ fontSize: 18, fontWeight: 750, lineHeight: 1.25 }} className="lx-clamp2">{lead.course?.title || 'Course'}</span>
-              <span style={{ display: 'grid', gridTemplateColumns: 'minmax(0,1fr) auto', gap: 10, alignItems: 'center' }}>
-                <span className="lx-bar"><i style={{ width: `${pct}%` }} /></span>
-                <span className="lx-num" style={{ fontSize: 12.5, fontWeight: 700 }}>{pct}%</span>
-              </span>
-            </span>
+        <div className="lx-welcome-ctas">
+          <a className="lx-btn" {...linkProps(to.catalog())}><GCompass size={16} /> Explore courses</a>
+          {n.completed > 0 && <a className="lx-btn" {...linkProps(to.achievements())}><GTrophy size={16} /> Achievements</a>}
+        </div>
+      </div>
+      <div className="lx-stats lx-num">
+        {tiles.map(t => (
+          <a key={t.k} className="lx-stat" data-hot={t.hot ? '1' : '0'} {...linkProps(t.href)}>
+            <i aria-hidden>{t.icon}</i>
+            <b><CountUp value={t.v} /></b>
+            <span>{t.label}</span>
           </a>
-        )}
+        ))}
       </div>
     </section>
+  )
+}
+
+/** The one course to open next, large: overdue first, then what is under way, then mandatory. */
+function Resume({ lead }: { lead: LearnItem }) {
+  const c = lead.course
+  const pct = Math.round(Number(lead.progress_pct) || 0)
+  const verb = lead.status === 'IN_PROGRESS' ? 'Resume' : lead.status === 'FAILED' ? 'Try again' : 'Start'
+  const warm = () => prefetch(keys.view(lead.id), paths.view(lead.id))
+  return (
+    <article className="lx-resume lx-in" data-late={lead.overdue ? '1' : '0'}>
+      <a className="lx-resume-art" {...linkProps(to.play(lead.id))} onPointerEnter={warm} aria-label={`${verb} ${c?.title || 'course'}`}>
+        <CourseArt src={c?.thumbnail} id={lead.course_id} title={c?.title} />
+        <span className="lx-resume-play" aria-hidden><GPlay size={20} /></span>
+      </a>
+      <div className="lx-resume-body">
+        <div className="lx-eyebrow">{lead.overdue ? 'Overdue: finish this first' : lead.status === 'IN_PROGRESS' ? 'Continue where you left off' : lead.mandatory ? 'Mandatory: up next' : 'Up next'}</div>
+        <h2 className="lx-resume-title lx-clamp2">{c?.title || 'Course'}</h2>
+        {c?.summary && <p className="lx-resume-sum lx-clamp2">{c.summary}</p>}
+        <div className="lx-cc-meta lx-num">
+          <DueTag dueAt={lead.due_at} overdue={lead.overdue} status={lead.status} />
+          {lead.mandatory && <span className="lx-tag lx-tag--brand">Mandatory</span>}
+          {!!c?.est_minutes && <span><GClock size={13} />{durationWords(c.est_minutes)}</span>}
+          {c?.difficulty && <span>{LEVEL[c.difficulty]}</span>}
+        </div>
+        <div className="lx-resume-prog">
+          <span className="lx-bar"><i style={{ width: `${pct}%` }} /></span>
+          <span className="lx-num">{pct}% complete</span>
+        </div>
+        <div className="lx-resume-ctas">
+          <a className="lx-btn lx-btn--primary" {...linkProps(to.play(lead.id))} onPointerEnter={warm}><GPlay size={14} /> {verb}</a>
+          <a className="lx-btn" {...linkProps(to.course(lead.course_id))}>Course details</a>
+        </div>
+      </div>
+    </article>
+  )
+}
+
+/** Where the resume card goes when nothing is assigned. */
+function Discover() {
+  return (
+    <article className="lx-resume lx-resume--empty lx-in">
+      <div className="lx-resume-body">
+        <div className="lx-eyebrow">Nothing assigned right now</div>
+        <h2 className="lx-resume-title">Find your next course</h2>
+        <p className="lx-resume-sum">Browse the catalogue by subject, or start with what colleagues in your team are taking.</p>
+        <div className="lx-resume-ctas"><a className="lx-btn lx-btn--primary" {...linkProps(to.catalog())}><GCompass size={15} /> Explore courses</a></div>
+      </div>
+    </article>
   )
 }
 
@@ -208,51 +214,37 @@ function Pending({ items }: { items: LearnItem[] }) {
   )
 }
 
-/** The spotlight: what HR featured, then what is recommended, then what is new, six at most,
- *  each course once, and none the person has already finished. */
-function spotlightOf(courses: CatCourse[], recommended: CatCourse[]) {
-  const out: { c: CatCourse; why: string }[] = []
-  const add = (list: CatCourse[], why: string) => {
-    for (const c of list) {
-      if (out.length >= 6) return
-      if (c.mine?.status === 'COMPLETED' || out.some(o => o.c.id === c.id)) continue
-      out.push({ c, why })
-    }
-  }
-  add(courses.filter(c => c.is_featured), 'Featured by HR')
-  add(recommended, 'Recommended for you')
-  add(courses.filter(isNew), 'New this month')
-  return out
-}
+// Each row glides at its own pace, so rows on screen together never move in step.
+const PACE = [5200, 6100, 5600, 6600, 5900, 6300, 5400, 6800]
 
 export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard | null; dashErr: string; cat: Catalog | null; onRetry: () => void }) {
   const shelves = useMemo(() => {
     const courses = cat?.courses || []
     const catName = new Map((cat?.categories || []).map(c => [c.id, c.name]))
-    const notMine = (c: CatCourse) => !c.mine
+    const notMine = (c: (typeof courses)[number]) => !c.mine
     return {
       catName,
-      recommended: (cat?.recommended || []).slice(0, 10),
-      featured: courses.filter(c => c.is_featured).slice(0, 10),
-      fresh: [...courses].filter(c => c.published_at).sort((a, b) => String(b.published_at).localeCompare(String(a.published_at))).slice(0, 10),
-      popular: [...courses].filter(c => (c.learners || 0) > 0 || c.rating != null).sort((a, b) => (b.learners || 0) - (a.learners || 0) || (b.rating || 0) - (a.rating || 0)).slice(0, 10),
-      quick: courses.filter(c => notMine(c) && c.est_minutes != null && c.est_minutes <= 15).slice(0, 10),
+      recommended: (cat?.recommended || []).slice(0, 12),
+      featured: courses.filter(c => c.is_featured).slice(0, 12),
+      fresh: [...courses].filter(c => c.published_at).sort((a, b) => String(b.published_at).localeCompare(String(a.published_at))).slice(0, 12),
+      popular: [...courses].filter(c => (c.learners || 0) > 0 || c.rating != null).sort((a, b) => (b.learners || 0) - (a.learners || 0) || (b.rating || 0) - (a.rating || 0)).slice(0, 12),
+      quick: courses.filter(c => notMine(c) && c.est_minutes != null && c.est_minutes <= 15).slice(0, 12),
       categories: (cat?.categories || []).map(x => ({ ...x, n: courses.filter(c => c.category_id === x.id).length })).filter(x => x.n > 0),
-      spotlight: spotlightOf(courses, cat?.recommended || []),
     }
   }, [cat])
 
   if (!dash) {
     if (dashErr) return <Oops message={dashErr} onRetry={onRetry} />
     return (
-      <div style={{ display: 'grid', gap: 32 }}>
-        <Skel h={300} r={24} />
-        <div className="lx-home-grid"><div style={{ display: 'grid', gap: 20 }}><Skel h={26} w={240} /><div className="lx-grid">{[0, 1, 2].map(i => <Skel key={i} h={280} r={16} />)}</div></div><Skel h={320} r={16} /></div>
+      <div className="lx-stack">
+        <div style={{ display: 'grid', gap: 14 }}><Skel h={18} w={180} /><Skel h={40} w={420} /><div className="lx-stats">{[0, 1, 2, 3, 4].map(i => <Skel key={i} h={92} r={14} />)}</div></div>
+        <div className="lx-home-top"><Skel h={250} r={16} /><Skel h={250} r={16} /></div>
+        <div style={{ display: 'grid', gap: 16 }}><Skel h={26} w={240} /><div className="lx-grid">{[0, 1, 2, 3].map(i => <Skel key={i} h={280} r={16} />)}</div></div>
       </div>
     )
   }
 
-  // A course shows once, in the most pressing shelf it belongs to.
+  // A course shows once, in the most pressing row it belongs to.
   const seen = new Set<string>()
   const once = (list: LearnItem[] = []) => list.filter(i => { if (seen.has(i.id)) return false; seen.add(i.id); return true })
   const overdue = once(dash.overdue), resume = once(dash.continue), mandatory = once(dash.mandatory), optional = once(dash.optional)
@@ -260,95 +252,99 @@ export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard 
   const deadlines = [...(dash.overdue || []), ...(dash.upcoming || [])].filter((x, i, a) => a.findIndex(y => y.id === x.id) === i)
   const todo = [...overdue, ...mandatory]
   const nothingAtAll = !seen.size && !(dash.completed || []).length && !(cat?.courses || []).length
+  let pace = 0
+  const next = () => PACE[pace++ % PACE.length]
+  const name = (id?: string | null) => shelves.catName.get(id || '')
 
   return (
     <div className="lx-stack">
-      <Hero dash={dash} lead={lead} cat={cat} />
-
-      {shelves.spotlight.length > 1 && (
-        <Carousel items={shelves.spotlight} label="Spotlight courses" slideLabel={s => s.c.title}
-          render={s => <Billboard c={s.c} why={s.why} category={shelves.catName.get(s.c.category_id || '')} />} />
-      )}
+      <Welcome dash={dash} cat={cat} />
 
       {nothingAtAll ? (
         <EmptyState title="Your learning will show up here" icon={<GCompass size={34} />}>Anything HR assigns to you appears on this page, and the catalogue fills up as courses are published.</EmptyState>
       ) : (
-        <div className="lx-home-grid">
-          <div className="lx-stack" style={{ minWidth: 0 }}>
-            {todo.length > 0 && (
-              <Rail title={overdue.length ? 'Needs your attention' : 'Mandatory training'} sub={overdue.length ? 'Overdue and mandatory courses, most urgent first' : 'Required for your role. Finish these before their due dates.'} more={{ label: 'See all', href: to.my('todo') }} n={todo.length}>
-                {todo.map(i => <LearnCard key={i.id} item={i} />)}
-              </Rail>
-            )}
-            {resume.length > 0 && (
-              <Rail title="Continue learning" sub="Pick up right where you left off" more={{ label: 'My learning', href: to.my() }} n={resume.length}>
-                {resume.map(i => <LearnCard key={i.id} item={i} />)}
-              </Rail>
-            )}
-            {optional.length > 0 && (
-              <Rail title="Assigned to you" sub="Optional courses HR or your manager suggested" n={optional.length}>
-                {optional.map(i => <LearnCard key={i.id} item={i} />)}
-              </Rail>
-            )}
-            {shelves.recommended.length > 0 && (
-              <Rail title="Recommended for you" sub="Picked by HR, popular in your department, or close to what you finished" more={{ label: 'Explore', href: to.catalog() }} n={shelves.recommended.length}>
-                {shelves.recommended.map(c => <CourseCard key={c.id} c={c} category={shelves.catName.get(c.category_id || '')} />)}
-              </Rail>
-            )}
-            {shelves.categories.length > 0 && (
-              <section>
-                <div className="lx-sec-head"><div><h2 className="lx-sec-title">Browse by category</h2><div className="lx-sec-sub">Find courses by subject</div></div></div>
-                <div className="lx-cats">
-                  {shelves.categories.map(x => (
-                    <a key={x.id} className="lx-cat" data-h={hueOf(x.id)} {...linkProps(to.catalog({ cat: x.id }))}>
-                      <b>{x.name}</b><span className="lx-num">{plural(x.n, 'course')}</span>
-                    </a>
-                  ))}
-                </div>
-              </section>
-            )}
-            {shelves.featured.length > 0 && (
-              <Rail title="Featured by HR" sub="Courses your company wants everyone to see" n={shelves.featured.length}>
-                {shelves.featured.map(c => <CourseCard key={c.id} c={c} category={shelves.catName.get(c.category_id || '')} />)}
-              </Rail>
-            )}
-            {shelves.fresh.length > 0 && (
-              <Rail title="Recently added" sub={shelves.fresh.some(isNew) ? 'Fresh in the catalogue this month' : 'The latest courses in the catalogue'} more={{ label: 'Newest first', href: to.catalog() }} n={shelves.fresh.length}>
-                {shelves.fresh.map(c => <CourseCard key={c.id} c={c} category={shelves.catName.get(c.category_id || '')} />)}
-              </Rail>
-            )}
-            {shelves.popular.length > 0 && (
-              <Rail title="Popular with colleagues" sub="What people across the company are taking" n={shelves.popular.length}>
-                {shelves.popular.map(c => <CourseCard key={c.id} c={c} category={shelves.catName.get(c.category_id || '')} />)}
-              </Rail>
-            )}
-            {shelves.quick.length > 0 && (
-              <Rail title="Learn something in 15 minutes" sub="Short courses for a coffee break" n={shelves.quick.length}>
-                {shelves.quick.map(c => <CourseCard key={c.id} c={c} category={shelves.catName.get(c.category_id || '')} />)}
-              </Rail>
-            )}
+        <>
+          <div className="lx-home-top" data-side={deadlines.length ? '1' : '0'}>
+            {lead ? <Resume lead={lead} /> : <Discover />}
+            {deadlines.length > 0 && <Deadlines items={deadlines} />}
           </div>
-          <aside className="lx-home-side" aria-label="At a glance">
-            <Deadlines items={deadlines} />
-            <Paths dash={dash} />
-            <Pending items={dash.pending || []} />
-            <Milestones dash={dash} />
-            {(dash.completed || []).length > 0 && (
-              <section className="lx-panel">
-                <div className="lx-panel-head"><div className="lx-panel-title">Recently completed</div><a className="lx-sec-link" {...linkProps(to.my('done'))}>All</a></div>
-                {(dash.completed || []).slice(0, 3).map(i => (
-                  <button key={i.id} className="lx-dl" onClick={() => navigate(to.play(i.id))} disabled={i.status !== 'COMPLETED'}>
-                    <CourseArt src={i.course?.thumbnail} id={i.course_id} title={i.course?.title} word={false} style={{ width: 52, height: 40, borderRadius: 9 }} />
-                    <span style={{ minWidth: 0 }}>
-                      <span className="lx-clamp1" style={{ display: 'block', fontSize: 13.5, fontWeight: 650 }}>{i.course?.title || 'Course'}</span>
-                      <span className="lx-num" style={{ display: 'block', fontSize: 12.5, color: 'var(--ez-muted)' }}>{i.status === 'COMPLETED' ? `Finished ${shortDay(i.completed_at)}` : i.status.toLowerCase()}{i.score_pct != null ? ` · ${Number(i.score_pct)}%` : ''}</span>
-                    </span>
-                  </button>
+
+          {todo.length > 0 && (
+            <Rail title={overdue.length ? 'Needs your attention' : 'Mandatory training'} sub={overdue.length ? 'Overdue and mandatory courses, most urgent first' : 'Required for your role. Finish these before their due dates.'} more={{ label: 'See all', href: to.my('todo') }} n={todo.length} auto={next()}>
+              {todo.map(i => <LearnCard key={i.id} item={i} />)}
+            </Rail>
+          )}
+          {resume.length > 0 && (
+            <Rail title="Continue learning" sub="Pick up right where you left off" more={{ label: 'My learning', href: to.my() }} n={resume.length} auto={next()}>
+              {resume.map(i => <LearnCard key={i.id} item={i} />)}
+            </Rail>
+          )}
+          {optional.length > 0 && (
+            <Rail title="Assigned to you" sub="Optional courses HR or your manager suggested" n={optional.length} auto={next()}>
+              {optional.map(i => <LearnCard key={i.id} item={i} />)}
+            </Rail>
+          )}
+          {shelves.recommended.length > 0 && (
+            <Rail title="Recommended for you" sub="Picked by HR, popular in your department, or close to what you finished" more={{ label: 'Explore', href: to.catalog() }} n={shelves.recommended.length} auto={next()}>
+              {shelves.recommended.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
+            </Rail>
+          )}
+          {shelves.featured.length > 0 && (
+            <Rail title="Featured by HR" sub="Courses your company wants everyone to see" n={shelves.featured.length} auto={next()}>
+              {shelves.featured.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
+            </Rail>
+          )}
+          {shelves.categories.length > 0 && (
+            <section className="lx-row">
+              <div className="lx-sec-head"><div><h2 className="lx-sec-title">Browse by category</h2><div className="lx-sec-sub">Find courses by subject</div></div></div>
+              <div className="lx-cats">
+                {shelves.categories.map(x => (
+                  <a key={x.id} className="lx-cat" data-h={hueOf(x.id)} {...linkProps(to.catalog({ cat: x.id }))}>
+                    <b>{x.name}</b><span className="lx-num">{plural(x.n, 'course')}</span>
+                  </a>
                 ))}
-              </section>
-            )}
-          </aside>
-        </div>
+              </div>
+            </section>
+          )}
+          {shelves.fresh.length > 0 && (
+            <Rail title="Recently added" sub={shelves.fresh.some(isNew) ? 'Fresh in the catalogue this month' : 'The latest courses in the catalogue'} more={{ label: 'Newest first', href: to.catalog() }} n={shelves.fresh.length} auto={next()}>
+              {shelves.fresh.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
+            </Rail>
+          )}
+          {shelves.popular.length > 0 && (
+            <Rail title="Popular with colleagues" sub="What people across the company are taking" n={shelves.popular.length} auto={next()}>
+              {shelves.popular.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
+            </Rail>
+          )}
+          {shelves.quick.length > 0 && (
+            <Rail title="Learn something in 15 minutes" sub="Short courses for a coffee break" n={shelves.quick.length} auto={next()}>
+              {shelves.quick.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
+            </Rail>
+          )}
+
+          <section className="lx-row" aria-label="At a glance">
+            <div className="lx-sec-head"><div><h2 className="lx-sec-title">At a glance</h2><div className="lx-sec-sub">Paths, milestones and what you finished lately</div></div></div>
+            <div className="lx-glance">
+              <Paths dash={dash} />
+              <Pending items={dash.pending || []} />
+              <Milestones dash={dash} />
+              {(dash.completed || []).length > 0 && (
+                <section className="lx-panel">
+                  <div className="lx-panel-head"><div className="lx-panel-title">Recently completed</div><a className="lx-sec-link" {...linkProps(to.my('done'))}>All</a></div>
+                  {(dash.completed || []).slice(0, 3).map(i => (
+                    <button key={i.id} className="lx-dl" onClick={() => navigate(to.play(i.id))} disabled={i.status !== 'COMPLETED'}>
+                      <CourseArt src={i.course?.thumbnail} id={i.course_id} title={i.course?.title} word={false} style={{ width: 52, height: 40, borderRadius: 9 }} />
+                      <span style={{ minWidth: 0 }}>
+                        <span className="lx-clamp1" style={{ display: 'block', fontSize: 13.5, fontWeight: 650 }}>{i.course?.title || 'Course'}</span>
+                        <span className="lx-num" style={{ display: 'block', fontSize: 12.5, color: 'var(--ez-muted)' }}>{i.status === 'COMPLETED' ? `Finished ${shortDay(i.completed_at)}` : i.status.toLowerCase()}{i.score_pct != null ? ` · ${Number(i.score_pct)}%` : ''}</span>
+                      </span>
+                    </button>
+                  ))}
+                </section>
+              )}
+            </div>
+          </section>
+        </>
       )}
     </div>
   )

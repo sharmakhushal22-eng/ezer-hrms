@@ -57,19 +57,19 @@ export default function Live({ focusId }: { focusId?: string | null }) {
           {rest.length > 0 && (
             <section>
               <div className="lx-sec-head"><div><h2 className="lx-sec-title">Coming up</h2><div className="lx-sec-sub lx-num">{plural(rest.length, 'more session')}</div></div></div>
-              <div className="lx-lv-grid">{rest.map(card)}</div>
+              <div className="lx-lv-list">{rest.map(card)}</div>
             </section>
           )}
           {d.past.length > 0 && (
             <section>
               <div className="lx-sec-head"><div><h2 className="lx-sec-title">Past sessions</h2><div className="lx-sec-sub">Recordings stay here; watching one counts the same as attending</div></div></div>
-              <div className="lx-lv-grid">{d.past.map(card)}</div>
+              <div className="lx-lv-list">{d.past.map(card)}</div>
             </section>
           )}
           {d.cancelled.length > 0 && (
             <section>
               <div className="lx-sec-head"><div><h2 className="lx-sec-title">Cancelled</h2></div></div>
-              <div className="lx-lv-grid">{d.cancelled.map(card)}</div>
+              <div className="lx-lv-list">{d.cancelled.map(card)}</div>
             </section>
           )}
         </div>

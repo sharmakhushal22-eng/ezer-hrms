@@ -3,7 +3,7 @@
    What moves, and why it is safe:
    - Ambient light (the aurora behind dark banners), a spinning glow on the cards that matter
      most, a light that follows the mouse and a slight lean towards it, slideshows, shelves with
-     arrows and a position bar, figures that count up, bars and rings that fill, sections that
+     arrows, a position bar and an unhurried glide of their own, figures that count up, bars and rings that fill, sections that
      rise into view as you scroll, and a cross-fade between screens.
    - Everything moves with transform or opacity (the browser's cheap path), except the glow's
      angle and the certificate sheen, which are small.
@@ -53,8 +53,6 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
   .ezl .lx-au-3{animation:lx-au-3 24s ease-in-out infinite alternate}
   .ezl .lx-aurora>b{animation:lx-speck var(--d) linear var(--dl) infinite}
   .ezl .lx-aurora[data-run="0"]>*{animation-play-state:paused}
-  /* The banners' own glow layer drifts too (it was still on the page headers). */
-  .ezl .lx-ph::before{animation:lx-drift 22s ease-in-out infinite alternate}
 }
 @keyframes lx-au-1{to{transform:translate3d(-22%,26%,0) scale(1.18)}}
 @keyframes lx-au-2{to{transform:translate3d(30%,-18%,0) scale(.9)}}
@@ -62,14 +60,14 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
 @keyframes lx-speck{0%{transform:translate3d(0,0,0);opacity:0}12%{opacity:.85}78%{opacity:.45}100%{transform:translate3d(26px,-360px,0) rotate(160deg);opacity:0}}
 
 /* ═══ Glow border: the card that matters most on a screen ═════════════════════════════════ */
-.ezl .lx-hero-card::before,.ezl .lx-cp-card::before,.ezl .lx-feature::before,.ezl .lx-bb::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;pointer-events:none;
+.ezl .lx-cp-card::before,.ezl .lx-feature::before{content:"";position:absolute;inset:0;border-radius:inherit;padding:1.5px;pointer-events:none;
   z-index:var(--ez-z-local-2);
   background:conic-gradient(from var(--lx-spin),transparent 0deg,color-mix(in srgb,var(--lx-hero-c) 90%,transparent) 50deg,color-mix(in srgb,var(--lx-glow) 75%,transparent) 100deg,transparent 160deg,transparent 360deg);
   -webkit-mask:linear-gradient(#000 0 0) content-box,linear-gradient(#000 0 0);-webkit-mask-composite:xor;
   mask:linear-gradient(#000 0 0) content-box exclude,linear-gradient(#000 0 0)}
 .ezl .lx-cp-card::before{opacity:.75}
 @media (prefers-reduced-motion:no-preference){
-  .ezl .lx-hero-card::before,.ezl .lx-cp-card::before,.ezl .lx-feature::before,.ezl .lx-bb::before{animation:lx-spin-border 7s linear infinite}
+  .ezl .lx-cp-card::before,.ezl .lx-feature::before{animation:lx-spin-border 7s linear infinite}
 }
 @keyframes lx-spin-border{to{--lx-spin:360deg}}
 
@@ -85,11 +83,8 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
     transition:transform .12s linear,box-shadow .28s var(--lx-ease),border-color .2s}
   .ezl .lx-cert[data-tilt]{transform:perspective(1100px) rotateX(calc(var(--lx-ty,0) * -4deg)) rotateY(calc(var(--lx-tx,0) * 5deg));transition:transform .12s linear}
   .ezl .lx-cert{transition:transform .5s var(--lx-ease)}
-  .ezl .lx-hero-card[data-tilt]{transform:perspective(1200px) translateY(-3px) rotateX(calc(var(--lx-ty,0) * -3deg)) rotateY(calc(var(--lx-tx,0) * 4deg));transition:transform .12s linear}
   .ezl .lx-feature[data-tilt]{transform:perspective(1600px) translateY(-3px) rotateX(calc(var(--lx-ty,0) * -1.5deg)) rotateY(calc(var(--lx-tx,0) * 2deg));transition:transform .12s linear,box-shadow .3s}
   .ezl .lx-cat[data-tilt]{transform:perspective(700px) translateY(-3px) rotateX(calc(var(--lx-ty,0) * -6deg)) rotateY(calc(var(--lx-tx,0) * 7deg));transition:transform .12s linear,box-shadow .25s}
-  /* The billboard does not lean: its picture shifts against the pointer, for depth. */
-  .ezl .lx-bb[data-tilt] .lx-bb-art{translate:calc(var(--lx-tx,0) * -14px) calc(var(--lx-ty,0) * -10px);transition:translate .2s linear}
 }
 
 /* ═══ Certificates: a holographic sheen ═══════════════════════════════════════════════════ */
@@ -143,25 +138,6 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
 }
 @keyframes lx-kb{from{transform:scale(1.02)}to{transform:scale(1.13) translate3d(-2%,-1.5%,0)}}
 
-/* Billboard: one spotlight slide on Home */
-.ezl .lx-bb{position:relative;display:grid;align-items:end;min-height:330px;border-radius:22px;overflow:hidden;isolation:isolate;color:#fff;background:var(--lx-hero-a);
-  box-shadow:0 30px 60px -34px color-mix(in srgb,var(--lx-hero-b) 70%,transparent)}
-/* The picture fills the right-hand side and fades into the dark on its left, so the words never
-   sit on top of a thumbnail's own lettering. */
-.ezl .lx-bb-art{position:absolute;inset:-14px -14px -14px 48%;z-index:var(--ez-z-under);
-  -webkit-mask-image:linear-gradient(90deg,transparent 0,rgba(0,0,0,.35) 35%,#000 70%);mask-image:linear-gradient(90deg,transparent 0,rgba(0,0,0,.35) 35%,#000 70%)}
-.ezl .lx-bb-art>.lx-art{position:absolute;inset:0}
-.ezl .lx-bb-art .lx-art-glyph{display:none}
-.ezl .lx-bb-shade{position:absolute;inset:0;z-index:var(--ez-z-under);
-  background:radial-gradient(70% 90% at 0% 100%,color-mix(in srgb,var(--lx-hero-b) 55%,transparent),transparent 70%),
-             linear-gradient(0deg,color-mix(in srgb,var(--lx-hero-a) 55%,transparent),transparent 45%)}
-.ezl .lx-bb-body{position:relative;display:grid;gap:12px;padding:36px 40px 62px;max-width:min(620px,56%);min-width:0}
-.ezl .lx-bb-kick{display:flex;gap:6px;flex-wrap:wrap}
-.ezl .lx-bb h3{font-family:var(--lx-f-display);font-variation-settings:"SOFT" 50,"opsz" 144;font-weight:600;font-size:34px;line-height:1.08;letter-spacing:-.03em}
-.ezl .lx-bb p{font-size:15px;line-height:1.55;color:rgba(255,255,255,.82)}
-.ezl .lx-bb .lx-cc-meta{color:rgba(255,255,255,.8);font-size:13px}
-.ezl .lx-bb-ctas{display:flex;gap:10px;flex-wrap:wrap;margin-top:6px}
-
 /* ═══ Shelves and chip rows that scroll sideways ══════════════════════════════════════════ */
 .ezl .lx-scroller[data-over="1"]>.lx-rail,.ezl .lx-scroller[data-over="1"]>.lx-chips{--lx-fl:0px;--lx-fr:0px;
   -webkit-mask-image:linear-gradient(90deg,transparent 0,#000 var(--lx-fl),#000 calc(100% - var(--lx-fr)),transparent 100%);
@@ -173,11 +149,17 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
 .ezl .lx-scroller--chips .lx-rail-btn{top:calc(50% - 20px);width:34px;height:34px}
 .ezl .lx-scroller--chips .lx-rail-btn[data-dir="prev"]{left:-6px}
 .ezl .lx-scroller--chips .lx-rail-btn[data-dir="next"]{right:-6px}
+/* Under a shelf: the position bar, and the pause button of a shelf that moves on its own. */
+.ezl .lx-rail-foot{position:relative;display:flex;justify-content:center;align-items:center;min-height:22px;margin-top:2px}
+.ezl .lx-rail-auto{position:absolute;right:2px;top:50%;transform:translateY(-50%);width:26px;height:26px;border-radius:50%;padding:0;display:grid;place-items:center;cursor:pointer;
+  border:1px solid var(--ez-line);background:var(--ez-surface);color:var(--ez-muted);transition:color .15s,border-color .15s}
+.ezl .lx-rail-auto:hover{color:var(--ez-ink);border-color:var(--ez-line-strong)}
+.ezl .lx-rail-auto[aria-pressed="true"]{color:var(--ez-brand);border-color:var(--ez-brand-edge)}
 .ezl .lx-scroll-prog{display:none}
 @supports (animation-timeline:scroll()){
   .ezl .lx-scroller{timeline-scope:--lx-row}
   .ezl .lx-scroller>.lx-rail{scroll-timeline:--lx-row inline}
-  .ezl .lx-scroll-prog{display:block;width:min(140px,36%);height:3px;margin:4px auto 0;border-radius:99px;background:var(--ez-line);overflow:hidden;opacity:0;transition:opacity .25s}
+  .ezl .lx-scroll-prog{display:block;width:min(140px,36%);height:3px;margin:0 auto;border-radius:99px;background:var(--ez-line);overflow:hidden;opacity:0;transition:opacity .25s}
   .ezl .lx-scroller[data-over="1"] .lx-scroll-prog{opacity:1}
   .ezl .lx-scroll-prog>i{display:block;height:100%;border-radius:99px;background:linear-gradient(90deg,var(--lx-hero-c),var(--ez-brand));transform-origin:left center;
     animation:lx-grow-x linear both;animation-timeline:--lx-row}
@@ -204,7 +186,7 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
   @supports ((animation-timeline:view()) and (animation-range:entry)){
     /* backwards only: once in place nothing stays in effect, so no lingering transform turns
        a section into the frame of a full-screen overlay inside it. */
-    .ezl .lx-home-grid .lx-stack>section,.ezl .lx-cp-main>section,.ezl .lx-home-side>*,.ezl .lx-st-card,.ezl .lx-cats>*,.ezl .lx-certs>*,.ezl .lx-ach-top>*{
+    .ezl .lx-row,.ezl .lx-glance>*,.ezl .lx-cp-main>section,.ezl .lx-st-card,.ezl .lx-cats>*,.ezl .lx-certs>*,.ezl .lx-ach-top>*{
       animation:lx-reveal linear backwards;animation-timeline:view();animation-range:entry 0% entry 180px}
     .ezl .lx-grid>.lx-cc{animation:lx-reveal linear backwards;animation-timeline:view();animation-range:entry 0% entry 140px}
     .ezl .lx-tl-item{animation:lx-reveal-x linear backwards;animation-timeline:view();animation-range:entry 0% entry 90px}
@@ -212,17 +194,15 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
     .ezl .lx-rail>*{animation:lx-rail-in linear backwards;animation-timeline:view(inline);animation-range:entry 0% entry 70%}
     /* The timeline's line draws itself down as you scroll it in. */
     .ezl .lx-timeline::before{transform-origin:top;animation:lx-grow-y linear backwards;animation-timeline:view();animation-range:entry 0% cover 60%}
-    /* Banners: the words drift up and fade as the banner leaves, the card lags behind them. */
-    .ezl .lx-hero,.ezl .lx-cp-hero{view-timeline:--lx-banner block}
-    .ezl .lx-hero-grid>:first-child,.ezl .lx-cp-hero-grid>:first-child{animation:lx-par-words linear both;animation-timeline:--lx-banner;animation-range:exit 0% exit 100%}
-    .ezl .lx-hero-card{animation:lx-par-card linear both;animation-timeline:--lx-banner;animation-range:exit 0% exit 100%}
+    /* The course banner: its words drift up and fade as it leaves. */
+    .ezl .lx-cp-hero{view-timeline:--lx-banner block}
+    .ezl .lx-cp-hero-grid>:first-child{animation:lx-par-words linear both;animation-timeline:--lx-banner;animation-range:exit 0% exit 100%}
   }
 }
 @keyframes lx-reveal{from{opacity:.001;transform:translateY(26px)}}
 @keyframes lx-reveal-x{from{opacity:.001;transform:translateX(-16px)}}
 @keyframes lx-rail-in{from{opacity:.25;transform:scale(.93)}}
 @keyframes lx-par-words{to{translate:0 -54px;opacity:.2}}
-@keyframes lx-par-card{to{translate:0 -18px}}
 
 /* ═══ Course page: the curriculum opens and closes smoothly ═══════════════════════════════ */
 .ezl .lx-acc-body{display:grid;grid-template-rows:0fr;transition:grid-template-rows .34s var(--lx-ease)}
@@ -243,12 +223,6 @@ html[data-lx-vt="filter"]::view-transition-new(root){animation-duration:.2s}
 
 /* ═══ Phone and tablet ════════════════════════════════════════════════════════════════════ */
 @media (max-width:760px){
-  .ezl .lx-bb{min-height:380px;border-radius:20px}
-  .ezl .lx-bb-art{inset:-14px -14px 30% -14px;-webkit-mask-image:linear-gradient(0deg,transparent 0,#000 45%);mask-image:linear-gradient(0deg,transparent 0,#000 45%)}
-  .ezl .lx-bb-shade{background:linear-gradient(0deg,color-mix(in srgb,var(--lx-hero-a) 96%,transparent) 0%,color-mix(in srgb,var(--lx-hero-a) 80%,transparent) 48%,color-mix(in srgb,var(--lx-hero-a) 20%,transparent) 100%)}
-  .ezl .lx-bb-body{padding:22px 20px 64px;max-width:none}
-  .ezl .lx-bb h3{font-size:25px}
-  .ezl .lx-bb p{font-size:14px}
   .ezl .lx-car--overlay .lx-car-bar{right:50%;transform:translateX(50%);bottom:10px}
   .ezl .lx-car-btn{min-height:32px}
   .ezl .lx-car-dot{min-height:32px}
