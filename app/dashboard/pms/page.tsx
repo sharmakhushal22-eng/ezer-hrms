@@ -188,13 +188,31 @@ const CONFIGURES_THE_MODULE = new Set<Tab>(['setup'])
  * from this map is still drawn, in the last group — a new tab can never
  * vanish because nobody gave it an icon.
  */
-type NavGroup = 'cycle' | 'setup' | 'run' | 'results' | 'insight'
+/**
+ * THE GROUP ORDER REPRODUCES THE ORIGINAL TAB ORDER EXACTLY.
+ *
+ * The tabs were, and still are:
+ *   This cycle · PMS Configuration · Setup & Controls · Policy Builder ·
+ *   Fill Status Tracker · Publish Results · Ratings Summary ·
+ *   Final Rating Upload · PIP Management · Reports & Export · Flow & Hierarchy
+ *
+ * Grouping them is a drawing decision and must not become a reordering one:
+ * people navigate by position, and a tab that moves is a tab somebody hunts
+ * for. PIP sits between Final Rating Upload and Reports, so it gets its own
+ * group rather than being folded in beside Fill Status Tracker — which would
+ * have moved it from ninth to sixth.
+ *
+ * "Improvement" is also the honester label for it: a PIP is not something you
+ * run the cycle with, it is what follows a result.
+ */
+type NavGroup = 'cycle' | 'setup' | 'run' | 'results' | 'improvement' | 'insight'
 const NAV_GROUPS: { key: NavGroup; label: string }[] = [
-  { key: 'cycle',   label: 'Cycle' },
-  { key: 'setup',   label: 'Set up' },
-  { key: 'run',     label: 'Run' },
-  { key: 'results', label: 'Results' },
-  { key: 'insight', label: 'Insight' },
+  { key: 'cycle',       label: 'Cycle' },
+  { key: 'setup',       label: 'Set up' },
+  { key: 'run',         label: 'Run' },
+  { key: 'results',     label: 'Results' },
+  { key: 'improvement', label: 'Improvement' },
+  { key: 'insight',     label: 'Insight' },
 ]
 const NAV: Partial<Record<Tab, { group: NavGroup; icon: (p: IconProps) => React.ReactNode }>> = {
   overview: { group: 'cycle',   icon: IconHome },
@@ -202,10 +220,10 @@ const NAV: Partial<Record<Tab, { group: NavGroup; icon: (p: IconProps) => React.
   setup:    { group: 'setup',   icon: IconAdmin },
   policies: { group: 'setup',   icon: IconPolicies },
   fill:     { group: 'run',     icon: IconEmployees },
-  pip:      { group: 'run',     icon: IconAlert },
   publish:  { group: 'results', icon: IconAward },
   summary:  { group: 'results', icon: IconReports },
   upload:   { group: 'results', icon: IconUpload },
+  pip:      { group: 'improvement', icon: IconAlert },
   reports:  { group: 'insight', icon: IconDownload },
   chain:    { group: 'insight', icon: IconOrgChart },
 }

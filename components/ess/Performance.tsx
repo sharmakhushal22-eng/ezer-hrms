@@ -597,19 +597,20 @@ export default function Performance({ employeeId }: { employeeId: string }) {
         </div>
       )}
 
-      {/* Your own cycle belongs to your own side. On My team and My
-          department the workspace comes straight under the cards, so a
-          manager is not scrolling past their own appraisal to reach their
-          team's. HIDDEN, NOT UNMOUNTED: CycleHeader stays mounted exactly as
-          before, so it loads once and its data flow is unchanged — only
-          whether it is painted depends on the side chosen. */}
-      <div hidden={scope !== 'me'}>
-        <CycleHeader
-          employeeId={employeeId}
-          roles={{ isEmployee: true, isRM: roles.isRM, isHOD: roles.isHOD }}
-          onGo={goToAction}
-        />
-      </div>
+      {/* ON EVERY SIDE, as it has always been.
+          The redesign hid this on My team and My department so a manager
+          would not scroll past their own appraisal to reach their team's.
+          That reads well and costs too much: the header carries the NEXT
+          STEP, including the team tasks it points at, and a manager who
+          opens straight into My team would never see that their own self
+          rating is overdue. A deadline you are not shown is one you miss.
+          The scrolling is the smaller problem, and the cards above already
+          give a manager somewhere to jump to. */}
+      <CycleHeader
+        employeeId={employeeId}
+        roles={{ isEmployee: true, isRM: roles.isRM, isHOD: roles.isHOD }}
+        onGo={goToAction}
+      />
 
       {/* The workspace header: which side you are on, what the open tab is
           for, and the tabs themselves along its lower edge — one object, so
