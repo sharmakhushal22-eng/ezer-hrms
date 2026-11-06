@@ -59,6 +59,7 @@ import { rungFor, heldBy, approvalFinalises, effectiveChain } from '@/lib/pms/ch
 import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFinal'
 import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
+import { selfKey } from '@/lib/pms/kpi'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { filled, defaultPipWindow, RECOGNITION_LABEL,
          type PipIntent, type RecognitionIntent } from '@/lib/pms/training'
@@ -680,7 +681,8 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   /** The employee's rating of each KRA while they write it, keyed by seq_no.
    *  Seeded from any SELF review already saved, so re-opening the tab shows
    *  what they rated last time rather than an empty form. */
-  const [selfBySeq, setSelfBySeq] = useState<Record<number, KraSelf> | null>(null)
+  /** 220: keyed by selfKey(kraSeq, kpiSeq) — a rating belongs to a KPI. */
+  const [selfBySeq, setSelfBySeq] = useState<Record<string, KraSelf> | null>(null)
   const [carried, setCarried] = useState<{
     fromPeriodId: string; fromPeriodCode: string; kras: Kra[]
   } | null>(null)
@@ -929,26 +931,35 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   }))
 
   /**
-   * seq_no -> the employee's rating, seeded from pms_reviews.
+   * selfKey(kraSeq, kpiSeq) -> the employee's rating, seeded from pms_reviews.
    *
-   * The join is goal.id -> review.goal_id, then re-keyed by seq_no, because
-   * the KRA form works in seq_no (a row being typed has no id yet) while
-   * pms_reviews is keyed by goal_id. One of the two has to translate, and it
-   * is cheaper to do it here than to carry ids through the editing form.
+   * The join is kpi.id -> review.kpi_id, then re-keyed by position, because
+   * the form works in positions (a row being typed has no id yet) while
+   * pms_reviews is keyed by kpi_id. One of the two has to translate, and it
+   * is cheaper here than carrying ids through the editing form.
+   *
+   * 220 moved the rating from the KRA to the KPI, so the key gained the KPI's
+   * position. Both ends use selfKey() rather than spelling the string, since
+   * two places building it slightly differently is a rating that silently
+   * fails to save.
    */
-  const selfSeeded: Record<number, KraSelf> = useMemo(() => {
-    const out: Record<number, KraSelf> = {}
+  const selfSeeded: Record<string, KraSelf> = useMemo(() => {
+    const out: Record<string, KraSelf> = {}
     for (const g of goals) {
       const seq = Number(g.seq_no)
-      const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
-      out[seq] = {
-        achievement: String(row?.achievement_value ?? ''),
-        rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
-        comment: String(row?.comments ?? ''),
+      const mine = kpis.filter(x => String(x.goal_id) === String(g.id))
+                       .sort((a, b) => Number(a.seq_no) - Number(b.seq_no))
+      for (const x of mine) {
+        const row = reviews.find(r => String(r.kpi_id) === String(x.id) && r.rater_role === 'SELF')
+        out[selfKey(seq, Number(x.seq_no))] = {
+          achievement: String(row?.achievement_value ?? ''),
+          rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
+          comment: String(row?.comments ?? ''),
+        }
       }
     }
     return out
-  }, [goals, reviews])
+  }, [goals, kpis, reviews])
   const selfForKras = selfBySeq ?? selfSeeded
 
   /**
@@ -968,17 +979,25 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     return mine.length === 1 ? String(mine[0].id) : null
   }, [kpis])
 
-  const selfRows: SelfRow[] = selfDraft ?? goals.map(g => {
-    const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
-    return {
-      goalId: String(g.id), title: String(g.kra_title ?? ''),
-      weightage: Number(g.weightage) || 0,
-      category: String(g.category ?? 'BUSINESS') as Category,
-      achievement: String(row?.achievement_value ?? ''),
-      rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
-      comment: String(row?.comments ?? ''),
-    }
-  })
+  // 220: ONE ROW PER KPI, because that is what carries a rating. The title
+  // names both, so a flat list still says which objective a row sits under.
+  const selfRows: SelfRow[] = selfDraft ?? goals.flatMap(g =>
+    kpis
+      .filter(x => String(x.goal_id) === String(g.id))
+      .sort((a, b) => Number(a.seq_no) - Number(b.seq_no))
+      .map(x => {
+        const row = reviews.find(r => String(r.kpi_id) === String(x.id) && r.rater_role === 'SELF')
+        const metric = String(x.kpi_metric ?? '').trim()
+        return {
+          goalId: String(g.id), kpiId: String(x.id),
+          title: metric ? `${String(g.kra_title ?? '')} · ${metric}` : String(g.kra_title ?? ''),
+          weightage: Number(x.weightage) || 0,
+          category: String(g.category ?? 'BUSINESS') as Category,
+          achievement: String(row?.achievement_value ?? ''),
+          rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
+          comment: String(row?.comments ?? ''),
+        }
+      }))
 
   const progress: Progress = settled({
     kraCount: goals.length,
@@ -1166,13 +1185,23 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         const x = r as { id: string; goal_id: string; seq_no: number }
         return [`${x.goal_id}|${x.seq_no}`, String(x.id)]
       }))
-      // 220: a rating names its KPI. A KRA whose KPI cannot be resolved is
-      // left out rather than written against a guess — see kpiIdFor.
+      /**
+       * ONE RATING PER KPI (220).
+       *
+       * Built from the ids just read back rather than from kpiIdFor, which
+       * only answers when a KRA has a single KPI. Now that the form can add
+       * a second, the rows come from the saved positions — the same
+       * (goal, seq_no) pair the upsert above keyed on.
+       */
       const rated = kras
-        .map(k => {
+        .flatMap(k => {
           const goalId = idBySeq.get(k.seq_no)
-          return { k, sr: selfForKras[k.seq_no], goalId,
-                   kpiId: goalId ? kpiIdFor(String(goalId)) : null }
+          if (!goalId) return []
+          return (k.kpis ?? []).map(x => ({
+            sr: selfForKras[selfKey(k.seq_no, x.seq_no)],
+            goalId,
+            kpiId: kpiByGoalSeq.get(`${goalId}|${x.seq_no}`) ?? null,
+          }))
         })
         .filter(x => x.goalId && x.kpiId && x.sr && x.sr.rating !== null)
       ratedCount = rated.length
@@ -1293,12 +1322,11 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
     setSaving(true); setMsg(null)
     if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
     const rows = selfRows
-      .map(r => ({ r, kpiId: kpiIdFor(r.goalId) }))
-      .filter(x => x.kpiId)
-      .map(({ r, kpiId }) => ({
+      .filter(r => r.kpiId)
+      .map(r => ({
         company_id: companyId,
         period_id: period.id, employee_id: employeeId,
-        goal_id: r.goalId, kpi_id: kpiId,
+        goal_id: r.goalId, kpi_id: r.kpiId,
         rater_id: employeeId, rater_role: 'SELF',
         achievement_value: r.achievement || null, rating: r.rating,
         comments: r.comment || null, submitted: true,
@@ -1417,9 +1445,9 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
                 carriedFrom={!goals.length && carried ? carried.fromPeriodCode : null}
                 bands={bands.length ? bands : undefined}
                 self={selfForKras}
-                onSelfChange={(seq, patch) => setSelfBySeq(prev => ({
+                onSelfChange={(key, patch) => setSelfBySeq(prev => ({
                   ...(prev ?? selfSeeded),
-                  [seq]: { ...(prev ?? selfSeeded)[seq]
+                  [key]: { ...(prev ?? selfSeeded)[key]
                              ?? { achievement: '', rating: null, comment: '' }, ...patch },
                 }))}
                 // Required only once the one-to-one is acknowledged: at that

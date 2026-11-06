@@ -2140,3 +2140,42 @@
     clip-path: none; padding: 0; overflow: visible; white-space: normal;
   }
 }
+
+/* ── rating a KPI, inside its row (220) ───────────────────────────────────
+ *
+ * Under the measure it belongs to, not in a block at the foot of the KRA.
+ * You rate the thing that was measured, beside its own target — one rating
+ * covering three different measures of one objective was the shape this
+ * replaces. */
+.pms .pms-kpi-self {
+  grid-column: 2 / -1;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  gap: 12px; align-items: start;
+  margin-top: 8px; padding: 10px 12px;
+  background: var(--ez-surface);
+  border: 1px solid var(--ez-line);
+  border-radius: 8px;
+}
+/* A rated measure takes a brand tint, so what is left shows up by scanning
+ * rather than by reading every row. */
+.pms .pms-kpi-self.is-rated {
+  background: color-mix(in oklab, var(--ez-brand-tint) 55%, var(--ez-surface));
+  border-color: var(--ez-brand-edge);
+}
+/* These labels always show: they are not column headings repeated down a
+ * list, they name three different fields. */
+.pms .pms-kpi-self label,
+.pms .pms-kpi-self .pms-kra-flabel {
+  position: static; width: auto; height: auto; margin: 0 0 4px;
+  clip-path: none; overflow: visible; white-space: normal;
+  display: block; font-size: 11px; font-weight: 600; color: var(--ez-muted);
+}
+.pms .pms-kpi-self textarea { min-height: 36px; resize: vertical; line-height: 1.45; }
+.pms .pms-kpi-band {
+  display: inline-block; margin-top: 6px;
+  font-size: 11px; font-weight: 700; color: var(--ez-brand);
+}
+
+@media (max-width: 860px) {
+  .pms .pms-kpi-self { grid-template-columns: 1fr; grid-column: 1 / -1; }
+}

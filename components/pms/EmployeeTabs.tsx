@@ -21,8 +21,8 @@ import { useState } from 'react'
 import './pms.css'
 import { checkKras, canAdd, canDelete, meter, suggestSplit,
          CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@/lib/pms/kra'
-import { balance, checkKpis, suggestKpiSplit, blankKpi, renumber,
-         type Kpi } from '@/lib/pms/kpi'
+import { balance, checkKpis, suggestKpiSplit, blankKpi, renumber, selfKey,
+         kraRating, ratedCount, type Kpi } from '@/lib/pms/kpi'
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
          type Log, type DiscussionType, type Mode, type WeightageChange } from '@/lib/pms/oneToOne'
@@ -280,8 +280,10 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   /** §3's merge: the employee rates each KRA as they write it, and the KRAs
    *  and the ratings go to the manager together. Optional, so a caller that
    *  has not wired rating still renders. */
-  self?: Record<number, KraSelf>
-  onSelfChange?: (seq: number, patch: Partial<KraSelf>) => void
+  /** 220: a rating belongs to a KPI. Keyed by selfKey(kraSeq, kpiSeq),
+   *  because a KPI being typed has no id yet. */
+  self?: Record<string, KraSelf>
+  onSelfChange?: (key: string, patch: Partial<KraSelf>) => void
   bands?: Band[]
   /** Once the one-to-one is acknowledged this submission IS the final one, so
    *  every KRA must carry a rating. Before that the employee is drafting and a
@@ -359,7 +361,12 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   // Presentation: one shade of the brand per KRA, shared by its segment in
   // the weightage bar and its number badge, so the two read as one object.
   const shade = (i: number) => `color-mix(in oklab, var(--ez-brand) ${Math.max(30, 100 - i * 11)}%, var(--ez-brand-tint))`
-  const ratedByYou = onSelfChange ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) !== null).length : 0
+  // Counted over KPIs, because that is what carries a rating now. A KRA is
+  // "done" only when every measure under it has been rated.
+  const allKpis = kras.flatMap(k => (k.kpis ?? []).map(x => ({ k, x })))
+  const ratedByYou = onSelfChange
+    ? allKpis.filter(({ k, x }) => (self?.[selfKey(k.seq_no, x.seq_no)]?.rating ?? null) !== null).length
+    : 0
 
   return (
     <>
@@ -409,8 +416,8 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
             <b>{m.says}</b>
             <span>{check.count} {check.count === 1 ? 'KRA' : 'KRAs'} · minimum {rules.minKra}, maximum {rules.maxKra}</span>
             {onSelfChange && kras.length > 0 && (
-              <span className={`pms-kmeter-rated${ratedByYou === kras.length ? ' is-done' : ''}`}>
-                {ratedByYou} of {kras.length} rated by you
+              <span className={`pms-kmeter-rated${ratedByYou === allKpis.length ? ' is-done' : ''}`}>
+                {ratedByYou} of {allKpis.length} rated by you
               </span>
             )}
           </div>
@@ -574,6 +581,51 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                                         aria-label={`Remove KRA ${i + 1} KPI ${j + 1}`}
                                         onClick={() => removeKpi(i, j)}>×</button>
                               )}
+
+                              {/* §3's merge, now per measure: you rate the
+                                  thing that is measured, beside its target,
+                                  rather than one rating covering three
+                                  different measures of one objective. */}
+                              {onSelfChange && (() => {
+                                const key = selfKey(k.seq_no, x.seq_no)
+                                const got = self?.[key]?.rating ?? null
+                                const band = bands.find(b => b.value === got)
+                                return (
+                                  <div className={`pms-kpi-self${got !== null ? ' is-rated' : ''}`}>
+                                    <div>
+                                      <label htmlFor={`kra-${i}-kpi-${j}-ach`}>What you delivered</label>
+                                      <input id={`kra-${i}-kpi-${j}-ach`}
+                                             value={self?.[key]?.achievement ?? ''} readOnly={selfSubmitted}
+                                             aria-label={`Achievement for KRA ${i + 1} KPI ${j + 1}`}
+                                             placeholder="The number you actually hit"
+                                             onChange={e => onSelfChange(key, { achievement: e.target.value })} />
+                                    </div>
+                                    <div>
+                                      <label htmlFor={`kra-${i}-kpi-${j}-ev`}>Evidence</label>
+                                      <textarea id={`kra-${i}-kpi-${j}-ev`} rows={1}
+                                                value={self?.[key]?.comment ?? ''} readOnly={selfSubmitted}
+                                                aria-label={`Comment for KRA ${i + 1} KPI ${j + 1}`}
+                                                placeholder="Evidence a manager could check"
+                                                onChange={e => onSelfChange(key, { comment: e.target.value })} />
+                                    </div>
+                                    <div>
+                                      <span className="pms-kra-flabel">Your rating</span>
+                                      <div className="pms-kra-rate" role="group"
+                                           aria-label={`Your rating for KRA ${i + 1} KPI ${j + 1}`}>
+                                        {bands.map(b => (
+                                          <button key={b.value} type="button" disabled={selfSubmitted}
+                                                  className={got === b.value ? 'btn sm' : 'btn ghost sm'}
+                                                  title={`${b.value}: ${b.label}`}
+                                                  onClick={() => onSelfChange(key, { rating: b.value })}>
+                                            {b.value}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      {band && <span className="pms-kpi-band">{band.value} · {band.label}</span>}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
                             </div>
                           )
                         })}
@@ -585,48 +637,6 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                     )
                   })()}
 
-                  {/* §3's merge: rated beside the KRA it belongs to, rather
-                      than on a separate screen found afterwards. */}
-                  {onSelfChange && (
-                    <div className="pms-kra-self">
-                      <div className="pms-kra-self-h">
-                        <span>Your self assessment</span>
-                        {mineBand
-                          ? <span className="pill p-brand">{mineBand.value} · {mineBand.label}</span>
-                          : <span className="pill p-grey">Not rated yet</span>}
-                      </div>
-                      <div className="pms-kra-self-g">
-                        <div>
-                          <label htmlFor={`kra-${i}-ach`}>What you delivered</label>
-                          <input id={`kra-${i}-ach`} value={self?.[k.seq_no]?.achievement ?? ''} readOnly={selfSubmitted}
-                                 aria-label={`Achievement for KRA ${i + 1}`}
-                                 placeholder="The number you actually hit"
-                                 onChange={e => onSelfChange(k.seq_no, { achievement: e.target.value })} />
-                        </div>
-                        <div>
-                          <label htmlFor={`kra-${i}-ev`}>Evidence</label>
-                          <textarea id={`kra-${i}-ev`} value={self?.[k.seq_no]?.comment ?? ''} readOnly={selfSubmitted}
-                                    aria-label={`Comment for KRA ${i + 1}`} rows={1}
-                                    placeholder="Evidence a manager could check"
-                                    onChange={e => onSelfChange(k.seq_no, { comment: e.target.value })} />
-                        </div>
-                        <div>
-                          <span className="pms-kra-flabel">Your rating</span>
-                          <div className="pms-kra-rate" role="group"
-                               aria-label={`Your rating for KRA ${i + 1}`}>
-                            {bands.map(b => (
-                              <button key={b.value} type="button" disabled={selfSubmitted}
-                                      className={mine === b.value ? 'btn sm' : 'btn ghost sm'}
-                                      title={`${b.value}: ${b.label}`}
-                                      onClick={() => onSelfChange(k.seq_no, { rating: b.value })}>
-                                {b.value}
-                              </button>
-                            ))}
-                          </div>
-                        </div>
-                      </div>
-                    </div>
-                  )}
                 </div>
               )
             })}
@@ -978,7 +988,17 @@ export function OneToOneTab({ logs, managerName, onLog, onAcknowledge, saving, k
 export interface KraSelf { achievement: string; rating: number | null; comment: string }
 
 export interface SelfRow {
-  goalId: string; title: string; weightage: number; category: Category
+  /** The KRA this measure belongs to. Still written to pms_reviews.goal_id. */
+  goalId: string
+  /** 220: what the rating actually belongs to. */
+  kpiId: string
+  /** "KRA · KPI", so a flat list still says which objective a row is under —
+   *  the same shape lines() builds for scoring. */
+  title: string
+  /** THE KPI's weightage, not the KRA's. One row per measure now, and the
+   *  weighted mean is over those. */
+  weightage: number
+  category: Category
   achievement: string; rating: number | null; comment: string
 }
 
@@ -1049,7 +1069,11 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
                   <div className="k">Your KRA set has to be locked before self rating opens.</div>
                 </td></tr>
               ) : rows.map((r, i) => (
-                <tr key={r.goalId}>
+                // Keyed by the KPI, not the KRA: since 220 a KRA produces one
+                // row per measure, so goalId repeats. React warned about
+                // duplicate keys, which means it can reuse the wrong row's
+                // DOM and carry a half-typed value across.
+                <tr key={r.kpiId || r.goalId}>
                   <td style={{ fontWeight: 600 }}>{r.title}</td>
                   <td className="num">{r.weightage}</td>
                   <td><input value={r.achievement} readOnly={submitted}

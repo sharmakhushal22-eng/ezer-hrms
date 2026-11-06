@@ -240,3 +240,19 @@ export function blankKpi(seq: number): Kpi {
 export function renumber(kpis: Kpi[]): Kpi[] {
   return (kpis ?? []).map((k, i) => ({ ...k, seq_no: i + 1 }))
 }
+
+/**
+ * HOW A RATING IN PROGRESS IS KEYED, before anything has an id.
+ *
+ * A KPI being typed has no `id` until it is written, so a draft rating cannot
+ * be keyed by one. The KRA's position and the KPI's position within it are
+ * stable for the life of the form and unique together — and `renumber` keeps
+ * them that way across adds and removes.
+ *
+ * Exported rather than spelled inline at each end, because the form writes
+ * these keys and the save reads them: two places building the same string
+ * slightly differently is a rating that silently fails to save. Matches the
+ * fallback `lines()` uses for an unsaved row, so the two agree by
+ * construction.
+ */
+export const selfKey = (kraSeq: number, kpiSeq: number) => `${kraSeq}.${kpiSeq}`

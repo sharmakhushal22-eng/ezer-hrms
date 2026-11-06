@@ -168,12 +168,30 @@ const CASES: [string, React.ReactNode][] = [
       actionLabel="Your self rating" actionNote="Rate every KRA, then submit — it locks" />],
   ['emp-kras', <KraTab key="ek" kras={KRAS} onChange={() => {}} locked={false}
       lockGate={{ open: false, because: 'Neither side has acknowledged this yet.' }}
+      // 220: self rating happens per KPI, inside each measure's row. Passed
+      // here so the harness actually shows that path — without onSelfChange
+      // the whole assessment block is hidden, and it was invisible before.
+      // Two of the eight measures left unrated, so the rated and unrated
+      // treatments are both on screen.
+      self={Object.fromEntries(KRAS.flatMap(k => (k.kpis ?? []).map(x => [
+        `${k.seq_no}.${x.seq_no}`,
+        { achievement: x.seq_no === 1 ? '0.11% across 3 runs' : '',
+          rating: (k.seq_no + x.seq_no) % 4 === 0 ? null : 4,
+          comment: x.seq_no === 1 ? 'Pre-run validation checklist introduced' : '' },
+      ])))}
+      onSelfChange={() => {}}
       onSubmit={() => {}} />],
   ['emp-o2o',  <OneToOneTab key="eo" logs={LOGS} managerName="Priya Nair (RM L1)" />],
   ['emp-self', <SelfRatingTab key="es" submitted={false} onSubmit={() => {}} onChange={() => {}}
-      rows={LINES.map(l => ({ goalId: l.goalId, title: l.title, weightage: l.weightage,
-        category: l.category, achievement: '0.11% across 3 runs', rating: l.self ?? null,
-        comment: 'Pre-run validation checklist introduced' }))} />],
+      // 220: one row per KPI. Built from the KRA fixtures so the harness
+      // shows the real shape — a KRA with three measures produces three rows.
+      rows={KRAS.flatMap(k => (k.kpis ?? []).map(x => ({
+        goalId: String(k.seq_no), kpiId: `${k.seq_no}.${x.seq_no}`,
+        title: `${k.kra_title} · ${x.kpi_metric}`,
+        weightage: x.weightage, category: k.category,
+        achievement: '0.11% across 3 runs',
+        rating: LINES.find(l => l.goalId === String(k.seq_no))?.self ?? null,
+        comment: 'Pre-run validation checklist introduced' })))} />],
   ['emp-result', <ResultTab key="er" published lines={LINES} finalRating={4}
       finalisedBy="Anil Kapoor (HOD)" finalisedOn="2026-08-30" deptAverage={3.24}
       appreciation="Took the payroll checklist from an idea to something the whole department now runs."
