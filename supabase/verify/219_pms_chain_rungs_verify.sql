@@ -44,6 +44,24 @@
 -- difference, and it is the project's own rule: ENGINE COMPUTES, SQL DECIDES.
 --
 -- READ THE RESULT: anything whose `result` is not PASS or INFO is a problem.
+--
+-- ── LAST RUN: 2026-11-06, 15 PASS · 5 INFO · 0 FAIL ────────────────────────
+--
+-- Check 4 is the one that mattered: Postgres actually refused the empty
+-- array — "new row for relation pms_chain violates check constraint
+-- pms_chain_has_rungs". 218's version of that constraint accepted it, and
+-- every unit test passed over the defect because they read the migration's
+-- text rather than asking the database.
+--
+-- Check 8 closed the other gap. site_hr_id and regional_head_id appear in no
+-- migration and nowhere else in the product, so nothing in the repository
+-- could prove they exist; information_schema returned all five rung columns,
+-- and check 9 confirmed the rm_l1_id / rm_l2_id that 218 wrongly documented
+-- are not there.
+--
+-- Coverage that run: HOD 398/398 · RM_L1 395/398 · SITE_HR 395/398 ·
+-- RM_L2 261/398 · REGIONAL_HEAD 0/398. The same numbers the chain builder
+-- shows, arrived at independently.
 
 BEGIN;
 

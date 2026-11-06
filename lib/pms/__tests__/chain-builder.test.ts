@@ -125,12 +125,18 @@ test('the two columns nothing in this repo can vouch for are verified in SQL', (
   // there is no independent in-repo source for them and no unit test here
   // can prove they exist — the honest answer is that only the database can.
   //
-  // MEASURED on the live database 2026-11-05: both exist; site_hr_id is set
-  // for 395 of 398 active employees, regional_head_id for 0.
+  // CLOSED, 2026-11-06, by running supabase/verify/219_pms_chain_rungs_verify.sql
+  // against the live database. Check 8 asked information_schema and returned
+  // all five columns — hod_id, l1_manager_id, l2_manager_id, regional_head_id,
+  // site_hr_id — and check 9 confirmed rm_l1_id and rm_l2_id are not there.
+  // Coverage the same run reported: HOD 398/398, RM_L1 395/398, SITE_HR
+  // 395/398, RM_L2 261/398, REGIONAL_HEAD 0/398, matching what the chain
+  // builder reads through its own route.
   //
-  // What keeps them honest from here is the verify script, which asks
-  // information_schema. So what this test can check is that the script
-  // actually asks about every rung on the menu — including these two.
+  // The gap is closed for today's schema, not for ever: nothing in this repo
+  // re-proves it, so a column renamed outside this folder would go unnoticed
+  // again until the script is next run. What this test can do is keep the
+  // script asking about every rung on the menu — including these two.
   const list = VERIFY.match(/column_name IN \(([^)]*'regional_head_id'[^)]*)\)/)
   assert.ok(list, 'the verify script no longer checks the rung columns')
   const checked = [...list[1].matchAll(/'([^']+)'/g)].map(m => m[1])
