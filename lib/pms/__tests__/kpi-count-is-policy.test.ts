@@ -262,3 +262,83 @@ test('the KRA form reads the limits from the policy, not the defaults', () => {
     assert.ok(form.includes(call), `${call} — the policy is not being passed`)
   }
 })
+
+// ── reading a policy from a database that is behind the code ─────────────
+//
+// REPORTED, FROM THE BROWSER: `[pms] could not read the policy: [42703]
+// column pms_policies.min_kpi_per_kra does not exist`.
+//
+// I knew this window existed and judged it acceptable because the screens
+// "degrade gracefully to DEFAULT_RULES". That was wrong, and the error above
+// is what wrong looks like: every one of these readers treats a policy READ
+// ERROR as a policy ABSENCE, so one unknown column costs the custom chain,
+// the one-to-one rule, the finaliser, carry-forward and the eligibility
+// cut-off together — and the screen then renders confidently against the
+// shipped defaults rather than showing anything is missing.
+
+import { FRESH_POLICY_COLS, withoutFreshCols } from '../policy.ts'
+
+test('stripping a young column leaves valid select syntax', () => {
+  // First, middle, last, and embedded — the four positions these columns
+  // actually occupy across the four readers.
+  assert.equal(withoutFreshCols('min_kpi_per_kra,a,b'), 'a,b')
+  assert.equal(withoutFreshCols('a,min_kpi_per_kra,b'), 'a,b')
+  assert.equal(withoutFreshCols('a,b,min_kpi_per_kra'), 'a,b')
+  assert.equal(withoutFreshCols('a, min_kpi_per_kra, b'), 'a, b')
+  assert.equal(withoutFreshCols('id, min_kpi_per_kra, max_kpi_per_kra, one_to_one_mandatory'),
+    'id, one_to_one_mandatory')
+  // Embedded, as the cycle header reads them.
+  assert.equal(
+    withoutFreshCols('status, pms_policies(frequency, min_kpi_per_kra, max_kpi_per_kra)'),
+    'status, pms_policies(frequency)')
+  // A select with none of them is returned untouched.
+  assert.equal(withoutFreshCols('a,b,c'), 'a,b,c')
+  // No stray commas anywhere.
+  for (const s of ['min_kpi_per_kra,a', 'a,max_kpi_per_kra', 'a,min_kpi_per_kra,b']) {
+    const out = withoutFreshCols(s)
+    assert.ok(!/,\s*,/.test(out) && !/^\s*,/.test(out) && !/,\s*$/.test(out),
+      `stripping "${s}" produced invalid syntax: "${out}"`)
+  }
+})
+
+test('a column name that merely contains another is not mangled', () => {
+  // \b matters, and there are TWO regexes — one taking the comma after the
+  // name, one taking the comma before it. A longer name can collide with
+  // either, from either end, so both directions need a case.
+  //
+  // Found by mutation: dropping \b from the first regex survived a test that
+  // only exercised a SUFFIX collision, because that case is caught by the
+  // second regex. A test that passes for the wrong reason is not a test.
+  assert.equal(withoutFreshCols('a,max_kpi_per_kra_override,b'),
+    'a,max_kpi_per_kra_override,b', 'a longer name starting with the column')
+  assert.equal(withoutFreshCols('a,custom_max_kpi_per_kra,b'),
+    'a,custom_max_kpi_per_kra,b', 'a longer name ending with the column')
+  assert.equal(withoutFreshCols('legacy_min_kpi_per_kra,a'),
+    'legacy_min_kpi_per_kra,a', 'a longer name ending with the column, first')
+  assert.equal(withoutFreshCols('a,min_kpi_per_kra_v2'),
+    'a,min_kpi_per_kra_v2', 'a longer name starting with the column, last')
+})
+
+test('every policy reader retries without the young columns', () => {
+  // THE FIX FOR THE REPORTED ERROR. All four readers react to a failed
+  // policy read by treating the policy as absent, so all four need the
+  // retry — not just the dashboard, which was the only one that had it.
+  const READERS = [
+    'app/dashboard/pms/page.tsx',
+    'app/api/ess/pms/route.ts',
+    'components/ess/Performance.tsx',
+    'components/pms/CycleHeader.tsx',
+  ]
+  for (const f of READERS) {
+    const src = read(f)
+    assert.match(src, /withoutFreshCols\(/,
+      `${f} selects the young columns but never retries without them — on a `
+      + 'database behind the code it loses the WHOLE policy, not just those '
+      + 'columns')
+  }
+})
+
+test('the young-column list still covers 221', () => {
+  assert.ok((FRESH_POLICY_COLS as readonly string[]).includes('min_kpi_per_kra'))
+  assert.ok((FRESH_POLICY_COLS as readonly string[]).includes('max_kpi_per_kra'))
+})

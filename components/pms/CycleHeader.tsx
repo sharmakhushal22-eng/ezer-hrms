@@ -24,6 +24,7 @@ import {
   stageStates, nextAction, humanDate, DEFAULT_RULES,
   type Period, type Progress, type Roles, type Queues, type Rules,
 } from '@/lib/pms/cycle'
+import { withoutFreshCols } from '@/lib/pms/policy'
 import {
   PERIOD_OPEN, GOAL_SENT, GOAL_STATUS, GOAL_AWAITING_RM, WORKFLOW, reached,
 } from '@/lib/pms/status'
@@ -65,22 +66,38 @@ export default function CycleHeader({
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const per = await supabase.from('pms_periods')
-        .select('id, period_name, period_code, financial_year, period_no, period_start, period_end,'
-              + ' kra_window_from, kra_window_to,'
-              + ' self_rating_from, self_rating_to, rm_review_from, rm_review_to,'
-              + ' finalise_from, finalise_to, result_publish_date, status,'
-              // The KRA rules come with the period's policy in the same
-              // query. They were hardcoded to DEFAULT_RULES below, so an
-              // admin changing min_kra_count left this header still saying
-              // "You need between 4 and 10".
-              + ' pms_policies(frequency, min_kra_count, max_kra_count,'
-              + ' total_weightage, min_weightage_per_kra,'
-              + ' min_kpi_per_kra, max_kpi_per_kra)')
+      const PERIOD_SELECT =
+          'id, period_name, period_code, financial_year, period_no, period_start, period_end,'
+        + ' kra_window_from, kra_window_to,'
+        + ' self_rating_from, self_rating_to, rm_review_from, rm_review_to,'
+        + ' finalise_from, finalise_to, result_publish_date, status,'
+        // The KRA rules come with the period's policy in the same
+        // query. They were hardcoded to DEFAULT_RULES below, so an
+        // admin changing min_kra_count left this header still saying
+        // "You need between 4 and 10".
+        + ' pms_policies(frequency, min_kra_count, max_kra_count,'
+        + ' total_weightage, min_weightage_per_kra,'
+        + ' min_kpi_per_kra, max_kpi_per_kra)'
+      const ask = (sel: string) => supabase.from('pms_periods').select(sel)
         // NOT .eq('status','ACTIVE') — pms_periods has no such value, and
         // that filter matches zero rows forever without ever erroring.
         .in('status', PERIOD_OPEN)
         .order('period_start', { ascending: false }).limit(1).maybeSingle()
+      let per = await ask(PERIOD_SELECT)
+
+      /**
+       * TOLERANT OF A MIGRATION NOT HAVING RUN.
+       *
+       * The policy columns are EMBEDDED in this select, so one the database
+       * does not know about fails the PERIOD read as well — and this header
+       * renders nothing at all without a period. A missing KPI limit would
+       * blank the whole cycle banner, which is a great deal louder than the
+       * setting it came from.
+       */
+      if (per.error) {
+        const narrowed = withoutFreshCols(PERIOD_SELECT)
+        if (narrowed !== PERIOD_SELECT) per = await ask(narrowed)
+      }
 
       if (missing(per.error)) { if (alive) { setPending(true); setD(EMPTY) } ; return }
       const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null

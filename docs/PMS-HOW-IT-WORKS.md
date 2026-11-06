@@ -526,7 +526,7 @@ able to build a chain whose results can never be published.
 
 ### Built and verified
 
-Everything above. 1,073 PMS tests, migrations through 221, production build
+Everything above. 1,077 PMS tests, migrations through 221, production build
 compiles, `tsc` at the project's 39-error baseline.
 
 ### Not finished

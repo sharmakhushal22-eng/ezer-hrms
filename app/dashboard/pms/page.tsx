@@ -35,7 +35,7 @@ import { mayWritePostFinal, postFinalNote, pmsRoleOf,
          type PostFinalOwner } from '@/lib/pms/postFinal'
 import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
-import { type Frequency, type Policy } from '@/lib/pms/policy'
+import { withoutFreshCols, type Frequency, type Policy } from '@/lib/pms/policy'
 import { localToday } from '@/components/pms/CycleHeader'
 import { chainAsksByEmployee, type ChainAsks,
          type RecRowDb } from '@/lib/pms/hrQueue'
@@ -155,22 +155,6 @@ const POLICY_SELECT =
   + ' min_kpi_per_kra, max_kpi_per_kra,'
   + ' include_notice_period, include_exited'
 
-/**
- * COLUMNS YOUNGER THAN SOME DEPLOYED DATABASES.
- *
- * Selecting a column PostgREST does not know about fails the WHOLE request,
- * which would take out the policy list, the config tab, the company narrowing
- * and with it the publish workspace — for the sake of one field. These are
- * stripped and the select retried, each with a default that is the SAFE
- * reading rather than the convenient one.
- *
- * A column leaves this list once its migration is everywhere; keeping it here
- * costs one retry on the first failure and nothing otherwise.
- */
-const FRESH_POLICY_COLS = [
-  'hr_head_final_rating',                      // 211
-  'min_kpi_per_kra', 'max_kpi_per_kra',        // 221
-] as const
 
 const SCREEN_KEY: Partial<Record<Tab, string>> = {}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
@@ -533,8 +517,7 @@ export default function PmsPage() {
        * before its migration must not read as "no rule applies".
        */
       if (pol.error) {
-        const narrowed = FRESH_POLICY_COLS.reduce(
-          (sel, col) => sel.replace(` ${col},`, ''), POLICY_SELECT)
+        const narrowed = withoutFreshCols(POLICY_SELECT)
         if (narrowed !== POLICY_SELECT) {
           polQ = supabase.from('pms_policies').select(narrowed)
           if (co) polQ = polQ.eq('company_id', co)

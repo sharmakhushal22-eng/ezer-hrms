@@ -364,16 +364,19 @@ test('both new selects survive 211 not having run', () => {
   // config tab and the company narrowing; the rating select feeds the
   // publish workspace and the ratings summary.
   //
-  // 221 generalised the policy retry: it used to name hr_head_final_rating
-  // and strip that one column, and now strips every column in
-  // FRESH_POLICY_COLS at once. What this test cares about is unchanged — that
-  // the retry EXISTS and that it covers 211's column — so it asserts both,
-  // rather than the shape of the `if`.
+  // 221 generalised the policy retry twice over. It used to name
+  // hr_head_final_rating and strip that one column inline; it then stripped a
+  // local list; it now calls withoutFreshCols from lib/pms/policy.ts, which
+  // all four policy readers share. What this test cares about has not changed
+  // — that the retry EXISTS and that it still covers 211's column — so it
+  // asserts those two things rather than the shape of the code.
   assert.match(PAGE, /if \(pol\.error\) \{/, 'the policy select has no retry')
-  assert.match(PAGE, /FRESH_POLICY_COLS\.reduce\(/,
+  assert.match(PAGE, /withoutFreshCols\(POLICY_SELECT\)/,
     'the retry does not strip the young columns')
-  const fresh = PAGE.slice(PAGE.indexOf('const FRESH_POLICY_COLS'),
-                           PAGE.indexOf('] as const', PAGE.indexOf('const FRESH_POLICY_COLS')))
+  const policy = read('lib/pms/policy.ts')
+  const fresh = policy.slice(policy.indexOf('export const FRESH_POLICY_COLS'),
+                             policy.indexOf('] as const',
+                               policy.indexOf('export const FRESH_POLICY_COLS')))
   assert.match(fresh, /'hr_head_final_rating'/,
     '211\'s column is no longer in the retry list, so a database without 211 '
     + 'loses the whole policy read again')

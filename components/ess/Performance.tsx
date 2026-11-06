@@ -41,6 +41,7 @@ import {
   IconBuilding, type IconProps,
 } from '@/lib/ui'
 import type { ActionTab } from '@/lib/pms/cycle'
+import { withoutFreshCols } from '@/lib/pms/policy'
 import {
   EMP_TABS, DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
   AnalyticsTab, ChainBanner, type EmpTab, type Who, type SelfRow, type KraSelf,
@@ -229,19 +230,39 @@ function usePeriod(employeeId: string) {
     // would have refused — the screen would simply have disagreed with it.
     const pid = (p.data as { policy_id?: string }).policy_id
     if (pid) {
-      const po = await supabase.from('pms_policies')
-        // 218: chain_id AND the chain it points at, in one read. A second
-        // round trip for the rungs would leave a window where the screen
-        // knows a custom chain is selected and not what is in it — and would
-        // draw the preset's track for that window.
-        .select('approval_chain,who_can_finalise,final_review_one_to_one,'
-              + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
-              + 'min_kpi_per_kra,max_kpi_per_kra,'
-              + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner,'
-              + 'one_to_one_mandatory,chain_id,pms_chain(rungs)')
-        .eq('id', pid).maybeSingle()
+      // 218: chain_id AND the chain it points at, in one read. A second
+      // round trip for the rungs would leave a window where the screen
+      // knows a custom chain is selected and not what is in it — and would
+      // draw the preset's track for that window.
+      const SEL = 'approval_chain,who_can_finalise,final_review_one_to_one,'
+                + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
+                + 'min_kpi_per_kra,max_kpi_per_kra,'
+                + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner,'
+                + 'one_to_one_mandatory,chain_id,pms_chain(rungs)'
+      const ask = (sel: string) =>
+        supabase.from('pms_policies').select(sel).eq('id', pid).maybeSingle()
+      let po = await ask(SEL)
+      /**
+       * TOLERANT OF A MIGRATION NOT HAVING RUN.
+       *
+       * One unknown column fails the whole request, and the line below turns
+       * that into `setPolicy(null)` — which this screen reads as "no policy",
+       * not as "could not read the policy". So a database missing 221 lost
+       * the custom chain, the one-to-one rule, the finaliser, carry-forward
+       * AND the eligibility cut-off, and then rendered confidently against
+       * the shipped defaults.
+       *
+       * Reported exactly that way: `column pms_policies.min_kpi_per_kra does
+       * not exist`, from this line. There is always a window between
+       * deploying code and running its migration; the dashboard already had
+       * this retry and the other three readers did not.
+       */
+      if (po.error) {
+        const narrowed = withoutFreshCols(SEL)
+        if (narrowed !== SEL) po = await ask(narrowed)
+      }
       if (po.error) logFail('could not read the policy', po.error)
-      setPolicy(po.error ? null : (po.data as Policy | null))
+      setPolicy(po.error ? null : (po.data as unknown as Policy | null))
     } else {
       setPolicy(null)
     }
