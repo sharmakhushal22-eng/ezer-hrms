@@ -83,6 +83,8 @@ function Shell({ employeeId, tab, go, canApprove, canRaiseMrf, adminMode, notify
     ind.style.width = `${on.offsetWidth}px`
     ind.style.height = `${on.offsetHeight}px`
     ind.style.transform = `translate(${on.offsetLeft}px, ${on.offsetTop}px)`
+    // On a phone the strip scrolls; keep the open tab in view rather than off the edge.
+    if (nav.scrollWidth > nav.clientWidth) nav.scrollLeft = on.offsetLeft - (nav.clientWidth - on.offsetWidth) / 2
   }, [])
 
   useLayoutEffect(() => {

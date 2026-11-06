@@ -33,6 +33,13 @@ const CLASS_OF: Record<DayKind, string> = {
   HOLIDAY: 'holiday', WEEKLY_OFF: 'off', UPCOMING: 'next',
 };
 
+/** The day in one or two characters, for a phone where a seventh of the screen cannot
+ *  hold "Weekly off". The attendance calendar's own legend, so the two read alike. */
+const CODE_OF: Record<DayKind, string> = {
+  PRESENT: 'P', LATE: 'LT', HALF_DAY: '½', MISS_IN: 'MI', MISS_OUT: 'MO', IN_PROGRESS: 'In',
+  ABSENT: 'A', LEAVE: 'L', HALF_LEAVE: '½L', HOLIDAY: 'H', WEEKLY_OFF: 'WO', UPCOMING: '–',
+};
+
 interface Cell { date: string; kind: DayKind | null; in: string | null; out: string | null; minutes: number | null; note: string | null; late: boolean }
 
 export default function WeekStrip({ data, prefs, liveIn, nav }: { data: TodayPayload; prefs: Prefs; liveIn: Date | null; nav: (r: string) => void }) {
@@ -100,6 +107,7 @@ export default function WeekStrip({ data, prefs, liveIn, nav }: { data: TodayPay
               <div className="dd">{new Date(d.date + 'T00:00:00').getDate()}</div>
               <div className="st">{l1 || ' '}</div>
               <div className="st">{l2 || ' '}</div>
+              <div className="st-code" aria-hidden="true">{d.kind ? CODE_OF[d.kind] : (future ? '–' : ' ')}</div>
               <div className="bar"><i style={{ width: `${w}%` }} /></div>
             </div>
           );
