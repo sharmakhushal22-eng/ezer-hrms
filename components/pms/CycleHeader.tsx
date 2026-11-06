@@ -27,7 +27,7 @@ import {
 import {
   PERIOD_OPEN, GOAL_SENT, GOAL_STATUS, GOAL_AWAITING_RM, WORKFLOW, reached,
 } from '@/lib/pms/status'
-import { C, F, W, S, R } from '@/lib/ui'
+import { C, F, W, S, R, IconPerformance, IconCalendar, IconClock } from '@/lib/ui'
 
 /** PostgREST's "that relation does not exist". */
 const MISSING = 'PGRST205'
@@ -195,7 +195,11 @@ export default function CycleHeader({
   }, [employeeId, roles.isRM, roles.isHOD])
 
   if (!d) {
-    return <div style={{ height: 132, borderRadius: R.sm, background: C.sunken, opacity: .5 }} aria-hidden />
+    return (
+      <div className="pms-skel" aria-hidden style={{ minHeight: 132 }}>
+        <i /><i /><i />
+      </div>
+    )
   }
 
   const states = stageStates(d.period, d.progress, today)
@@ -247,50 +251,41 @@ export default function CycleHeader({
   ]
 
   return (
-    <section style={{ marginBottom: S.lg }} aria-label="Where this appraisal cycle is">
-      <div className="pms-head" style={{
-        border: `1px solid ${C.line}`, borderRadius: R.sm,
-        padding: `${S.lg}px ${S.lg}px ${S.lg}px`, marginBottom: S.sm,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
-                      gap: S.md, flexWrap: 'wrap', marginBottom: S.lg }}>
-          <div style={{ minWidth: 0 }}>
-            <h2 style={{
-              fontSize: F.title, fontWeight: W.bold, color: C.ink, letterSpacing: '-.015em',
-              lineHeight: 1.15, margin: 0,
-            }}>{d.naming.title}</h2>
-            <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: 4 }}>
-              {d.naming.sub}
-              {d.naming.code && (
-                <span style={{
-                  marginLeft: 8, padding: '2px 7px', borderRadius: 999, background: C.sunken,
-                  color: C.muted, fontSize: F.micro, fontWeight: W.semi, whiteSpace: 'nowrap',
-                }} title="The code your HR team files this under">{d.naming.code}</span>
-              )}
-            </div>
+    <section className="pms-cycle" aria-label="Where this appraisal cycle is">
+      {/* The period, on the hero band. The track sits on a white panel that
+          overlaps the band's lower edge, so the two read as one object. */}
+      <div className="pms-hero pms-hero-cycle">
+        <div className="pms-hero-main">
+          <div className="pms-hero-eyebrow">
+            <span className="pms-hero-ico" aria-hidden="true"><IconPerformance size={15} /></span>
+            My performance
           </div>
-          <div style={{ fontSize: F.micro, color: C.muted, maxWidth: '38ch', textAlign: 'right' }}>
+          <h2>{d.naming.title}</h2>
+          <div className="pms-hero-sub">{d.naming.sub}</div>
+          <div className="pms-hero-chips">
+            {d.naming.code && (
+              <span className="pms-hero-chip" title="The code your HR team files this under">
+                {d.naming.code}
+              </span>
+            )}
+            {d.span && <span className="pms-hero-chip"><IconCalendar size={13} /> {d.span}</span>}
+            {d.frequency && <span className="pms-hero-chip"><IconClock size={13} /> {d.frequency}</span>}
+          </div>
+        </div>
+      </div>
+      <div className="pms-cycle-track">
+        <div className="pms-cycle-track-head">
+          <span className="pms-cycle-track-t">Where the cycle is</span>
+          <span className="k" style={{ maxWidth: '52ch' }}>
             {pending
               ? 'These are the stages every appraisal goes through. The module is not switched on in this database yet, so nothing is filled in.'
               : 'Hover any stage to see what happens in it.'}
-          </div>
+          </span>
         </div>
-
         <CycleStepper states={states as never} detail={detail as never} />
       </div>
-
-      <div style={{ marginBottom: S.sm }}><NextAction action={action} onGo={onGo} /></div>
+      <div style={{ marginBottom: S.md }}><NextAction action={action} onGo={onGo} /></div>
       <StatCards stats={stats} />
-
-      <style>{`
-        /* A ground, not a flat panel: the rail of stages sits on a faint
-           vertical wash so the stepper reads as a surface with things on it
-           rather than a row of icons floating on the page. */
-        .pms-head{
-          background: linear-gradient(180deg, ${C.surface} 0%, ${C.canvas} 100%);
-          box-shadow: 0 1px 2px rgba(16,36,100,.05);
-        }
-      `}</style>
     </section>
   )
 }

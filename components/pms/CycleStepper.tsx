@@ -105,11 +105,11 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
         .pms-stepper{
           --pms-done:        ${C.positive};
           --pms-done-ink:    #FFFFFF;
-          --pms-active:      ${C.brand};
+          --pms-active:      linear-gradient(135deg, ${C.brand}, ${C.brandDeep});
           --pms-active-ring: ${C.brandTint};
           --pms-blocked:     ${C.warning};
           --pms-blocked-ring:${C.warningTint};
-          --pms-todo:        ${C.sunken};
+          --pms-todo:        ${C.surface};
           --pms-todo-ink:    ${C.muted};
           display:grid; grid-auto-flow:column; grid-auto-columns:1fr;
           gap:0; align-items:start; width:100%;
@@ -126,9 +126,9 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
            air removes the overlap altogether, and reads as a connector
            between stages rather than a rule ruled under them. */
         .pms-line{
-          position:absolute; top:13px; height:2px; border-radius:2px;
-          left:  calc(-50% + 18px);
-          right: calc(50%  + 18px);
+          position:absolute; top:15px; height:3px; border-radius:3px;
+          left:  calc(-50% + 20px);
+          right: calc(50%  + 20px);
           background:${C.line};
         }
         /* The completed part of the line GROWS from the previous stage, so
@@ -136,7 +136,8 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
            always there. */
         .pms-line::after{
           content:''; position:absolute; inset:0; border-radius:inherit;
-          background:${C.positive}; transform-origin:left center; transform:scaleX(0);
+          background:linear-gradient(90deg, ${C.positive}, color-mix(in oklab, ${C.positive} 60%, ${C.info}));
+          transform-origin:left center; transform:scaleX(0);
           transition: transform .5s cubic-bezier(.2,.8,.2,1);
         }
         .pms-line[data-filled="1"]::after{ transform:scaleX(1) }
@@ -146,7 +147,7 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
            rather than printed on it. The inset highlight is what does the
            work — a flat disc with a drop shadow reads as a sticker. */
         .pms-dot{
-          width:28px; height:28px; border-radius:50%; display:grid; place-items:center;
+          width:32px; height:32px; border-radius:50%; display:grid; place-items:center;
           font-size:${F.tiny}px; font-weight:${W.bold}; flex-shrink:0;
           position:relative; z-index:1;
           box-shadow:
@@ -157,6 +158,15 @@ export default function CycleStepper({ states, detail, dense }: CycleStepperProp
                       transform .22s cubic-bezier(.2,.8,.2,1);
         }
         .pms-dot-wrap:hover .pms-dot{ transform: translateY(-2px) scale(1.06) }
+        /* Edition 2. The not-started dot is an outlined disc on the surface,
+           and every filled dot takes the THEME'S on-accent ink — the inline
+           white stayed white on the dark theme's light fills (about 2:1). */
+        .pms-step[data-state="upcoming"] .pms-dot{ box-shadow: inset 0 0 0 2px ${C.lineStrong} !important }
+        .pms-step[data-state="done"] .pms-dot,
+        .pms-step[data-state="active"] .pms-dot,
+        .pms-step[data-state="blocked"] .pms-dot{ color:${C.onAccent} !important }
+        .pms-step[data-state="active"] .pms-dot{
+          box-shadow: 0 0 0 5px ${C.brandTint}, 0 8px 18px -8px ${C.brand} !important }
 
         /* The stage you are ON breathes. One element, slowly, so it reads as
            "here" rather than as an alarm — and it is the only thing moving

@@ -19,7 +19,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
 import { companyFilter, canSeeScreen, canManage } from '@/lib/rms/resolve'
-import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
+import { C as TK, F, W, S, R, E, numeric,
+         IconPerformance, IconHome, IconSliders, IconAdmin, IconPolicies,
+         IconEmployees, IconAward, IconReports, IconUpload, IconAlert,
+         IconDownload, IconOrgChart, IconCalendar, IconBell,
+         type IconProps } from '@/lib/ui'
 import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
 import { PERIOD_OPEN } from '@/lib/pms/status'
@@ -173,6 +177,38 @@ const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
  * row for, which is the privilege removal migration 142 warns about.
  */
 const CONFIGURES_THE_MODULE = new Set<Tab>(['setup'])
+
+/**
+ * HOW THE RAIL IS DRAWN — presentation only.
+ *
+ * Which tabs a person may open is decided below exactly as before, by the
+ * same canSeeScreen / canManage pair the API enforces. This only says which
+ * group a visible tab is drawn in and which icon it wears, so eleven tabs
+ * read as five errands rather than eleven competing words. A tab missing
+ * from this map is still drawn, in the last group — a new tab can never
+ * vanish because nobody gave it an icon.
+ */
+type NavGroup = 'cycle' | 'setup' | 'run' | 'results' | 'insight'
+const NAV_GROUPS: { key: NavGroup; label: string }[] = [
+  { key: 'cycle',   label: 'Cycle' },
+  { key: 'setup',   label: 'Set up' },
+  { key: 'run',     label: 'Run' },
+  { key: 'results', label: 'Results' },
+  { key: 'insight', label: 'Insight' },
+]
+const NAV: Partial<Record<Tab, { group: NavGroup; icon: (p: IconProps) => React.ReactNode }>> = {
+  overview: { group: 'cycle',   icon: IconHome },
+  config:   { group: 'setup',   icon: IconSliders },
+  setup:    { group: 'setup',   icon: IconAdmin },
+  policies: { group: 'setup',   icon: IconPolicies },
+  fill:     { group: 'run',     icon: IconEmployees },
+  pip:      { group: 'run',     icon: IconAlert },
+  publish:  { group: 'results', icon: IconAward },
+  summary:  { group: 'results', icon: IconReports },
+  upload:   { group: 'results', icon: IconUpload },
+  reports:  { group: 'insight', icon: IconDownload },
+  chain:    { group: 'insight', icon: IconOrgChart },
+}
 
 
 /**
@@ -1447,6 +1483,27 @@ export default function PmsPage() {
       hint: 'the twelve steps, the reporting line, and who may do what' },
   ]
 
+  // The rail. WHO MAY SEE WHICH TAB is the same two checks as before — the
+  // screen permission and, for the configuring tab, canManage — and only the
+  // tabs that pass are then grouped for drawing.
+  const visibleTabs = TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))
+                        && (canManage(grant, 'Performance')
+                            || !CONFIGURES_THE_MODULE.has(t.k)))
+  const lastGroup = NAV_GROUPS[NAV_GROUPS.length - 1].key
+  const navGroups = NAV_GROUPS
+    .map(g => ({ ...g, tabs: visibleTabs.filter(t => (NAV[t.k]?.group ?? lastGroup) === g.key) }))
+    .filter(g => g.tabs.length)
+
+  // The hero's four numbers are the roll-up the overview already computes —
+  // nothing new is fetched for them.
+  const heroKpis = roll && roll.total > 0 ? [
+    { l: 'In this cycle',  v: roll.total, share: 1 },
+    { l: 'Not started',    v: roll.notStarted, share: roll.notStarted / roll.total },
+    { l: 'With the chain', v: roll.counts.SUBMITTED + roll.counts.IN_REVIEW,
+      share: (roll.counts.SUBMITTED + roll.counts.IN_REVIEW) / roll.total },
+    { l: 'Finalised',      v: roll.counts.FINALISED, share: roll.done },
+  ] : null
+
   // Every rule in pms.css is scoped under .pms so its very generic class names
   // (.card, .stat, .pill, .btn) cannot leak into another module. That scoping
   // means the class below is not decoration — without it the whole stylesheet
@@ -1456,66 +1513,96 @@ export default function PmsPage() {
   return (
     <div className="pms" style={{ padding: `${S.lg}px ${S.xl}px ${S.huge}px`, maxWidth: 1440, margin: '0 auto' }}>
 
-      <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: TK.ink, letterSpacing: '-.02em' }}>
-            Performance
-          </h1>
-          <div style={{ marginTop: 3, fontSize: F.small, color: TK.muted }}>
+      <header className="pms-hero">
+        <div className="pms-hero-main">
+          <div className="pms-hero-eyebrow">
+            <span className="pms-hero-ico" aria-hidden="true"><IconPerformance size={15} /></span>
+            Performance management
+          </div>
+          <h1>Performance</h1>
+          <div className="pms-hero-sub">
             {naming
-              ? <>Running now: <strong style={{ color: TK.ink }}>{naming.title}</strong> · {naming.sub}</>
+              ? <>Running now: <strong>{naming.title}</strong> · {naming.sub}</>
               : <>KRAs, the appraisal cycle and ratings. You are not a step in the chain:
                  it runs Employee → manager → second manager → HOD, and you keep it moving.</>}
           </div>
+          <div className="pms-hero-chips">
+            {ready === true && <span className="pms-hero-chip pms-live">Module live</span>}
+            <span className="pms-hero-chip"><IconCalendar size={13} /> FY {fyLabel}</span>
+            {naming?.code && <span className="pms-hero-chip">{naming.code}</span>}
+          </div>
         </div>
-        {ready === true && (
-          <span style={{ fontSize: F.micro, fontWeight: W.semi, padding: '5px 11px', borderRadius: 999,
-                         background: TK.positiveTint, color: TK.positive }}>Module live</span>
+        {heroKpis && (
+          <div className="pms-hero-kpis" aria-label="This cycle at a glance">
+            {heroKpis.map(k => (
+              <div key={k.l} className="pms-hero-kpi">
+                <div className="pms-hk-v">{k.v}</div>
+                <div className="pms-hk-l">{k.l}</div>
+                <div className="pms-hk-bar" aria-hidden="true">
+                  <span style={{ width: `${Math.round(Math.max(0, Math.min(1, k.share)) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         )}
-      </div>
+      </header>
 
-      {/* The mockup's tab strip: an underline, not a row of filled pills. With
-          eight tabs, eight filled chips read as eight competing buttons; an
-          underline puts the weight on the one you are in. */}
-      <div className="tabs">
-        {TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))
-                        && (canManage(grant, 'Performance')
-                            || !CONFIGURES_THE_MODULE.has(t.k))).map(t => (
-          <button key={t.k} type="button" onClick={() => setTab(t.k)}
-                  className={tab === t.k ? 'on' : undefined}
-                  aria-current={tab === t.k ? 'page' : undefined}>
-            {t.label}
-          </button>
+      {/* The rail: icon pills, grouped by errand. Still one <button> per tab,
+          with aria-current on the open one — choosing a tab works exactly as
+          it did. */}
+      <nav className="pms-nav" aria-label="Performance sections">
+        {navGroups.map(g => (
+          <div key={g.key} className="pms-nav-group" role="group" aria-label={g.label}>
+            <span className="pms-nav-label" aria-hidden="true">{g.label}</span>
+            {g.tabs.map(t => {
+              const Ico = NAV[t.k]?.icon
+              return (
+                <button key={t.k} type="button" onClick={() => setTab(t.k)}
+                        className={tab === t.k ? 'on' : undefined}
+                        aria-current={tab === t.k ? 'page' : undefined}>
+                  {Ico && <Ico size={15} />}
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
         ))}
-      </div>
+      </nav>
       {/* The hint belongs on the page, not in a tooltip: a title attribute is
           invisible to touch and to anyone not hovering. */}
-      <div style={{ fontSize: F.micro, color: TK.faint, marginTop: -10, marginBottom: 16 }}>
-        {TABS.find(t => t.k === tab)?.hint}
-      </div>
-
-      {commitNote && (
-        <Card>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <span aria-hidden="true">✓</span>
-            <div style={{ fontSize: F.small, lineHeight: 1.6 }}>
-              {commitNote}
-              <button type="button" onClick={() => setCommitNote(null)}
-                      style={{ marginLeft: 10, background: 'none', border: 'none',
-                               color: TK.muted, cursor: 'pointer', fontSize: F.small,
-                               textDecoration: 'underline', padding: 0 }}>
-                dismiss
-              </button>
+      {(() => {
+        const cur = TABS.find(t => t.k === tab)
+        const Ico = NAV[tab]?.icon
+        return (
+          <div className="pms-pagehead">
+            {Ico && <span className="pms-pagehead-ico" aria-hidden="true"><Ico size={20} /></span>}
+            <div style={{ minWidth: 0 }}>
+              <h2 className="pms-pagehead-t">{cur?.label}</h2>
+              <div className="pms-pagehead-d">{cur?.hint}</div>
             </div>
           </div>
-        </Card>
+        )
+      })()}
+
+      {commitNote && (
+        <div className="pms-toast" role="status">
+          <span className="pms-toast-ico" aria-hidden="true"><IconBell size={15} /></span>
+          <div className="pms-toast-body">{commitNote}</div>
+          <button type="button" className="pms-toast-x" onClick={() => setCommitNote(null)}>
+            Dismiss
+          </button>
+        </div>
       )}
-      {loading && <Card><div style={{ color: TK.muted, fontSize: F.small }}>Loading…</div></Card>}
+      {loading && (
+        <div className="pms-skel" aria-busy="true" aria-label="Loading">
+          <i /><i /><i />
+        </div>
+      )}
 
       {!loading && err && (
-        <Card tone="critical">
-          <strong style={{ color: TK.critical }}>Could not read the performance module.</strong>
-          <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6 }}>{err}</div>
+        <Card tone="critical" icon={<IconAlert size={18} />}
+              title="Could not read the performance module.">
+          {err}
         </Card>
       )}
 
@@ -1576,32 +1663,35 @@ export default function PmsPage() {
   )
 }
 
-function Card({ children, tone }: { children: React.ReactNode; tone?: 'critical' | 'warning' }) {
-  const edge = tone === 'critical' ? TK.critical : tone === 'warning' ? TK.warning : TK.line
-  const fill = tone === 'critical' ? TK.criticalTint : tone === 'warning' ? TK.warningTint : TK.surface
+/**
+ * The shell's own notice card — module pending, no period, coverage, errors.
+ * An icon tile and a title on the left, the explanation beside it; the tone
+ * tints the edge and the tile and nothing else.
+ */
+function Card({ children, tone, icon, title }: {
+  children?: React.ReactNode; tone?: 'critical' | 'warning'
+  icon?: React.ReactNode; title?: React.ReactNode
+}) {
+  const cls = tone === 'critical' ? 'pms-note pms-crit' : tone === 'warning' ? 'pms-note pms-warn' : 'pms-note'
   return (
-    <div style={{ background: fill, border: `1px solid ${edge}`, borderRadius: 14,
-                  padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
-      {children}
+    <div className={cls}>
+      {icon && <span className="pms-note-ico" aria-hidden="true">{icon}</span>}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        {title && <div className="pms-note-t">{title}</div>}
+        {children != null && <div className="pms-note-d">{children}</div>}
+      </div>
     </div>
   )
 }
 
 function MigrationPending() {
   return (
-    <Card tone="warning">
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
-        Waiting on migration 066
-      </div>
-      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8, lineHeight: 1.6, maxWidth: 720 }}>
-        The performance module's tables do not exist in the database yet. The screens and the
-        approval flow are built; they have nothing to read until{' '}
-        <code style={{ background: TK.sunken, padding: '1px 6px', borderRadius: 6, fontSize: F.micro }}>
-          supabase/migrations/066_pms_module.sql
-        </code>{' '}
-        is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
-      </div>
-      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 10, lineHeight: 1.6, maxWidth: 720 }}>
+    <Card tone="warning" icon={<IconAlert size={18} />} title="Waiting on migration 066">
+      The performance module's tables do not exist in the database yet. The screens and the
+      approval flow are built; they have nothing to read until{' '}
+      <code>supabase/migrations/066_pms_module.sql</code>{' '}
+      is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
+      <div style={{ marginTop: 10 }}>
         It is handed to Nayan rather than run from here. This project does not apply schema
         changes itself. Nothing on this page is broken; it is waiting.
       </div>
@@ -1611,15 +1701,10 @@ function MigrationPending() {
 
 function Overview({ cov }: { cov: Coverage | null }) {
   return (
-    <Card>
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink, marginBottom: 4 }}>
-        Cycle overview
-      </div>
-      <div style={{ fontSize: F.small, color: TK.muted, lineHeight: 1.6 }}>
-        No active period yet. Create a policy in Setup and periods generate from its frequency:
-        monthly, quarterly, half-yearly or annual.
-        {cov && cov.hodResolved === 0 && ' Note the HOD warning below: the finalise step has nobody to route to yet.'}
-      </div>
+    <Card icon={<IconCalendar size={18} />} title="Cycle overview">
+      No active period yet. Create a policy in Setup and periods generate from its frequency:
+      monthly, quarterly, half-yearly or annual.
+      {cov && cov.hodResolved === 0 && ' Note the HOD warning below: the finalise step has nobody to route to yet.'}
     </Card>
   )
 }
@@ -1645,26 +1730,24 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
   ]
   const blocked = cov.total - cov.hodResolved
   return (
-    <Card tone={cov.hodResolved < cov.total ? 'warning' : undefined}>
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>Approval chain coverage</div>
-      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 4, marginBottom: 12 }}>
-        An appraisal can only move to a stage that has somebody mapped to it.
-      </div>
-      <div style={{ display: 'grid', gap: 8 }}>
+    <Card tone={cov.hodResolved < cov.total ? 'warning' : undefined}
+          icon={<IconOrgChart size={18} />} title="Approval chain coverage">
+      An appraisal can only move to a stage that has somebody mapped to it.
+      <div className="pms-cov">
         {rows.map(r => {
           const pct = cov.total ? Math.round((r.n / cov.total) * 100) : 0
           const bad = r.n === 0
           return (
-            <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ width: 60, fontSize: F.small, fontWeight: W.semi, color: TK.ink }}>{r.label}</div>
-              <div style={{ flex: 1, minWidth: 160, height: 8, borderRadius: 999, background: TK.sunken, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%',
-                              background: bad ? TK.critical : pct === 100 ? TK.positive : TK.warning }} />
+            <div key={r.label} className="pms-cov-row">
+              <div className="pms-cov-k">{r.label}</div>
+              <div className="pms-cov-bar">
+                <span style={{ width: `${pct}%`,
+                               background: bad ? TK.critical : pct === 100 ? TK.positive : TK.warning }} />
               </div>
-              <div style={{ ...numeric, width: 96, fontSize: F.small, color: bad ? TK.critical : TK.ink, fontWeight: W.semi }}>
+              <div className="pms-cov-n" style={{ ...numeric, color: bad ? TK.critical : TK.ink }}>
                 {r.n} / {cov.total}
               </div>
-              <div style={{ fontSize: F.micro, color: TK.faint, minWidth: 180 }}>
+              <div className="pms-cov-m">
                 <code>{r.col}</code> · {r.note}
               </div>
             </div>
@@ -1673,12 +1756,13 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
       </div>
       {/* How the HOD number above was arrived at. Shown because "0 mapped" on
           its own does not tell anyone which of the two sources to go and fill. */}
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${TK.line}` }}>
-        <div style={{ fontSize: F.micro, fontWeight: W.semi, letterSpacing: '.05em',
-                      textTransform: 'uppercase', color: TK.faint, marginBottom: 8 }}>
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${TK.line}` }}>
+        <div style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: 0,
+                       color: TK.faint, marginBottom: 8 }}>
           How HOD resolves
         </div>
-        <ol style={{ margin: 0, paddingLeft: 18, fontSize: F.small, color: TK.muted, lineHeight: 1.8 }}>
+        <ol style={{ margin: 0, paddingLeft: 20, fontSize: F.small, color: TK.muted, lineHeight: 1.8,
+                     listStyle: 'decimal' }}>
           <li>
             <code>employees.hod_id</code>: explicit override for matrix and dotted-line cases
             {' · '}<strong style={{ color: TK.ink }}>{cov.hodOverride}</strong> set

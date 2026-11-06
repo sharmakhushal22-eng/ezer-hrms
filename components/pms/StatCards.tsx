@@ -32,12 +32,14 @@ export interface Stat {
   tone?: Tone
 }
 
+// Edges are real tokens now. They were `${C.positive}33`, which expands to
+// `var(--ez-positive)33` — not a colour at all, so the border was dropped.
 const TONES: Record<Tone, { ink: string; bar: string; wash: string; edge: string }> = {
-  neutral: { ink: C.ink,      bar: C.muted,    wash: C.surface, edge: C.line },
-  brand:   { ink: C.brand,    bar: C.brand,    wash: C.brandTint, edge: C.brandEdge },
-  good:    { ink: C.positive, bar: C.positive, wash: C.positiveTint, edge: `${C.positive}33` },
-  warn:    { ink: C.warning,  bar: C.warning,  wash: C.warningTint, edge: `${C.warning}44` },
-  bad:     { ink: C.critical, bar: C.critical, wash: C.criticalTint, edge: `${C.critical}44` },
+  neutral: { ink: C.ink,      bar: C.brand,    wash: C.surface, edge: C.line },
+  brand:   { ink: C.brandDeep, bar: C.brand,   wash: C.brandTint, edge: C.brandEdge },
+  good:    { ink: C.positive, bar: C.positive, wash: C.positiveTint, edge: C.positiveEdge },
+  warn:    { ink: C.warning,  bar: C.warning,  wash: C.warningTint, edge: C.warningEdge },
+  bad:     { ink: C.critical, bar: C.critical, wash: C.criticalTint, edge: C.criticalEdge },
 }
 
 /** True when the reader has asked their system for less movement. Read once
@@ -83,16 +85,18 @@ function Card({ s, i, calm }: { s: Stat; i: number; calm: boolean }) {
     <div
       className="pms-stat"
       style={{
-        background: t.wash, border: `1px solid ${t.edge}`, borderRadius: R.sm,
-        padding: `${S.md}px ${S.md}px ${S.md}px`,
+        background: `linear-gradient(180deg, ${t.wash}, ${C.surface})`,
+        border: `1px solid ${t.edge}`, borderRadius: 16,
+        padding: `${S.md + 2}px ${S.lg}px`,
+        ['--pms-stat-tone' as string]: t.bar,
         // Staggered entrance: the row assembles left to right rather than
         // appearing all at once, which reads as one motion instead of five.
         animationDelay: calm ? undefined : `${i * 55}ms`,
       }}
     >
       <div style={{
-        fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.11em',
-        textTransform: 'uppercase', color: C.muted, marginBottom: 6,
+        fontSize: F.small, fontWeight: W.semi, letterSpacing: 0,
+        color: C.muted, marginBottom: 6,
       }}>{s.label}</div>
 
       <div style={{ display: 'flex', alignItems: 'baseline', gap: 5, flexWrap: 'wrap' }}>
@@ -112,10 +116,10 @@ function Card({ s, i, calm }: { s: Stat; i: number; calm: boolean }) {
 
       {s.fill !== undefined && (
         <div style={{
-          height: 5, borderRadius: 3, background: C.sunken, marginTop: 9, overflow: 'hidden',
+          height: 6, borderRadius: 6, background: C.sunken, marginTop: 10, overflow: 'hidden',
         }}>
           <div className="pms-fill" style={{
-            height: '100%', borderRadius: 3, background: t.bar,
+            height: '100%', borderRadius: 6, background: t.bar,
             width: `${Math.max(0, Math.min(1, s.fill)) * 100}%`,
             transformOrigin: 'left center',
             animationDelay: calm ? undefined : `${140 + i * 55}ms`,
@@ -141,17 +145,21 @@ export default function StatCards({ stats }: { stats: Stat[] }) {
 
       <style>{`
         .pms-stats{
-          display:grid; gap:${S.sm}px;
-          grid-template-columns: repeat(auto-fit, minmax(178px, 1fr));
+          display:grid; gap:${S.md}px;
+          grid-template-columns: repeat(auto-fit, minmax(190px, 1fr));
         }
         /* The lift is a real one: the card rises and its shadow grows with
            it, which is what a raised thing does. A shadow that appears
            without movement reads as a glow. */
         .pms-stat{
-          position:relative;
+          position:relative; overflow:hidden;
           transition: transform .18s cubic-bezier(.2,.8,.2,1), box-shadow .18s ease;
-          box-shadow: 0 1px 2px rgba(16,36,100,.06);
+          box-shadow: 0 1px 2px rgba(16,36,100,.06), 0 8px 22px -16px rgba(16,36,100,.35);
           will-change: transform;
+        }
+        .pms-stat::before{
+          content:''; position:absolute; left:0; right:0; top:0; height:3px;
+          background: linear-gradient(90deg, var(--pms-stat-tone), transparent);
         }
         .pms-stat:hover{
           transform: translateY(-3px);

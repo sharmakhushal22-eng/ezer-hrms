@@ -201,25 +201,50 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
   const band = bandFor(lastRating, bands)
   return (
     <>
-      <Card title={`${who.name} · ${who.code}`}
-            sub={[who.designation, who.department,
-                  who.rmL1 && `RM L1: ${who.rmL1}`, who.rmL2 && `RM L2: ${who.rmL2}`,
-                  who.hod && `HOD: ${who.hod}`].filter(Boolean).join(' · ')}>
-        <div className="stepper">
-          {STAGES.map((s, i) => {
-            const st = stages.find(x => x.key === s.key)
-            const cls = st?.state === 'done' ? 'step done'
-                      : s.key === current ? 'step now' : 'step'
-            return (
-              <div className={cls} key={s.key}>
-                <div className="dot">{i + 1}</div>
-                <div className="t">{s.label}</div>
-                <div className="d">{st?.detail ?? ''}</div>
+      {/* Who this is and who reviews them. The cycle track already sits in
+          the header above every tab, so it is not drawn a second time here;
+          this card says where the person stands in it in one line instead. */}
+      {(() => {
+        const done = stages.filter(x => x.state === 'done').length
+        const now = STAGES.find(x => x.key === current)
+        const line = [
+          who.rmL1 && { k: 'RM L1', v: who.rmL1 },
+          who.rmL2 && { k: 'RM L2', v: who.rmL2 },
+          who.hod  && { k: 'HOD',   v: who.hod },
+        ].filter(Boolean) as { k: string; v: string }[]
+        return (
+          <div className="card pms-profile">
+            <div className="pms-profile-main">
+              <div className="ava pms-profile-ava" aria-hidden="true">
+                {who.name.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}
               </div>
-            )
-          })}
-        </div>
-      </Card>
+              <div style={{ minWidth: 0 }}>
+                <div className="pms-profile-name">{who.name} <span>{who.code}</span></div>
+                <div className="k">{[who.designation, who.department].filter(Boolean).join(' · ')}</div>
+              </div>
+              <div className="pms-profile-now">
+                <div className="pms-profile-now-t">{now ? `Now: ${now.label}` : 'Cycle'}</div>
+                <div className="k">{done} of {STAGES.length} stages done</div>
+                <div className="bar green" aria-hidden="true">
+                  <span style={{ width: `${Math.round((done / STAGES.length) * 100)}%` }} />
+                </div>
+              </div>
+            </div>
+            {line.length > 0 && (
+              <div className="pms-profile-line">
+                <span className="pms-profile-line-k">Reviewed by</span>
+                <span className="pms-profile-chip pms-you">You</span>
+                {line.map(x => (
+                  <span key={x.k} className="pms-profile-step">
+                    <span className="pms-profile-sep" aria-hidden="true">›</span>
+                    <span className="pms-profile-chip"><b>{x.k}</b> {x.v}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <div className="grid g4" style={{ marginBottom: 16 }}>
         <Stat tone="accent" label="Owed from you" value={actionLabel} note={actionNote} />
@@ -312,6 +337,10 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
 
   const set = (i: number, patch: Partial<Kra>) =>
     onChange(kras.map((k, j) => j === i ? { ...k, ...patch } : k))
+  // Presentation: one shade of the brand per KRA, shared by its segment in
+  // the weightage bar and its number badge, so the two read as one object.
+  const shade = (i: number) => `color-mix(in oklab, var(--ez-brand) ${Math.max(30, 100 - i * 11)}%, var(--ez-brand-tint))`
+  const ratedByYou = onSelfChange ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) !== null).length : 0
 
   return (
     <>
@@ -331,24 +360,44 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
         </div>
       )}
 
-      <div className="wmeter">
-        <div className={`big ${m.tone === 'good' ? 'ok' : m.tone === 'bad' ? 'bad' : ''}`}>
-          {check.total}
+      {/* THE WEIGHTAGE, AS THE SET'S SHAPE. One segment per KRA, sized by its
+          weightage, so "where the 100 went" is seen before it is read. Same
+          numbers, same progressbar semantics and the same Add button as the
+          meter it replaces. */}
+      <div className={`pms-kmeter ${m.tone === 'good' ? 'is-good' : m.tone === 'bad' ? 'is-bad' : 'is-warn'}`}>
+        <div className="pms-kmeter-total">
+          <div className="pms-kmeter-n">{check.total}<span>/{rules.totalWeightage}</span></div>
+          <div className="pms-kmeter-l">Weightage</div>
         </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div className={`bar ${m.tone === 'good' ? 'green' : m.tone === 'bad' ? 'red' : 'amber'}`}
-               style={{ marginBottom: 6 }}
+        <div className="pms-kmeter-mid">
+          <div className="pms-kmeter-bar"
                role="progressbar" aria-valuenow={check.total} aria-valuemin={0}
                aria-valuemax={rules.totalWeightage} aria-label="Total weightage">
-            <span style={{ width: `${m.pct}%` }} />
+            {kras.map((k, i) => (k.weightage || 0) > 0 && (
+              <span key={i} title={`KRA ${i + 1}: ${k.weightage}`}
+                    style={{ flexGrow: k.weightage || 0,
+                             flexBasis: 0,
+                             maxWidth: `${Math.min(100, ((k.weightage || 0) / Math.max(rules.totalWeightage, check.total || 1)) * 100)}%`,
+                             background: shade(i) }}>
+                <i>{k.weightage}%</i>
+              </span>
+            ))}
+            {check.total < rules.totalWeightage && (
+              <span className="pms-kmeter-gap" style={{ flexGrow: rules.totalWeightage - check.total, flexBasis: 0 }} />
+            )}
           </div>
-          <div className="k">
-            {m.says} · {check.count} {check.count === 1 ? 'KRA' : 'KRAs'}{' '}
-            (minimum {rules.minKra}, maximum {rules.maxKra})
+          <div className="pms-kmeter-says">
+            <b>{m.says}</b>
+            <span>{check.count} {check.count === 1 ? 'KRA' : 'KRAs'} · minimum {rules.minKra}, maximum {rules.maxKra}</span>
+            {onSelfChange && kras.length > 0 && (
+              <span className={`pms-kmeter-rated${ratedByYou === kras.length ? ' is-done' : ''}`}>
+                {ratedByYou} of {kras.length} rated by you
+              </span>
+            )}
           </div>
         </div>
         {!locked && (
-          <button className="btn ghost sm" type="button" disabled={!add.allowed}
+          <button className="btn" type="button" disabled={!add.allowed}
                   title={add.reason}
                   onClick={() => onChange([...kras, {
                     seq_no: kras.length + 1, kra_title: '', kpi_metric: '',
@@ -373,102 +422,125 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                 </div>
               </div>
             )}
-        <div className="tblwrap">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 34 }}>#</th>
-                <th>KRA / objective</th><th>KPI metric</th><th>Target</th>
-                <th>Category</th><th style={{ width: 104 }} className="num">Weightage</th>
-                {onSelfChange && <><th>What you delivered</th><th>Your rating</th></>}
-                {!locked && <th style={{ width: 40 }}><span className="sr-only">Remove</span></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {/* colSpan is counted, not guessed: 6 base columns, +1 for the
-                  remove button when unlocked, +2 when rating is shown. A wrong
-                  one leaves the empty state squeezed into a single cell. */}
-              {kras.length === 0 ? (
-                <tr><td colSpan={6 + (locked ? 0 : 1) + (onSelfChange ? 2 : 0)}
-                        style={{ textAlign: 'center', padding: '22px 14px' }}>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing written yet</div>
-                  <div className="k">
-                    Add {rules.minKra} to {rules.maxKra} KRAs. They are what
-                    your rating will be measured against, so they are worth the time.
+
+        {/* One card per KRA instead of a nine-column table row. The title gets
+            the width it needs, the measure sits under it, and the self rating
+            — when this stage asks for it — is part of the same card. Every
+            input keeps its aria-label, value, readOnly and onChange. */}
+        {kras.length === 0 ? (
+          <div className="pms-kempty">
+            <div className="pms-kempty-t">Nothing written yet</div>
+            <div className="k">
+              Add {rules.minKra} to {rules.maxKra} KRAs. They are what
+              your rating will be measured against, so they are worth the time.
+            </div>
+          </div>
+        ) : (
+          <div className="pms-klist">
+            {kras.map((k, i) => {
+              const thin = check.thin.includes(k.seq_no)
+              const mine = self?.[k.seq_no]?.rating ?? null
+              const mineBand = bands.find(b => b.value === mine)
+              return (
+                <div key={i} className={`pms-kra${thin ? ' is-thin' : ''}${locked ? ' is-locked' : ''}${mine !== null ? ' is-rated' : ''}`}
+                     style={{ ['--kra-c' as string]: shade(i) }}>
+                  <div className="pms-kra-top">
+                    <span className="pms-kra-no" aria-hidden="true">{i + 1}</span>
+                    <div className="pms-kra-title">
+                      <label htmlFor={`kra-${i}-title`}>KRA / objective</label>
+                      <input id={`kra-${i}-title`} value={k.kra_title} readOnly={locked} aria-label={`KRA ${i + 1} title`}
+                             placeholder="What you are accountable for"
+                             onChange={e => set(i, { kra_title: e.target.value })} />
+                    </div>
+                    <div className="pms-kra-w">
+                      <label htmlFor={`kra-${i}-w`}>Weightage</label>
+                      <div className="pms-kra-wbox">
+                        <input id={`kra-${i}-w`} type="number" min={0} max={100} value={k.weightage} readOnly={locked}
+                               aria-label={`KRA ${i + 1} weightage`}
+                               aria-invalid={thin || undefined}
+                               style={thin ? { borderColor: 'var(--ez-critical)' } : undefined}
+                               onChange={e => set(i, { weightage: Number(e.target.value) || 0 })} />
+                        <span aria-hidden="true">%</span>
+                      </div>
+                    </div>
+                    {!locked && (
+                      <button className="pms-kra-x" type="button" disabled={!del.allowed}
+                              title={del.reason ?? 'Remove this KRA'}
+                              aria-label={`Remove KRA ${i + 1}`}
+                              onClick={() => onChange(kras.filter((_, j) => j !== i)
+                                .map((x, j) => ({ ...x, seq_no: j + 1 })))}>×</button>
+                    )}
                   </div>
-                </td></tr>
-              ) : kras.map((k, i) => {
-                const thin = check.thin.includes(k.seq_no)
-                return (
-                  <tr key={i}>
-                    <td className="num">{i + 1}</td>
-                    <td><input value={k.kra_title} readOnly={locked} aria-label={`KRA ${i + 1} title`}
-                               placeholder="What you are accountable for"
-                               onChange={e => set(i, { kra_title: e.target.value })} /></td>
-                    <td><input value={k.kpi_metric} readOnly={locked} aria-label={`KRA ${i + 1} metric`}
-                               placeholder="How it is measured"
-                               onChange={e => set(i, { kpi_metric: e.target.value })} /></td>
-                    <td><input value={k.target_value} readOnly={locked} aria-label={`KRA ${i + 1} target`}
-                               placeholder="The number to hit"
-                               onChange={e => set(i, { target_value: e.target.value })} /></td>
-                    <td>
-                      <select value={k.category} disabled={locked} aria-label={`KRA ${i + 1} category`}
+
+                  <div className="pms-kra-fields">
+                    <div>
+                      <label htmlFor={`kra-${i}-metric`}>KPI metric</label>
+                      <input id={`kra-${i}-metric`} value={k.kpi_metric} readOnly={locked} aria-label={`KRA ${i + 1} metric`}
+                             placeholder="How it is measured"
+                             onChange={e => set(i, { kpi_metric: e.target.value })} />
+                    </div>
+                    <div>
+                      <label htmlFor={`kra-${i}-target`}>Target</label>
+                      <input id={`kra-${i}-target`} value={k.target_value} readOnly={locked} aria-label={`KRA ${i + 1} target`}
+                             placeholder="The number to hit"
+                             onChange={e => set(i, { target_value: e.target.value })} />
+                    </div>
+                    <div>
+                      <label htmlFor={`kra-${i}-cat`}>Category</label>
+                      <select id={`kra-${i}-cat`} value={k.category} disabled={locked} aria-label={`KRA ${i + 1} category`}
                               onChange={e => set(i, { category: e.target.value as Category })}>
                         {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
                       </select>
-                    </td>
-                    <td className="num">
-                      <input type="number" min={0} max={100} value={k.weightage} readOnly={locked}
-                             aria-label={`KRA ${i + 1} weightage`}
-                             aria-invalid={thin || undefined}
-                             style={thin ? { borderColor: 'var(--ez-critical)' } : undefined}
-                             onChange={e => set(i, { weightage: Number(e.target.value) || 0 })} />
-                    </td>
-                    {/* §3's merge: rated beside the KRA it belongs to, rather
-                        than on a separate screen found afterwards. */}
-                    {onSelfChange && (
-                      <>
-                        <td>
-                          <input value={self?.[k.seq_no]?.achievement ?? ''} readOnly={selfSubmitted}
+                    </div>
+                  </div>
+
+                  {/* §3's merge: rated beside the KRA it belongs to, rather
+                      than on a separate screen found afterwards. */}
+                  {onSelfChange && (
+                    <div className="pms-kra-self">
+                      <div className="pms-kra-self-h">
+                        <span>Your self assessment</span>
+                        {mineBand
+                          ? <span className="pill p-brand">{mineBand.value} · {mineBand.label}</span>
+                          : <span className="pill p-grey">Not rated yet</span>}
+                      </div>
+                      <div className="pms-kra-self-g">
+                        <div>
+                          <label htmlFor={`kra-${i}-ach`}>What you delivered</label>
+                          <input id={`kra-${i}-ach`} value={self?.[k.seq_no]?.achievement ?? ''} readOnly={selfSubmitted}
                                  aria-label={`Achievement for KRA ${i + 1}`}
                                  placeholder="The number you actually hit"
                                  onChange={e => onSelfChange(k.seq_no, { achievement: e.target.value })} />
-                          <input value={self?.[k.seq_no]?.comment ?? ''} readOnly={selfSubmitted}
-                                 aria-label={`Comment for KRA ${i + 1}`}
-                                 placeholder="Evidence a manager could check"
-                                 style={{ marginTop: 4 }}
-                                 onChange={e => onSelfChange(k.seq_no, { comment: e.target.value })} />
-                        </td>
-                        <td>
-                          <div className="btnrow" role="group"
+                        </div>
+                        <div>
+                          <label htmlFor={`kra-${i}-ev`}>Evidence</label>
+                          <textarea id={`kra-${i}-ev`} value={self?.[k.seq_no]?.comment ?? ''} readOnly={selfSubmitted}
+                                    aria-label={`Comment for KRA ${i + 1}`} rows={1}
+                                    placeholder="Evidence a manager could check"
+                                    onChange={e => onSelfChange(k.seq_no, { comment: e.target.value })} />
+                        </div>
+                        <div>
+                          <span className="pms-kra-flabel">Your rating</span>
+                          <div className="pms-kra-rate" role="group"
                                aria-label={`Your rating for KRA ${i + 1}`}>
                             {bands.map(b => (
                               <button key={b.value} type="button" disabled={selfSubmitted}
-                                      className={self?.[k.seq_no]?.rating === b.value ? 'btn sm' : 'btn ghost sm'}
+                                      className={mine === b.value ? 'btn sm' : 'btn ghost sm'}
                                       title={`${b.value}: ${b.label}`}
                                       onClick={() => onSelfChange(k.seq_no, { rating: b.value })}>
                                 {b.value}
                               </button>
                             ))}
                           </div>
-                        </td>
-                      </>
-                    )}
-                    {!locked && (
-                      <td>
-                        <button className="btn ghost sm" type="button" disabled={!del.allowed}
-                                title={del.reason ?? 'Remove this KRA'}
-                                aria-label={`Remove KRA ${i + 1}`}
-                                onClick={() => onChange(kras.filter((_, j) => j !== i)
-                                  .map((x, j) => ({ ...x, seq_no: j + 1 })))}>×</button>
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
+                        </div>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              )
+            })}
+          </div>
+        )}
 
         {check.faults.length > 0 && (
           <div className="banner b-red" style={{ marginTop: 14, marginBottom: 0 }}>

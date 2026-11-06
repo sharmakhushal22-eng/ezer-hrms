@@ -14,7 +14,7 @@
 
 import { FILL_ORDER, FILL_LABEL, FILL_MEANING, type FillStatus } from '@/lib/pms/status'
 import { readiness, distribution, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
-import { C, F, W, S, R } from '@/lib/ui'
+import { C, F, W, S, R, IconCheck, IconAlert, IconClock } from '@/lib/ui'
 
 const TONE: Record<FillStatus, string> = {
   NOT_STARTED: C.critical,
@@ -24,76 +24,115 @@ const TONE: Record<FillStatus, string> = {
   FINALISED:   C.positive,
 }
 
+// Edges are real tokens. They were `${C.positive}33` — `var(--ez-positive)33`
+// is not a colour, so the browser dropped the border altogether.
 const HEAD_TONE = {
-  good: { bg: C.positiveTint, ink: C.positive, edge: `${C.positive}33` },
-  warn: { bg: C.warningTint,  ink: C.warning,  edge: `${C.warning}44` },
-  bad:  { bg: C.criticalTint, ink: C.critical, edge: `${C.critical}44` },
+  good: { bg: C.positiveTint, ink: C.positive, edge: C.positiveEdge },
+  warn: { bg: C.warningTint,  ink: C.warning,  edge: C.warningEdge },
+  bad:  { bg: C.criticalTint, ink: C.critical, edge: C.criticalEdge },
   neutral: { bg: C.sunken,    ink: C.inkSoft,  edge: C.line },
 }
 
 export function ReadinessBanner({ r }: { r: Rollup }) {
   const v = readiness(r)
   const t = HEAD_TONE[v.tone]
+  const Ico = v.tone === 'good' ? IconCheck : v.tone === 'neutral' ? IconClock : IconAlert
   return (
-    <div style={{ background: t.bg, border: `1px solid ${t.edge}`, borderRadius: R.sm,
-                  padding: `${S.md}px ${S.lg}px`, marginBottom: S.sm }}>
-      <div style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.12em',
-                    textTransform: 'uppercase', color: t.ink, marginBottom: 5 }}>
-        Where this cycle stands
-      </div>
-      <div style={{ fontSize: F.lead, fontWeight: W.bold, color: C.ink, lineHeight: 1.25 }}>
-        {v.headline}
-      </div>
-      <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: 5, lineHeight: 1.55, maxWidth: '72ch' }}>
-        {v.detail}
-      </div>
-      {r.unknown > 0 && (
-        // Never folded into another bucket to make the arithmetic tidy — a
-        // status the app does not recognise is a thing somebody must look at.
-        <div style={{ fontSize: F.small, color: C.warning, marginTop: 8, fontWeight: W.semi }}>
-          {r.unknown} {r.unknown === 1 ? 'row has' : 'rows have'} a status this screen does not
-          recognise. They are counted separately rather than guessed at.
+    <div style={{ position: 'relative', overflow: 'hidden',
+                  background: `linear-gradient(90deg, ${t.bg}, ${C.surface})`,
+                  border: `1px solid ${t.edge}`, borderRadius: 16,
+                  padding: `${S.lg}px ${S.lg + 2}px`, marginBottom: S.md,
+                  display: 'flex', gap: S.md, alignItems: 'flex-start',
+                  boxShadow: '0 8px 24px -18px rgba(16,36,100,.35)' }}>
+      <span aria-hidden style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: 4, background: t.ink }} />
+      <span aria-hidden style={{ width: 40, height: 40, borderRadius: 13, flexShrink: 0,
+                                 display: 'grid', placeItems: 'center', background: C.surface,
+                                 color: t.ink, boxShadow: `inset 0 0 0 1px ${t.edge}` }}>
+        <Ico size={19} strokeWidth={2} />
+      </span>
+      <div style={{ minWidth: 0 }}>
+        <div style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: 0,
+                       color: t.ink, marginBottom: 4 }}>
+          Where this cycle stands
         </div>
-      )}
+        <div style={{ fontSize: F.title, fontWeight: W.bold, color: C.ink, lineHeight: 1.25,
+                      letterSpacing: '-.015em' }}>
+          {v.headline}
+        </div>
+        <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: 5, lineHeight: 1.55, maxWidth: '78ch' }}>
+          {v.detail}
+        </div>
+        {r.unknown > 0 && (
+          <div style={{ fontSize: F.small, color: C.warning, marginTop: 8, fontWeight: W.semi }}>
+            {r.unknown} {r.unknown === 1 ? 'row has' : 'rows have'} a status this screen does not
+            recognise. They are counted separately rather than guessed at.
+          </div>
+        )}
+      </div>
     </div>
   )
 }
 
-/** One bar, five segments, each labelled. A stacked bar with a legend makes
- *  the reader do a colour lookup; labelling in place does not. */
+/**
+ * The five fill states as one segmented bar and five stage tiles, in the
+ * order the work happens. Each tile carries its count, its share and what
+ * the state MEANS — the meaning is what tells HR whether to nudge or chase.
+ */
 export function FillDistribution({ r }: { r: Rollup }) {
   const rows = distribution(r)
   if (!r.total) return null
   return (
-    <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.sm,
-                  padding: `${S.md}px ${S.lg}px ${S.lg}px` }}>
-      <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink, marginBottom: 3 }}>
-        Everyone in this cycle, by where they have got to
-      </div>
-      <div style={{ fontSize: F.micro, color: C.muted, marginBottom: S.md }}>
-        {r.total} {r.total === 1 ? 'person' : 'people'} · left to right is the order the work happens
+    <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 16,
+                  padding: `${S.lg}px ${S.lg + 2}px ${S.lg + 2}px`,
+                  boxShadow: '0 1px 2px rgba(16,24,40,.04), 0 8px 24px -16px rgba(16,36,100,.3)' }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline',
+                    gap: S.md, flexWrap: 'wrap', marginBottom: S.md }}>
+        <div>
+          <div style={{ fontSize: F.lead, fontWeight: W.bold, color: C.ink, letterSpacing: '-.01em' }}>
+            Everyone in this cycle, by where they have got to
+          </div>
+          <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2 }}>
+            {r.total} {r.total === 1 ? 'person' : 'people'} · left to right is the order the work happens
+          </div>
+        </div>
       </div>
 
-      <div style={{ display: 'flex', height: 12, borderRadius: 6, overflow: 'hidden',
-                    background: C.sunken, marginBottom: S.md }}>
+      <div style={{ display: 'flex', gap: 3, height: 14, borderRadius: 8, overflow: 'hidden',
+                    background: C.sunken, marginBottom: S.lg }}>
         {rows.map(x => x.n > 0 && (
           <div key={x.key} title={`${x.label}: ${x.n}`}
-               style={{ width: `${x.share * 100}%`, background: TONE[x.key] }} />
+               style={{ width: `${x.share * 100}%`, background: TONE[x.key], borderRadius: 4 }} />
         ))}
       </div>
 
-      <div style={{ display: 'grid', gap: 7 }}>
+      <div style={{ display: 'grid', gap: S.sm,
+                    gridTemplateColumns: 'repeat(auto-fit, minmax(170px, 1fr))' }}>
         {rows.map(x => (
-          <div key={x.key} style={{ display: 'flex', alignItems: 'baseline', gap: 9, flexWrap: 'wrap' }}>
-            <span aria-hidden style={{ width: 9, height: 9, borderRadius: 3, flexShrink: 0,
-                                       background: x.n ? TONE[x.key] : C.line, transform: 'translateY(1px)' }} />
-            <span style={{ fontSize: F.small, fontWeight: W.semi, color: x.n ? C.ink : C.faint,
-                           minWidth: 92 }}>{x.label}</span>
-            <span style={{ fontSize: F.small, fontWeight: W.bold, color: x.n ? C.ink : C.faint,
-                           fontVariantNumeric: 'tabular-nums', minWidth: 34 }}>{x.n}</span>
-            <span style={{ fontSize: F.micro, color: C.muted, flex: 1, minWidth: 200 }}>
+          <div key={x.key} style={{
+            padding: `${S.md}px ${S.md}px ${S.md - 2}px`, borderRadius: 14,
+            background: x.n ? `color-mix(in oklab, ${TONE[x.key]} 7%, ${C.surface})` : C.surface,
+            border: `1px solid ${x.n ? `color-mix(in oklab, ${TONE[x.key]} 28%, ${C.line})` : C.line}`,
+            minWidth: 0,
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span aria-hidden style={{ width: 9, height: 9, borderRadius: 3, flexShrink: 0,
+                                         background: x.n ? TONE[x.key] : C.line }} />
+              <span style={{ fontSize: F.small, fontWeight: W.semi, color: x.n ? C.ink : C.faint }}>
+                {x.label}
+              </span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, marginTop: 6 }}>
+              <span style={{ fontSize: F.display, fontWeight: W.bold, letterSpacing: '-.02em',
+                             color: x.n ? C.ink : C.faint, fontVariantNumeric: 'tabular-nums',
+                             lineHeight: 1.1 }}>{x.n}</span>
+              <span style={{ fontSize: F.micro, fontWeight: W.semi, color: C.muted,
+                             fontVariantNumeric: 'tabular-nums' }}>
+                {Math.round(x.share * 100)}%
+              </span>
+            </div>
+            <div style={{ fontSize: F.micro, color: C.muted, marginTop: 6, lineHeight: 1.45 }}>
               {FILL_MEANING[x.key]}
-            </span>
+            </div>
           </div>
         ))}
       </div>
@@ -101,8 +140,6 @@ export function FillDistribution({ r }: { r: Rollup }) {
   )
 }
 
-/** Departments, worst first. The list exists to be worked down, so the one
- *  with the most people who have not started sorts to the top. */
 export function DepartmentTable({
   rows, nameOf,
 }: { rows: DeptRollup[]; nameOf: (id: string | null) => string }) {
@@ -114,8 +151,9 @@ export function DepartmentTable({
     // inside it, and the whole page picked up 210px of sideways scroll at
     // 320px. The overflow container below cannot do its job until its
     // ancestors are allowed to be narrower than what they hold.
-    <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.sm,
-                  padding: `${S.md}px ${S.lg}px ${S.lg}px`, minWidth: 0 }}>
+    <div style={{ background: C.surface, border: `1px solid ${C.line}`, borderRadius: 16,
+                  padding: `${S.lg}px ${S.lg + 2}px ${S.lg + 2}px`, minWidth: 0,
+                  boxShadow: '0 1px 2px rgba(16,24,40,.04), 0 8px 24px -16px rgba(16,36,100,.3)' }}>
       <div style={{ fontSize: F.small, fontWeight: W.bold, color: C.ink, marginBottom: 3 }}>
         By department: most people not started first
       </div>
@@ -129,8 +167,8 @@ export function DepartmentTable({
               {['Department', 'People', 'Not started', 'Finalised', ''].map((h, i) => (
                 <th key={h || i} style={{
                   textAlign: i === 0 || i === 4 ? 'left' : 'right',
-                  fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.08em',
-                  textTransform: 'uppercase', color: C.muted,
+                  fontSize: F.micro, fontWeight: W.bold, letterSpacing: 0,
+                   color: C.muted,
                   padding: '0 10px 8px', whiteSpace: 'nowrap',
                 }}>{h}</th>
               ))}
@@ -152,7 +190,7 @@ export function DepartmentTable({
                   {d.counts.FINALISED}
                 </td>
                 <td style={{ padding: '9px 10px', width: 132 }}>
-                  <div style={{ display: 'flex', height: 7, borderRadius: 4, overflow: 'hidden',
+                  <div style={{ display: 'flex', gap: 2, height: 8, borderRadius: 5, overflow: 'hidden',
                                 background: C.sunken }} aria-hidden>
                     {FILL_ORDER.map(k => d.counts[k] > 0 && (
                       <div key={k} style={{ width: `${(d.counts[k] / d.total) * 100}%`, background: TONE[k] }} />

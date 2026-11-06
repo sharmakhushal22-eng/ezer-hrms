@@ -35,6 +35,11 @@ import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import '@/components/pms/pms.css'
 import CycleHeader from '@/components/pms/CycleHeader'
+import {
+  IconHome, IconTemplates, IconCalendar, IconUser, IconAward, IconReports,
+  IconEmployees, IconCheck, IconPerformance, IconAlert, IconLock, IconHeart,
+  IconBuilding, type IconProps,
+} from '@/lib/ui'
 import type { ActionTab } from '@/lib/pms/cycle'
 import {
   EMP_TABS, DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
@@ -428,6 +433,27 @@ function localToday(): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
 }
 
+/**
+ * The icon each tab and scope wears — presentation only. Keyed on the tab
+ * constants' own keys, so a tab added to EMP_TABS / MGR_TABS / HOD_TABS
+ * without an entry here still renders, just without an icon.
+ */
+const TAB_ICON: Record<string, (p: IconProps) => React.ReactNode> = {
+  dashboard: IconHome, kras: IconTemplates, oneToOne: IconCalendar, self: IconUser,
+  result: IconAward, analytics: IconReports,
+  team: IconEmployees, approve: IconCheck, rate: IconPerformance, pip: IconAlert,
+  finalise: IconLock, feedback: IconHeart, published: IconAward, deptAnalytics: IconReports,
+}
+const SCOPE_ICON: Record<string, (p: IconProps) => React.ReactNode> = {
+  me: IconUser, team: IconEmployees, dept: IconBuilding,
+}
+/** What each side of the review is for, in the words on its card. */
+const SCOPE_META: Record<string, { title: string; does: string }> = {
+  me:   { title: 'Me',            does: 'Your KRAs, self rating, one-to-ones and result' },
+  team: { title: 'My team',       does: 'Approve KRAs, hold one-to-ones and rate the people you manage' },
+  dept: { title: 'My department', does: 'Review, finalise and publish results for your department' },
+}
+
 export default function Performance({ employeeId }: { employeeId: string }) {
   const [roles, setRoles] = useState<Roles | null>(null)
   const [moduleReady, setModuleReady] = useState<boolean | null>(null)
@@ -476,7 +502,11 @@ export default function Performance({ employeeId }: { employeeId: string }) {
   }, [])
 
   if (moduleReady === false) return <ModulePending />
-  if (!roles) return <div className="pms"><div className="k">Loading…</div></div>
+  if (!roles) return (
+    <div className="pms">
+      <div className="pms-skel" aria-busy="true" aria-label="Loading"><i /><i /><i /></div>
+    </div>
+  )
 
   const scopes: { k: Scope; label: string }[] = [
     { k: 'me', label: 'Me' },
@@ -528,36 +558,84 @@ export default function Performance({ employeeId }: { employeeId: string }) {
     else setHodTab(tab as HodTab)
   }
 
+  const scopeMeta = (k: Scope) => {
+    const m = SCOPE_META[k]
+    const count = k === 'team' ? `${roles.reportees} ${roles.reportees === 1 ? 'person' : 'people'}`
+                : k === 'dept' && roles.deptCount > 0
+                  ? `${roles.deptCount} ${roles.deptCount === 1 ? 'department' : 'departments'}`
+                : null
+    return { ...m, count }
+  }
+  const here = scopeMeta(scope)
+  const HereIco = SCOPE_ICON[scope]
+
   return (
     <div className="pms">
-      <CycleHeader
-        employeeId={employeeId}
-        roles={{ isEmployee: true, isRM: roles.isRM, isHOD: roles.isHOD }}
-        onGo={goToAction}
-      />
-
+      {/* WHOSE PERFORMANCE — the first choice on the screen for anyone who
+          manages people. Three cards rather than a small switch: each says
+          what you do on that side and how many people it covers. Same
+          role="tablist", aria-selected and setScope as the switch it
+          replaces. Not drawn for someone with no team: there is one side. */}
       {scopes.length > 1 && (
-        <div className="chips" role="tablist" aria-label="Which side of the review"
-             style={{ marginBottom: 4 }}>
-          {scopes.map(s => (
-            <button key={s.k} type="button" role="tab" aria-selected={scope === s.k}
-                    className={scope === s.k ? 'chip sel' : 'chip'}
-                    onClick={() => setScope(s.k)}>{s.label}</button>
-          ))}
+        <div className={`pms-scopes pms-scopes-${scopes.length}`} role="tablist" aria-label="Which side of the review">
+          {scopes.map(s => {
+            const Ico = SCOPE_ICON[s.k]
+            const m = scopeMeta(s.k)
+            return (
+              <button key={s.k} type="button" role="tab" aria-selected={scope === s.k}
+                      className={`pms-scope pms-scope-${s.k}${scope === s.k ? ' on' : ''}`}
+                      onClick={() => setScope(s.k)}>
+                <span className="pms-scope-ico" aria-hidden="true">{Ico && <Ico size={20} />}</span>
+                <span className="pms-scope-txt">
+                  <span className="pms-scope-t">{m.title}</span>
+                  <span className="pms-scope-d">{m.does}</span>
+                </span>
+                {m.count && <span className="pms-scope-n">{m.count}</span>}
+              </button>
+            )
+          })}
         </div>
       )}
 
-      <div className="tabs">
-        {tabs.map(t => (
-          <button key={t.k} type="button" onClick={() => pick(t.k)}
-                  className={activeKey === t.k ? 'on' : undefined}
-                  aria-current={activeKey === t.k ? 'page' : undefined}>
-            {t.label}
-          </button>
-        ))}
+      {/* Your own cycle belongs to your own side. On My team and My
+          department the workspace comes straight under the cards, so a
+          manager is not scrolling past their own appraisal to reach their
+          team's. HIDDEN, NOT UNMOUNTED: CycleHeader stays mounted exactly as
+          before, so it loads once and its data flow is unchanged — only
+          whether it is painted depends on the side chosen. */}
+      <div hidden={scope !== 'me'}>
+        <CycleHeader
+          employeeId={employeeId}
+          roles={{ isEmployee: true, isRM: roles.isRM, isHOD: roles.isHOD }}
+          onGo={goToAction}
+        />
       </div>
-      <div className="k" style={{ marginTop: -10, marginBottom: 16 }}>
-        {tabs.find(t => t.k === activeKey)?.blurb}
+
+      {/* The workspace header: which side you are on, what the open tab is
+          for, and the tabs themselves along its lower edge — one object, so
+          the tabs plainly belong to the side chosen above. */}
+      <div className={`pms-ws pms-ws-${scope}`}>
+        <div className="pms-ws-top">
+          <span className="pms-ws-ico" aria-hidden="true">{HereIco && <HereIco size={20} />}</span>
+          <div style={{ minWidth: 0, flex: 1 }}>
+            <h2 className="pms-ws-t">{here.title}</h2>
+            <div className="pms-ws-d">{tabs.find(t => t.k === activeKey)?.blurb}</div>
+          </div>
+          {here.count && <span className="pms-ws-n">{here.count}</span>}
+        </div>
+        <nav className="pms-ws-tabs" aria-label="Performance sections">
+          {tabs.map(t => {
+            const Ico = TAB_ICON[t.k]
+            return (
+              <button key={t.k} type="button" onClick={() => pick(t.k)}
+                      className={activeKey === t.k ? 'on' : undefined}
+                      aria-current={activeKey === t.k ? 'page' : undefined}>
+                {Ico && <Ico size={15} />}
+                {t.label}
+              </button>
+            )
+          })}
+        </nav>
       </div>
 
       {scope === 'me'   && <MySide employeeId={employeeId} tab={empTab} />}
@@ -854,7 +932,7 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   // must not sit behind a conditional return.
   const states = stageStates({ label: period?.period_code ?? '' }, progress, today)
 
-  if (loading) return <div className="k">Loading…</div>
+  if (loading) return <div className="pms-skel" aria-busy="true" aria-label="Loading"><i /><i /><i /></div>
   if (!period) return <NoPeriod />
 
   const submitKras = async () => {
@@ -2266,7 +2344,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     return true
   }
 
-  if (pLoading || loading) return <div className="k">Loading…</div>
+  if (pLoading || loading) return <div className="pms-skel" aria-busy="true" aria-label="Loading"><i /><i /><i /></div>
   if (!period) return <NoPeriod />
 
   return (
@@ -2603,7 +2681,7 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
     reloadRoster()
   }
 
-  if (pLoading || loading) return <div className="k">Loading…</div>
+  if (pLoading || loading) return <div className="pms-skel" aria-busy="true" aria-label="Loading"><i /><i /><i /></div>
   if (!period) return <NoPeriod />
 
   return (
@@ -2730,12 +2808,15 @@ function DeptSide({ employeeId, tab }: { employeeId: string; tab: HodTab }) {
 
 function NoPeriod() {
   return (
-    <div className="card">
-      <h3>No period is open</h3>
-      <div className="k" style={{ lineHeight: 1.7, maxWidth: 620 }}>
-        Nothing is running right now. A period opens when HR publishes the cycle
-        configuration, and everybody eligible is enrolled at that moment. There is
-        nothing to do here until then.
+    <div className="pms-note">
+      <span className="pms-note-ico" aria-hidden="true"><IconCalendar size={18} /></span>
+      <div style={{ minWidth: 0 }}>
+        <div className="pms-note-t">No period is open</div>
+        <div className="pms-note-d">
+          Nothing is running right now. A period opens when HR publishes the cycle
+          configuration, and everybody eligible is enrolled at that moment. There is
+          nothing to do here until then.
+        </div>
       </div>
     </div>
   )
@@ -2744,16 +2825,19 @@ function NoPeriod() {
 function ModulePending() {
   return (
     <div className="pms">
-      <div className="card">
-        <h3>Waiting on migration 066</h3>
-        <div className="k" style={{ lineHeight: 1.7, maxWidth: 680 }}>
-          The performance module&rsquo;s tables do not exist in the database yet. These
-          screens and the whole approval flow are built; they have nothing to read
-          until <code>supabase/migrations/066_pms_module.sql</code> is applied. That
-          file creates 15 tables, 9 functions, 10 views and 2 triggers.
-          <br /><br />
-          It is handed to Nayan rather than run from here. This project does not
-          apply schema changes itself. Nothing on this page is broken; it is waiting.
+      <div className="pms-note pms-warn">
+        <span className="pms-note-ico" aria-hidden="true"><IconAlert size={18} /></span>
+        <div style={{ minWidth: 0 }}>
+          <div className="pms-note-t">Waiting on migration 066</div>
+          <div className="pms-note-d">
+            The performance module&rsquo;s tables do not exist in the database yet. These
+            screens and the whole approval flow are built; they have nothing to read
+            until <code>supabase/migrations/066_pms_module.sql</code> is applied. That
+            file creates 15 tables, 9 functions, 10 views and 2 triggers.
+            <br /><br />
+            It is handed to Nayan rather than run from here. This project does not
+            apply schema changes itself. Nothing on this page is broken; it is waiting.
+          </div>
         </div>
       </div>
     </div>

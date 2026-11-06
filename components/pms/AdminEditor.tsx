@@ -19,6 +19,8 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadPmsAdmin, pmsAdmin, type PmsAdminSnapshot } from '@/lib/pms/adminClient'
+import { IconPolicies, IconTemplates, IconOrgChart, IconSliders, IconLetters,
+         IconCompliance, IconCalendar, IconLock, type IconProps } from '@/lib/ui'
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL } from '@/lib/pms/hierarchy'
 import { RUNG_CHOICES, chainFault, chainWarnings, chainSummary, usedBy,
          MAX_CHAIN_NAME } from '@/lib/pms/chainBuilder'
@@ -1468,6 +1470,22 @@ function FinalisePanel({ periods, canAttribute, reload }: {
 }
 
 // ══ the tab itself ════════════════════════════════════════════════════════
+// How each section is presented in the settings rail — icon, group and one
+// line on what it controls. Presentation only: which section is open is still
+// the `section` state below, set by the same setSection call.
+type SectionKey = 'policy' | 'kra' | 'chains' | 'scale' | 'courses' | 'authority' | 'cycle' | 'finalise'
+const SECTION_META: Record<SectionKey, { icon: (p: IconProps) => React.ReactNode; group: string; blurb: string }> = {
+  policy:    { icon: IconPolicies, group: 'Rules',      blurb: 'Frequency, KRA limits, one-to-ones and who finalises' },
+  chains:    { icon: IconOrgChart, group: 'Rules',      blurb: 'Who reviews a set, in which order' },
+  scale:     { icon: IconSliders,  group: 'Rules',      blurb: 'Rating bands, labels and what each one asks for' },
+  authority: { icon: IconCompliance, group: 'Rules',      blurb: 'What the HR Head may settle, override or do directly' },
+  kra:       { icon: IconTemplates, group: 'Libraries', blurb: 'Ready-made KRAs employees and managers can pick' },
+  courses:   { icon: IconLetters,  group: 'Libraries',  blurb: 'Courses a rater can recommend' },
+  cycle:     { icon: IconCalendar, group: 'Operations', blurb: 'Open, extend or close a period' },
+  finalise:  { icon: IconLock,     group: 'Operations', blurb: 'Record a final rating by hand, with a reason' },
+}
+const SECTION_GROUPS = ['Rules', 'Libraries', 'Operations']
+
 export default function AdminEditor() {
   const [snap, setSnap] = useState<PmsAdminSnapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
@@ -1489,7 +1507,7 @@ export default function AdminEditor() {
   }, [snap])
 
   if (err) return <div className="card"><Note tone="bad">{err}</Note></div>
-  if (!snap) return <div className="card"><div className="k">Loading…</div></div>
+  if (!snap) return <div className="pms-skel" aria-busy="true" aria-label="Loading"><i /><i /><i /></div>
 
   const TABS = [
     ['policy',   'Policy rules'],
@@ -1502,14 +1520,43 @@ export default function AdminEditor() {
     ['finalise', 'Finalise'],
   ] as const
 
-  return (
-    <>
-      <div className="tabs">
-        {TABS.map(([k, label]) => (
-          <button key={k} className={section === k ? 'on' : ''} onClick={() => setSection(k)}>{label}</button>
-        ))}
-      </div>
+  // The number beside each section in the rail — how many rows it holds, from
+  // the snapshot already loaded. Nothing is fetched for it.
+  const countOf: Partial<Record<SectionKey, number>> = {
+    policy: snap.policies.length, kra: snap.kras.length, chains: (snap.chains ?? []).length,
+    scale: snap.scale.length, courses: (snap.catalogue ?? []).length, cycle: snap.periods.length,
+  }
 
+  return (
+    <div className="pms-settings">
+      {/* A settings layout: the eight sections down the left, grouped by what
+          they control; the open one on the right under its own header. Each
+          item is still one button calling setSection, as the strip was. */}
+      <nav className="pms-settings-rail" aria-label="Setup sections">
+        {SECTION_GROUPS.map(g => (
+          <div key={g} className="pms-settings-group">
+            <div className="pms-settings-glabel">{g}</div>
+            {TABS.filter(([k]) => SECTION_META[k].group === g).map(([k, label]) => {
+              const Ico = SECTION_META[k].icon
+              const n = countOf[k]
+              return (
+                <button key={k} type="button" className={section === k ? 'on' : ''}
+                        aria-current={section === k ? 'page' : undefined}
+                        onClick={() => setSection(k)}>
+                  <span className="pms-settings-ico" aria-hidden="true"><Ico size={16} /></span>
+                  <span className="pms-settings-txt">
+                    <span className="pms-settings-name">{label}</span>
+                    <span className="pms-settings-blurb">{SECTION_META[k].blurb}</span>
+                  </span>
+                  {n != null && <span className="pms-settings-n">{n}</span>}
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </nav>
+
+      <div className="pms-settings-body">
       {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies}
                                               people={snap.people ?? []}
                                               chains={snap.chains ?? []} reload={reload} />}
@@ -1524,6 +1571,7 @@ export default function AdminEditor() {
                                                   companies={snap.companies} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
       {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
-    </>
+      </div>
+    </div>
   )
 }
