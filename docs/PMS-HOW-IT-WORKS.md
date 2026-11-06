@@ -1,151 +1,521 @@
 # PMS — how it works
 
-**For:** Nayan Ahuja
-**Date:** 4 September 2026
-**Branch:** `TusharPanwar`
-**Covers:** migrations `066`, `067`, `068`, `074`, `076` and the v2 rebuild on them
+The Performance module, end to end: what it does, the sub-modules it is made
+of, every rule it enforces, and the arithmetic behind a rating.
+
+**Written 2026-11-06.** Every number below is read from the live database or
+the source, not recalled. This replaces a 151-line version that predated
+approval chains, the HR Head, and KPIs.
 
 ---
 
-## 1. The headline: there is nothing to run
+## 1. What this module is
 
-Every PMS migration is **already applied**. I verified each one against the
-live database rather than carrying the previous list forward:
+It runs an appraisal cycle for ~400 employees across three companies sharing
+one database. An employee writes KRAs, agrees them with their manager, rates
+themselves; the appraisal then travels an approval chain; somebody finalises a
+rating; HR writes feedback and publishes it.
 
-| Migration | Evidence |
+**It is developmental.** `payout_linkage_enabled` is pinned `false` by a CHECK
+constraint — no screen, admin or API call can turn it on. Ratings are not
+linked to increment, variable pay, bonus or CTC.
+
+### The one rule everything else hangs off
+
+> **ENGINE COMPUTES, SQL DECIDES.**
+>
+> Every function in `lib/pms/` is a *prediction* about what the database will
+> do, used to decide which buttons appear and what the refusal will say —
+> before anybody presses anything. The database re-checks all of it in
+> triggers and functions and cannot be talked out of it by a client.
+>
+> **When the two disagree, the TypeScript is wrong.**
+
+### Live, at the time of writing
+
+| | |
 |---|---|
-| `066_pms_module` | all 15 `pms_*` tables and all **10 views** readable |
-| `067_pms_org_chain_resolution` | `departments.hod_employee_id` selectable |
-| `068_pms_setup_data` | 15 rating bands, **120 KRA library rows** |
-| `074_pms_not_found_guards` | all three functions answer when called |
-| `076_pms_persist_scores` | `pms_overall_rating.self_score` selectable |
+| Active employees | 398 |
+| Appraisals (`pms_overall_rating`) | 395 |
+| KRAs · KPIs · ratings | 48 · 48 · 92 |
+| Published · acknowledged | 5 · 3 |
+| **Never submitted** | **388** |
+| Logic modules · test files · tests | 27 · 52 · **1,045 passing** |
+| Migrations | through **220** |
 
-**`074` was previously reported as undetermined. It is applied.** The earlier
-handover said PostgREST cannot tell "no such function" from "wrong arguments",
-which is true — but calling each function with its *documented* arity settles
-it, and all three returned real answers.
-
-Live data today: **3 policies · 12 periods · 15 rating bands · 120 KRA library
-rows · 524 enrolment rows.** No KRAs, one-to-ones or reviews yet — see §5.
+The cycle has barely begun: 123 of 133 people in the current period have not
+written a KRA. The module is build-complete and **has never run a full cycle
+at scale.**
 
 ---
 
-## 2. What v2 changed, and why none of it needed schema
+## 2. Sub-modules
 
-The whole PMS was rebuilt against `EZER-PMS-MODULE-SPEC-v2`. It reads and
-writes only columns `066` already created, so **no migration accompanies it.**
+### Logic — `lib/pms/`, 27 files, no I/O anywhere
 
-**The one rule that must never move:**
+Every module is pure: no Supabase import, no `Date.now()`. `today` is always
+passed in, because a rule that reads the clock is untestable and differs
+between server and browser render.
 
-```sql
-payout_linkage_enabled boolean NOT NULL DEFAULT false
-                       CHECK (payout_linkage_enabled = false)
+| Module | What it owns |
+|---|---|
+| `hierarchy.ts` | Who may do what (§1, §2); the role matrix; chain presets |
+| `chain.ts` | Where an appraisal sits and which way it moves |
+| `chainBuilder.ts` | Composing a custom chain, and refusing a bad one |
+| `scoring.ts` | Ratings → score → meaning; bands, gaps, tone |
+| **`kpi.ts`** | **KPIs under a KRA, and the weightage they share** |
+| `kra.ts` | The KRA set (§3.2) |
+| `cycle.ts` | Where the cycle is and what you owe it |
+| `team.ts` | The two manager queues (§4.1, §5.1) |
+| `policy.ts` | Which policy covers an employee |
+| `employment.ts` | The four employment flags (§8) |
+| `publishGate.ts` | What stops a result going out |
+| `authority.ts` | What the HR Head may do, from the policy |
+| `hrFinal.ts` · `hrDirect.ts` | Settling a rating; building one outside the chain |
+| `hrQueue.ts` · `bulkPublish.ts` · `upload.ts` | HR's queues and bulk actions |
+| `oneToOne.ts` | The discussion log and the two gates it controls |
+| `pip.ts` | The PIP state machine (§7) |
+| `training.ts` · `trainingAi.ts` | Training recommendations and AI suggestion |
+| `postFinal.ts` · `rollup.ts` · `status.ts` · `language.ts` · `csv.ts` · `adminClient.ts` | Ownership after settlement, roll-ups, vocabularies, wording, CSV, the admin API client |
+
+### Screens
+
+| Surface | File | Lines |
+|---|---|---|
+| HR dashboard (11 tabs) | `app/dashboard/pms/page.tsx` | 1,794 |
+| Employee + manager (ESS) | `components/ess/Performance.tsx` | ~2,870 |
+| HR tab bodies | `components/pms/AdminTabs.tsx` | 3,187 |
+| Manager review surfaces | `components/pms/ManagerTabs.tsx` | 2,973 |
+| **Setup & Controls (the only writing tab)** | `components/pms/AdminEditor.tsx` | 1,577 |
+| Employee KRA/rating tabs | `components/pms/EmployeeTabs.tsx` | 1,229 |
+| Cycle header · stepper · stats · next action · overview | `components/pms/*.tsx` | ~1,160 |
+| Styles, scoped under `.pms` | `components/pms/pms.css` | ~2,020 |
+
+### API — two routes
+
+- **`/api/pms/admin`** — `GET` returns everything the editor renders;
+  `POST` performs one write from a 15-action allowlist.
+- **`/api/pms/training-ai`** — AI training suggestions from anonymised
+  rating context.
+
+No component writes to Supabase for admin configuration: the actor must come
+from the session, and the route allowlists which columns may be set.
+
+---
+
+## 3. The eleven HR tabs
+
+| Tab | What you go there to do |
+|---|---|
+| This cycle | Where the whole organisation has got to |
+| PMS Configuration | Frequency, windows, the KRA rules everyone is held to |
+| **Setup & Controls** | The only tab that writes — 8 panels |
+| Policy Builder | Different cycles for different groups |
+| Fill Status Tracker | Live status for everyone, and who to chase |
+| Publish Results | Settled ratings: feedback, recognition, release |
+| Ratings Summary | Every rating and where the appraisal stands |
+| Final Rating Upload | Bulk override from an offline calibration |
+| PIP Management | Requests from managers, plans you have started |
+| Reports & Export | Fourteen reports, Excel export |
+| Flow & Hierarchy | The twelve steps, the reporting line, who may do what |
+
+**Setup & Controls panels:** Policy rules · Approval chains · Rating scale ·
+HR Head authority · KRA library · Training catalogue · Cycle control ·
+Finalise.
+
+---
+
+## 4. Data model — 21 tables
+
+All prefixed `pms_`, all carrying `company_id`. Three companies share this
+database and employee codes repeat across them, so a query without a company
+filter is a bug.
+
+```
+pms_policies ─┬─ pms_periods ──── pms_overall_rating      (the appraisal)
+              ├─ pms_rating_scale                         (the bands)
+              └─ pms_chain                                (composed chains)
+
+pms_employee_goals  (the KRA)
+      └── pms_goal_kpi  (its KPIs)  ←── pms_reviews  (one per KPI per rater)
+
+pms_one_to_one · pms_feedback · pms_training_recommendation
+pms_pip ─┬─ pms_pip_areas
+         └─ pms_pip_reviews
+pms_kra_master · pms_training_catalogue · pms_training_suggestion
+pms_additional_benefits · pms_rating_upload_log · pms_audit_log
 ```
 
-The PMS is developmental. The rating has no link to increment, variable pay,
-bonus or CTC, and additional benefits stay recognition-only — certificate,
-nomination, award, no cash component. Turning it on would take a migration
-that drops the constraint, which is a product decision rather than a config
-one.
+### The three that carry the work
+
+**`pms_employee_goals`** — one row per KRA: title, category, **weightage**,
+status, lock state, HR override fields.
+
+**`pms_goal_kpi`** *(migration 220)* — one row per KPI: `goal_id`, `seq_no`,
+`kpi_metric`, `target_value`, **weightage** (a share of its KRA's).
+
+**`pms_reviews`** — one row per **KPI** per rater:
+`UNIQUE (period_id, employee_id, kpi_id, rater_role)`.
+`rater_role` ∈ `SELF · RM_L1 · RM_L2 · HOD · MD · HR_HEAD · SITE_HR · REGIONAL_HEAD`.
+
+### Three columns worth understanding
+
+**`chain_stage` is nullable, and NULL is not `'EMPLOYEE'`.** NULL means *not
+submitted*; `'EMPLOYEE'` means *sent back after a rejection*. On a queue those
+look identical otherwise, and only one is somebody's fault.
+
+**`chain_shape` + `chain_snapshot_at`** freeze the chain per appraisal at
+submission, which is what lets an administrator edit a chain without
+disturbing work in flight.
+
+**`chain_final_rating` is not `final_rating`.** It holds what the *chain*
+settled, so when the HR Head overrides, both numbers survive.
+
+### Database functions
+
+36 defined; **9 called from application code**:
+`pms_chain_submit · pms_chain_approve · pms_chain_reject · pms_finalise ·
+pms_open_period · pms_generate_periods · pms_lock_kras · pms_hr_kra_action ·
+pms_commit_rating_upload`.
+
+The other 27 are triggers and helpers enforcing the rules regardless of caller
+— the "SQL DECIDES" half.
 
 ---
 
-## 3. The four rules that carry real risk
+## 5. THE MATHEMATICS
 
-Built as pure, tested logic rather than conditions inside a screen:
+### 5.1 Weightage — two rules, one total
 
-**Policy overlap** — the narrowest match wins: `location > grade > department
-> all`, so a Sales person at the Pune plant follows Pune, not Sales. Rule 14
-says exactly one active policy, so **a tie is refused rather than guessed** —
-two policies of equal narrowness is a configuration mistake, and silently
-picking one only surfaces when an appraisal routes to the wrong manager.
+```
+Across KRAs      Σ w_kra  =  100          exactly  (policy.total_weightage)
+Within a KRA     Σ w_kpi  =  w_kra        exactly
+Therefore        Σ w_kpi  =  100          across the whole appraisal
+```
 
-**Employment flags** — `EXITED` is decided **before** `NOTICE_PERIOD`, because
-somebody who has already left also has a resignation date; checking notice
-first leaves a departed employee in the active queue counting down to a date
-that has passed. Notice rows sort **above** exited ones — theirs is the
-deadline that cannot move.
+The second rule is what keeps the first true. Without it a 30% KRA whose KPIs
+summed to 40 would make the real total 110 while the KRA-level check still
+read 100 and said yes.
 
-**Bulk rating upload** — all four blocking errors, and the commit is refused
-while any row fails. A half-applied upload leaves some people on the system's
-rating and some on the spreadsheet's, with nothing on screen to say which. An
-override reason is owed only where the rating actually **changes**; demanding
-one on an unchanged row trains people to type "n/a".
+Also enforced: `count` between `min_kra_count` and `max_kra_count` (4 and 10),
+and every KRA ≥ `min_weightage_per_kra` (5).
 
-**PIP** — an RM raises a request and **cannot initiate**, enforced in the model
-rather than by hiding a button. The PIP is the documentation trail that
-answers a claim under the Industrial Disputes Act, and HR gatekeeping is what
-keeps it consistent enough to rely on.
+### 5.2 The score
+
+For a given rater role, over **rated, submitted** KPIs only:
+
+```
+                Σ ( rating_kpi × weightage_kpi )
+  score    =    ───────────────────────────────         rounded to 2 dp
+                      Σ weightage_kpi
+```
+
+Computed independently for `self`, `rm_l1`, `rm_l2`, `hod`, and `final`.
+
+> **Unrated KPIs leave the denominator; they are not zero.** A half-rated
+> appraisal shows the average of what has been rated, not a number dragged
+> toward zero by work nobody has looked at yet. `null` when nothing is rated —
+> *"not rated"* and *"rated badly"* are different answers.
+
+**This formula did not change when KPIs arrived.** It is a weighted mean and
+cannot tell whether its weights came from 4 KRAs or 11 KPIs that add up the
+same. Migration 220 gave every existing KRA one KPI carrying its whole
+weightage, so every score on record stayed identical — verified across 23
+appraisal/rater combinations, largest difference **0**.
+
+### 5.3 A KRA's own rating, rolled up from its KPIs
+
+```
+                   Σ ( rating_kpi × weightage_kpi )
+  rating_kra  =    ───────────────────────────────    over that KRA's rated KPIs
+                         Σ weightage_kpi
+```
+
+**Worked example** — a 30% KRA with three KPIs:
+
+| KPI | Weightage | Rating |
+|---|---|---|
+| Cycle-count variance | 15 | 4 |
+| Shrinkage value | 10 | 3 |
+| Count completion on time | 5 | 5 |
+
+```
+  (4×15 + 3×10 + 5×5) / 30  =  (60 + 30 + 25) / 30  =  115 / 30  =  3.83
+```
+
+A flat average would say **4.00**, which is a different and wrong answer — the
+15% KPI must count three times the 5% one.
+
+### 5.4 Score → rating band
+
+The band is the row whose window contains the score:
+
+```
+  band  =  the row where   score_from  ≤  score  ≤  score_to
+```
+
+Live scale (Sharma Retail Solutions, 5-point):
+
+| Value | Code | Label | Window | Min comment | Improvement | PIP | Recognition |
+|---|---|---|---|---|---|---|---|
+| 5 | O | Outstanding | 4.51 – 5.00 | 200 | — | — | ✓ |
+| 4 | EE | Exceeds Expectations | 3.51 – 4.50 | 100 | — | — | ✓ |
+| 3 | ME | Meets Expectations | 2.51 – 3.50 | 50 | — | — | — |
+| 2 | NI | Needs Improvement | 1.51 – 2.50 | 200 | **✓** | **✓** | — |
+| 1 | U | Unsatisfactory | 1.00 – 1.50 | 200 | **✓** | **✓** | — |
+
+So the 3.83 above lands in **EE — Exceeds Expectations**.
+
+A score outside every window **clamps** rather than returning nothing: a
+rounding artefact of 5.01 must not leave a rating nameless.
+
+### 5.5 Self-versus-final gap (§3.6)
+
+```
+  δ  =  self_score − final_score          (signed, 2 dp)
+
+  |δ|  <  1     ALIGNED
+  1  ≤ |δ| < 2  MINOR_GAP
+  |δ| ≥  2      MAJOR_GAP
+```
+
+> A `MAJOR_GAP` is **not** a judgement about who is right. It means the two
+> are measuring the same work differently, and the next one-to-one is where
+> that gets resolved. The wording deliberately avoids implying the employee
+> over-rated themselves — the manager may be the one who has not seen the
+> work.
+
+### 5.6 The suggested weightage split
+
+Spread a total across *n* rows as evenly as whole numbers allow, remainder on
+the **first**:
+
+```
+  base    = floor(total / n)
+  out[i]  = base                     for all i
+  out[0] += total − base × n         the remainder
+```
+
+`suggestSplit(100, 3) = [34, 33, 33]` · `suggestKpiSplit(10, 3) = [4, 3, 3]`.
+Always sums to the total exactly. Offered as a starting point, **never applied
+silently**.
+
+### 5.7 Rung coverage
+
+For each rung, how many employees have somebody in it:
+
+```
+  coverage  =  count(employees where <column> IS NOT NULL  AND  date_of_leaving IS NULL)
+               ───────────────────────────────────────────────────────────────────────
+                             count(active employees)
+```
+
+Measured 2026-11-06 over 398 active employees:
+
+| Rung | Column | Coverage |
+|---|---|---|
+| HOD | `hod_id` | 398 / 398 |
+| RM L1 | `l1_manager_id` | 395 / 398 |
+| Site HR | `site_hr_id` | 395 / 398 |
+| RM L2 | `l2_manager_id` | 261 / 398 |
+| Regional head | `regional_head_id` | **0 / 398** |
 
 ---
 
-## 4. Where each surface lives
+## 6. The life of an appraisal
 
-**Performance** in the main menu is the **HR Admin** side — the six tabs of
-spec §6: Cycle setup · Policies · Who has filled · Rating upload · PIP ·
-Reports.
+```
+┌─ ADMIN ──────────────────────────────────────────────────────────────┐
+│ 1  Policy built                Setup & Controls                      │
+│ 2  Periods generated           pms_generate_periods                  │
+│ 3  Period opened               pms_open_period                       │
+│      └─ enrols every eligible employee: one pms_overall_rating each, │
+│         with rm_l1_id / rm_l2_id / hod_id resolved and FROZEN.       │
+│         Not undoable from the screen.                                │
+└──────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─ EMPLOYEE ───────────────────────────────────────────────────────────┐
+│ 4  Writes 4–10 KRAs, each with its KPIs                              │
+│      └─ Σ w_kra = 100 exactly;  Σ w_kpi = w_kra for every KRA        │
+│ 5  One-to-one                  BOTH must acknowledge                 │
+│      └─ editing a locked weightage REOPENS this (migration 206)      │
+│ 6  KRAs locked                 pms_lock_kras                         │
+│ 7  Self rating, per KPI        pms_reviews, rater_role = SELF        │
+│ 8  Submits                     pms_chain_submit                      │
+│      └─ chain_shape + chain_snapshot_at FROZEN here                  │
+└──────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─ THE CHAIN ──────────────────────────────────────────────────────────┐
+│ 9  Each rung in turn rates every KPI, then                           │
+│      approves  → chain_stage := nextRung(…)   ← SKIPS empty rungs    │
+│      or rejects → chain_stage := prevRung(…)  ← reason mandatory     │
+│                                                                      │
+│ 10 The LAST reviewer finalises. approvalFinalises() is true when     │
+│    nextRung() === 'HR', which is what makes the button read          │
+│    "Approve & finalise" and ask for a rating.                        │
+└──────────────────────────────────────────────────────────────────────┘
+                                  ↓
+┌─ HR ─────────────────────────────────────────────────────────────────┐
+│ 11 HR Head settles the rating   may KEEP or OVERRIDE the chain's     │
+│                                 number; both are preserved           │
+│ 12 Feedback written             appreciation + improvement           │
+│ 13 Published                    publishFaults() must be empty        │
+│ 14 Employee acknowledges        and can never be un-acknowledged     │
+└──────────────────────────────────────────────────────────────────────┘
+```
 
-**ESS portal → Performance** is the employee's own side, and grows RM and HOD
-tabs when the org chart says somebody holds those roles. Roles are *derived*
-from the org columns rather than read from `user_roles`, which has no rows —
-somebody is an RM because people report to them, which is more truthful than a
-flag that can disagree with the hierarchy.
+### The special case: an HR-direct appraisal
 
-Whose appraisals belong to a manager comes from the **frozen chain** on
-`pms_overall_rating` (`rm_l1_id`, `rm_l2_id`, `hod_id`), not a live lookup: a
-reorg mid-cycle must not move half-rated appraisals between managers.
+The HR Head can build an appraisal for somebody the cycle never picked up —
+KRAs, ratings, a final rating, published — bypassing the chain. Three rules
+bend, each discovered by *running the write* and hitting the next blocker:
 
----
-
-## 5. Two numbers not to misread
-
-**`pms_employee_goals` is 0.** Nobody has written a KRA yet — and that was
-partly a bug of mine: the INSERT was missing `period_id`, so every other query
-(which filters on it) could never find what was saved. It went in and
-vanished. Fixed on the branch. Read the zero as "not started", not as "not
-working".
-
-**`pms_overall_rating` is 524, and 129 of those are mine.** See §7.
-
----
-
-## 6. What is NOT built
-
-- **The AI layer** (§13) and **notifications** (§12) — both Phase 6 in the
-  spec's own sequence
-- **The 14 reports** — the catalogue renders; the exports are not wired
-- **Analytics widgets** for RM and HOD beyond the distribution and category
-  bars
-- **Rate-a-reportee and HOD feedback saves** — the screens render and validate
-  correctly, but their write handlers are stubs. I would rather wire them
-  against real rows than guess at the shapes.
-
----
-
-## 7. Something I got wrong, and the fix
-
-While probing which functions existed, I called `pms_open_period()`. I treated
-it as a read because I was testing for the function's *existence*, and did not
-check what it does first. It opens a period and enrols everybody eligible.
-
-It opened **Q1 FY2026-27 for one company** (`SCHEDULED → KRA_SETTING`) and
-created **129 `pms_overall_rating` rows**.
-
-Nothing else changed — all 129 are `NOT_STARTED` with null scores, that period
-had zero rows beforehand, and goals and reviews are still empty company-wide.
-
-`fix/UNDO-accidental-open-period.sql` reverses it, filtered by the period id
-and the timestamp of my call so nothing of yours is caught. **Running it is
-your call** and it is defensible either way — Q1 is a period that has already
-passed, so an open period with nothing filled in is wrong but harmless.
+| Migration | What it waived |
+|---|---|
+| 212 | `pms_block_unsigned_publish` — one line: `IF hr_direct THEN RETURN NEW` |
+| 213 | `pms_check_self_first` — there is no self rating to require |
+| 214 | `pms_reviews.rater_role` widened to accept `HR_HEAD` |
 
 ---
 
-## 8. Do not run these
+## 7. Read and write paths
 
-- **`055`, `056`, `057`** — an old, already-rolled-back RMS attempt holds those
-  numbers on this branch. The PMS module was renumbered `055 → 066`,
-  `056 → 067`, `057 → 068`. Running them would apply a superseded schema on
-  top of a live one.
-- **`079_pms_module_v2.sql`** from the PMS spec folder — same 15 tables as
-  `066`, which is applied. On this branch `079` is `group_profile`.
+### Read
+
+```
+HR dashboard      page.tsx  →  pms_policies + pms_chain(name, rungs)
+                              pms_periods, pms_overall_rating ⨝ employees
+
+ESS / manager     Performance.tsx  →  one query carrying the policy AND the
+                  chain it points at, plus goals AND their KPIs in the same
+                  round trip
+```
+
+> **A screen that knows the KRAs but not their KPIs can draw a form it cannot
+> save.** Since 220 a rating names a KPI (`kpi_id` is NOT NULL), so the KPIs
+> load with the goals.
+
+### Write
+
+```
+Browser → lib/pms/adminClient.ts → POST /api/pms/admin
+            └─ gate()                    permission
+            └─ pick(body, <TABLE>_COLS)  column allowlist
+            └─ validate                  refuse with a sentence
+            └─ service client → triggers re-check everything
+```
+
+**The actor is never read from the body.** It comes from the bearer token;
+`pms_hr_kra_action` and `pms_finalise` record who acted, and a
+caller-supplied actor would make that record worthless.
+
+### Three places a value can silently stop moving
+
+Each has caused a reported bug here:
+
+1. **The column allowlist.** A new `pms_policies` column is inert until named
+   in `POLICY_COLS` — the screen saves into nothing. *Happened twice.*
+2. **The read's select list.** A column not named in `.select()` is not there.
+   Omit `pms_chain(rungs)` and every custom chain silently falls back to the
+   preset — correctly, and uselessly.
+3. **A control that only sets React state.** The Config tab's frequency
+   dropdown redrew the preview and saved nothing.
+
+---
+
+## 8. The rules and gates
+
+### Who may do what
+
+`may(role, action)` returns **three** values — `yes` / `no` / **`policy`** —
+over 7 roles × 17 actions. Only `finalise_rating` is `policy`.
+
+> A screen that treats ⚙️ as ✅ lets an RM L1 finalise under a `HOD_ONLY`
+> policy; treating it as ❌ hides the button from the person the policy
+> appointed. Both wrong, so the type forces the caller to handle the third.
+
+**Finalisation is deliberately not a role permission.** The authority to
+finalise *one* appraisal is three things at once: the policy's
+`who_can_finalise`, the role matrix, and **holding that employee's rung in the
+frozen chain**. Only the third decides whether a particular HOD may settle a
+particular person, and a role toggle cannot express it.
+
+### The publish gate — one shared function, four screens
+
+A result is blocked when **any** holds:
+
+1. No final rating
+2. No appreciation remark
+3. Improvement feedback missing while the band requires it
+4. The HR Head has not settled the rating (when the policy requires it)
+5. The final-review one-to-one is not acknowledged — *waived for an
+   HR-direct appraisal, where there is no manager who could have had it*
+
+Returns the **list**, never a boolean, because every caller shows the reasons.
+
+### HR Head authority — configuration, not code
+
+| Power | Column | Default |
+|---|---|---|
+| Settle the final rating | `hr_head_final_rating` | true |
+| Override the chain's number | `hr_head_can_override` | true |
+| Build outside the chain | `hr_head_can_direct` | true |
+| Commit a rating upload | `rating_upload_by` | `HR_ANY` |
+
+**The role comes first; the policy only narrows it.** And every default is
+*today's behaviour*:
+
+> A permissions layer that fails closed sounds safer and is not: it would stop
+> a cycle the moment a policy row could not be read, and the people it stops
+> cannot fix it. Failing to the status quo is the honest default.
+
+### Employment flags (§8)
+
+`ACTIVE` · `NEW_JOINER` (within `new_joiner_cutoff_days` of period end → Not
+Rated) · `NOTICE_PERIOD` · `EXITED` (read-only once finalised).
+
+---
+
+## 9. Approval chains
+
+**Three presets** — `SELF_RM1_RM2_HOD`, `SELF_RM1_HOD`, `SELF_RM1` — or a
+**composed chain** built in Setup & Controls (migrations 218/219).
+`chain_id` is nullable; NULL falls back to the preset.
+
+A rung must resolve to a *person* through a column on `employees`, which is
+why the menu is five fixed choices and not free text.
+
+### The rule that makes it work
+
+> **An empty rung is stepped over, not blocked on.**
+
+`pms_resolve_chain` drops RM L2 when it resolves to the same person as RM L1,
+so **137 of 398** employees have `rm_l2_id = NULL` on a chain that names it.
+Walking the chain without asking who fills each rung would park a third of the
+company on a rung with nobody on it — a permanent deadlock on the first
+approval. It matters *more* going backwards: a rejection that strands an
+appraisal on nobody leaves the employee waiting for a correction that can
+never be made.
+
+**HR is always last**, appended if a composed chain omits it: nobody should be
+able to build a chain whose results can never be published.
+
+---
+
+## 10. Where it stands
+
+### Built and verified
+
+Everything above. 1,045 PMS tests, migrations through 220, production build
+compiles, `tsc` at the project's 39-error baseline.
+
+### Not finished
+
+| | |
+|---|---|
+| **Multi-KPI UI** | The schema, scoring, validation and writes are KPI-shaped; the **employee form cannot yet add a second KPI**, and the manager rating stepper is not built. Functionally the system is still one KPI per KRA. |
+| **Never run** | 388 of 395 appraisals never submitted. `pms_chain`, `pms_training_catalogue`, `pms_training_suggestion` and all three PIP tables are **empty** — the chain builder, the AI bin and the whole PIP flow have never been exercised on real data. |
+| **Rule 6 is dead code** | `canManagerRate` ("a manager cannot rate before the self rating") is defined and called from nowhere. SQL enforces it, so a manager meets a raw database refusal instead of a disabled button with a sentence. |
+| **A contradiction** | `EmployeeTabs` tells employees recognition is *"never a cash component"*, while `RECOGNITION_LABEL` offers raters **"Salary bonus"** and **"Out-of-cycle increment"**. One of the two is wrong — a product decision, not a bug to pick quietly. |
+| **Contrast unverified** | The audit cannot parse `color(srgb …)`, how Chrome serialises `color-mix()`. Hand measurements passed; the module is not cleared. |
+| **An unexplained anomaly** | Five `DISMISSED` training-suggestion rows appeared when one was dismissed by hand. Cause never found; migration 216 instrumented it so a recurrence is answerable. |
