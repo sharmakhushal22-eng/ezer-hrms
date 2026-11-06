@@ -25,7 +25,7 @@ const C = {
   red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+const inr = (n: number) => Math.round(n || 0).toLocaleString('en-IN')
 const fmtDate = (d?: string | null) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 

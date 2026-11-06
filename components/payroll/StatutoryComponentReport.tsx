@@ -20,7 +20,7 @@ import { STATUTORY_REPORTS, IDENTITY, snapshotColumns, cellValue, isYes, type St
 import { C, F, W, R, E, S, Z } from '@/lib/ui'
 
 const font = F.family
-const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+const inr = (n: number) => Math.round(n || 0).toLocaleString('en-IN')
 const fmtDate = (d?: string | null) =>
   d ? new Date(String(d).slice(0, 10) + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 const calYear = (fy: string, m: number) => (Number(fy.split('-')[0]) || 2026) + (m >= 10 ? 1 : 0)
