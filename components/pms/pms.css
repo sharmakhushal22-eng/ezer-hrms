@@ -1381,6 +1381,20 @@
   width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center;
   background: color-mix(in oklab, currentColor 16%, transparent);
 }
+/* TWO THINGS SHARE THIS CLASS, and only one of them is a pill.
+   The rules above describe a small chip — 11px, nowrap, fully rounded.
+   AdminEditor also puts `chk` on its full-width checkbox ROWS, which carry
+   a bold title and a sentence under it. The pill's `white-space: nowrap`
+   reached those and stopped them wrapping: "The HR Head can build an
+   appraisal…" ran 65px past the right edge of the card, measured on the
+   HR Head authority panel.
+
+   A label is always the row; the pills are spans and divs. Both get
+   min-width:0 as well, because a flex child defaults to min-width:auto and
+   refuses to shrink below its longest unbreakable run however it wraps. */
+.pms label.chk { white-space: normal; }
+.pms label.chk > span { min-width: 0; }
+
 .pms .chk.on  { background: var(--ez-positive-tint); color: var(--ez-positive); border-color: var(--ez-positive-edge); }
 .pms .chk.off { background: var(--ez-warning-tint);  color: var(--ez-warning); border-color: var(--ez-warning-edge); }
 .pms .chk.bad { background: var(--ez-critical-tint); color: var(--ez-critical); border-color: var(--ez-critical-edge); }
