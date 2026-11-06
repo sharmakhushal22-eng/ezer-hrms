@@ -60,6 +60,11 @@ export const MODULES = [
   // can open Company Dashboard in ESS is the same row that lets her in here.
   'Company Dashboard',
   'ESS Reports',
+  // EZER Learn. Three, not one, so that writing a course and assigning one stay independent
+  // jobs: see lib/lms/caps.ts for what each level opens.
+  'Learning Content',
+  'Learning Assignment',
+  'Learning Reports',
 ] as const
 
 export type Module = (typeof MODULES)[number]
@@ -114,6 +119,15 @@ export const ROUTE_MODULE: Record<string, Module> = {
   '/dashboard/roles':              'ESS & Roles',
   '/dashboard/support':            'Support',
   '/dashboard/ai':                 'Ezer AI',
+  // Opened by any of the three Learning modules: see ROUTE_ANY_MODULE below.
+  '/dashboard/learning':           'Learning Content',
+}
+
+/** Screens several modules share: anyone holding one of these may open the page, and the
+ *  page and its API routes decide what each of them can then do. A training coordinator has
+ *  no business in the course editor, but does need the same screen's Assignments tab. */
+export const ROUTE_ANY_MODULE: Record<string, Module[]> = {
+  '/dashboard/learning': ['Learning Content', 'Learning Assignment', 'Learning Reports'],
 }
 
 /** The module a path belongs to, or null for the dashboard landing page, which anyone
@@ -129,6 +143,15 @@ export function moduleForPath(path: string | null | undefined): Module | null {
     .filter(r => clean === r || clean.startsWith(r + '/'))
     .sort((a, b) => b.length - a.length)[0]
   return hit ? ROUTE_MODULE[hit] : null
+}
+
+/** Every module that would open this path: one, unless the screen is shared. */
+export function modulesForPath(path: string | null | undefined): Module[] {
+  const m = moduleForPath(path)
+  if (!m) return []
+  const clean = String(path).split('?')[0].replace(/\/+$/, '')
+  const shared = Object.keys(ROUTE_ANY_MODULE).find(r => clean === r || clean.startsWith(r + '/'))
+  return shared ? ROUTE_ANY_MODULE[shared] : [m]
 }
 
 // ── The functional roles the org chart actually names ────────────────────────

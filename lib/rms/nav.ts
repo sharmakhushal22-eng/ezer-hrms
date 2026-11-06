@@ -18,6 +18,9 @@ export interface NavEntry {
   href: string
   /** The permission that opens it. null = everyone (Home). */
   module: Module | null
+  /** Opened by any of these modules instead of the one in `module` (a shared screen).
+   *  `module` still names the first of them, for whatever reads a single value. */
+  anyModule?: Module[]
   /** Opened by ROLE instead of a module: shown to whoever holds any of these role codes
    *  (and the super admin). Set together with `module: null`. */
   roles?: string[]
@@ -49,6 +52,8 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { key: 'transfer',          label: 'Transfer',                href: '/dashboard/transfer',        module: 'Transfer' },
     // Pending appointment letters and the twenty HR letters (EZER Letters & Documents spec).
     { key: 'employee-letters',  label: 'Letters',                 href: '/dashboard/employee-letters', module: 'HR Letters' },
+    // EZER Learn. One screen for three permissions: each tab follows lib/lms/caps.ts.
+    { key: 'learning',          label: 'Learning',                href: '/dashboard/learning',        module: 'Learning Content', anyModule: ['Learning Content', 'Learning Assignment', 'Learning Reports'] },
   ]},
   { group: 'Time & Attendance', items: [
     { key: 'attendance',        label: 'Attendance & Leave',      href: '/dashboard/attendance',         module: 'Attendance' },

@@ -245,6 +245,12 @@ export function canSee(g: Grant, m: Module | null): boolean {
   return atLeast(g.modules[m], 'VIEW')
 }
 
+/** The same question for a screen several modules open: any one of them is enough. */
+export function canSeeAny(g: Grant, modules: Module[]): boolean {
+  if (!g.enforced) return true
+  return !modules.length || modules.some(m => atLeast(g.modules[m], 'VIEW'))
+}
+
 /** May this person see this sub-module tab? Reliability-first, default-VISIBLE:
  *   • super admin → yes, always.
  *   • the tab's module has no screen config for any of this person's roles → yes

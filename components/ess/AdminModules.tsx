@@ -42,6 +42,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   'bulk-upload':        lazy(() => import('@/app/dashboard/bulk-upload/page')),
   transfer:             lazy(() => import('@/app/dashboard/transfer/page')),
   'employee-letters':   lazy(() => import('@/app/dashboard/employee-letters/page')),
+  learning:             lazy(() => import('@/app/dashboard/learning/page')),
   // Time & Attendance
   attendance:           lazy(() => import('@/app/dashboard/attendance/page')),
   'attendance-reports': lazy(() => import('@/app/dashboard/attendance-reports/page')),
