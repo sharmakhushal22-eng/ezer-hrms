@@ -75,7 +75,8 @@ export default function CycleHeader({
               // admin changing min_kra_count left this header still saying
               // "You need between 4 and 10".
               + ' pms_policies(frequency, min_kra_count, max_kra_count,'
-              + ' total_weightage, min_weightage_per_kra)')
+              + ' total_weightage, min_weightage_per_kra,'
+              + ' min_kpi_per_kra, max_kpi_per_kra)')
         // NOT .eq('status','ACTIVE') — pms_periods has no such value, and
         // that filter matches zero rows forever without ever erroring.
         .in('status', PERIOD_OPEN)
@@ -92,6 +93,7 @@ export default function CycleHeader({
       const pol = (row as unknown as { pms_policies?: {
         frequency?: string; min_kra_count?: number; max_kra_count?: number
         total_weightage?: number; min_weightage_per_kra?: number
+        min_kpi_per_kra?: number; max_kpi_per_kra?: number
       } }).pms_policies
       const freq = pol?.frequency ?? null
       // DEFAULT_RULES stays the fallback for a period with no policy, which
@@ -101,6 +103,8 @@ export default function CycleHeader({
         maxKra: Number(pol?.max_kra_count) || DEFAULT_RULES.maxKra,
         totalWeightage: Number(pol?.total_weightage) || DEFAULT_RULES.totalWeightage,
         minWeightagePerKra: Number(pol?.min_weightage_per_kra) || DEFAULT_RULES.minWeightagePerKra,
+        minKpi: Number(pol?.min_kpi_per_kra) || DEFAULT_RULES.minKpi,
+        maxKpi: Number(pol?.max_kpi_per_kra) || DEFAULT_RULES.maxKpi,
       }
       const perYear = freq === 'MONTHLY' ? 12 : freq === 'QUARTERLY' ? 4
                     : freq === 'HALF_YEARLY' ? 2 : freq === 'ANNUAL' ? 1 : null

@@ -80,6 +80,11 @@ const POLICY_COLS = [
   // so a policy nobody has touched is appraised exactly as it was. Inert until
   // named here, same as every column above it.
   'chain_id',
+  // 221. HOW MANY KPIs ONE KRA MAY HOLD, default 1 to 5. The same kind of rule
+  // as min_kra_count/max_kra_count four lines up, and inert until named here.
+  // The pair CHECK pms_policies_kpi_range refuses min > max, so a bad pair is
+  // rejected by the database rather than saved and discovered later.
+  'min_kpi_per_kra', 'max_kpi_per_kra',
 ] as const
 
 /** A period's own windows, and its status.

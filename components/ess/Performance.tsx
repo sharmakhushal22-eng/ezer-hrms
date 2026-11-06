@@ -123,6 +123,11 @@ interface Policy {
   max_kra_count: number
   total_weightage: number
   min_weightage_per_kra: number
+  /** 221. How many KPIs one KRA may hold — the same mistake was waiting to be
+   *  made again: the KRA form's add and remove buttons were hardcoded to 1
+   *  and unlimited, so an admin setting a maximum of 3 changed nothing. */
+  min_kpi_per_kra: number
+  max_kpi_per_kra: number
 }
 interface Overall {
   workflow_status?: string | null
@@ -231,6 +236,7 @@ function usePeriod(employeeId: string) {
         // draw the preset's track for that window.
         .select('approval_chain,who_can_finalise,final_review_one_to_one,'
               + 'min_kra_count,max_kra_count,total_weightage,min_weightage_per_kra,'
+              + 'min_kpi_per_kra,max_kpi_per_kra,'
               + 'new_joiner_cutoff_days,carry_forward_kras,post_final_owner,'
               + 'one_to_one_mandatory,chain_id,pms_chain(rungs)')
         .eq('id', pid).maybeSingle()
@@ -272,6 +278,8 @@ function usePeriod(employeeId: string) {
     maxKra: Number(policy.max_kra_count) || DEFAULT_RULES.maxKra,
     totalWeightage: Number(policy.total_weightage) || DEFAULT_RULES.totalWeightage,
     minWeightagePerKra: Number(policy.min_weightage_per_kra) || DEFAULT_RULES.minWeightagePerKra,
+    minKpi: Number(policy.min_kpi_per_kra) || DEFAULT_RULES.minKpi,
+    maxKpi: Number(policy.max_kpi_per_kra) || DEFAULT_RULES.maxKpi,
   } : DEFAULT_RULES, [policy])
 
   /** §8's eligibility rules, from the policy rather than the constant. */

@@ -2069,6 +2069,15 @@
 .pms .pms-kpis-bal.is-over { background: var(--ez-critical-tint); color: var(--ez-critical); }
 .pms .pms-kpis-h .btnrow { margin-top: 0; margin-left: auto; }
 
+/* "3 of 5" beside the add button — how many measures this KRA holds against
+ * what the policy allows. Deliberately quiet: it is a running count, not a
+ * fault, and .pms-kpis-bal next to it is already carrying a colour. Reading
+ * as a second status pill would make two neutral numbers compete. */
+.pms .pms-kpis-n {
+  font-size: 11px; color: var(--ez-faint); font-variant-numeric: tabular-nums;
+  white-space: nowrap; align-self: center;
+}
+
 .pms .pms-kpi {
   display: grid;
   grid-template-columns: 22px minmax(0, 1fr) minmax(0, 0.8fr) 104px 28px;

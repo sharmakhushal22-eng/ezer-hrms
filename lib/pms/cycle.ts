@@ -101,10 +101,23 @@ export interface Rules {
   maxKra: number
   totalWeightage: number
   minWeightagePerKra: number
+  /**
+   * HOW MANY KPIs ONE KRA MAY HOLD — pms_policies.min_kpi_per_kra and
+   * max_kpi_per_kra, added in 221.
+   *
+   * These two sit here rather than in a KPI-specific rules type because they
+   * arrive on the same policy row, down the same four read paths, and a
+   * second rules object would mean a second thing to forget to pass. The
+   * defaults are the shipped ones: at least one measure per objective, at
+   * most five.
+   */
+  minKpi: number
+  maxKpi: number
 }
 
 export const DEFAULT_RULES: Rules = {
   minKra: 4, maxKra: 10, totalWeightage: 100, minWeightagePerKra: 5,
+  minKpi: 1, maxKpi: 5,
 }
 
 // ── dates ────────────────────────────────────────────────────────────────

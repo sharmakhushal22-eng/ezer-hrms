@@ -150,7 +150,27 @@ const POLICY_SELECT =
   + ' chain_id, pms_chain(name, rungs),'
   + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
   + ' publish_scope, hr_head_final_rating,'
+  // 221: how many KPIs one KRA may hold. The Config tab has to show the same
+  // numbers the KRA form enforces, or the two screens disagree about the rule.
+  + ' min_kpi_per_kra, max_kpi_per_kra,'
   + ' include_notice_period, include_exited'
+
+/**
+ * COLUMNS YOUNGER THAN SOME DEPLOYED DATABASES.
+ *
+ * Selecting a column PostgREST does not know about fails the WHOLE request,
+ * which would take out the policy list, the config tab, the company narrowing
+ * and with it the publish workspace — for the sake of one field. These are
+ * stripped and the select retried, each with a default that is the SAFE
+ * reading rather than the convenient one.
+ *
+ * A column leaves this list once its migration is everywhere; keeping it here
+ * costs one retry on the first failure and nothing otherwise.
+ */
+const FRESH_POLICY_COLS = [
+  'hr_head_final_rating',                      // 211
+  'min_kpi_per_kra', 'max_kpi_per_kra',        // 221
+] as const
 
 const SCREEN_KEY: Partial<Record<Tab, string>> = {}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
@@ -500,20 +520,26 @@ export default function PmsPage() {
       const ordered = () => polQ.order('company_id').order('policy_name').limit(50)
       let pol = await ordered()
       /**
-       * TOLERANT OF 211 NOT HAVING RUN.
+       * TOLERANT OF A MIGRATION NOT HAVING RUN — see FRESH_POLICY_COLS.
        *
-       * hr_head_final_rating is new, and selecting a column PostgREST does
-       * not know about fails the WHOLE request — which would take out the
-       * policy list, the config tab, the company narrowing and with it the
-       * publish workspace, for the sake of one boolean. So the narrow select
-       * is retried without it, and toConfig defaults the flag to TRUE: a
-       * policy read before the migration must not read as "the gate is off".
+       * Every young column is dropped together rather than one at a time.
+       * Probing them individually would mean one round trip per column and,
+       * worse, would stop at the first that succeeded: a database missing
+       * both 211 and 221 would retry without hr_head_final_rating, fail
+       * again on min_kpi_per_kra, and give up with the error it started with.
+       *
+       * toConfig defaults each stripped field to the SAFE reading — the gate
+       * is on, the limits are the shipped 1 and 5 — because a policy read
+       * before its migration must not read as "no rule applies".
        */
-      if (pol.error && POLICY_SELECT.includes('hr_head_final_rating')) {
-        polQ = supabase.from('pms_policies').select(
-          POLICY_SELECT.replace(' hr_head_final_rating,', ''))
-        if (co) polQ = polQ.eq('company_id', co)
-        pol = await ordered()
+      if (pol.error) {
+        const narrowed = FRESH_POLICY_COLS.reduce(
+          (sel, col) => sel.replace(` ${col},`, ''), POLICY_SELECT)
+        if (narrowed !== POLICY_SELECT) {
+          polQ = supabase.from('pms_policies').select(narrowed)
+          if (co) polQ = polQ.eq('company_id', co)
+          pol = await ordered()
+        }
       }
       if (!pol.error) {
         setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
@@ -559,6 +585,11 @@ export default function PmsPage() {
           maxKra: Number(p.max_kra_count) || 10,
           totalWeightage: Number(p.total_weightage) || 100,
           minWeightagePerKra: Number(p.min_weightage_per_kra) || 5,
+          // 221. `||` not `??`: a 0 in either column is not a KPI rule, it is
+          // a column the retry above stripped or a policy written before the
+          // migration, and the shipped default is the honest answer.
+          minKpi: Number(p.min_kpi_per_kra) || 1,
+          maxKpi: Number(p.max_kpi_per_kra) || 5,
           kraCreatedBy: (p.kra_created_by as string) ?? null,
           oneToOneMandatory: p.one_to_one_mandatory as boolean ?? null,
           midPeriodCheckin: p.mid_period_checkin as boolean ?? null,
@@ -1260,21 +1291,46 @@ export default function PmsPage() {
       }))).select('id, seq_no')
     if (goals.error) return `The KRAs could not be saved: ${goals.error.message}`
 
-    // 3. A rating against each, attributed to the HR Head.
     const bySeq = new Map((goals.data ?? []).map(g => {
       const r = g as { id: string; seq_no: number }
       return [Number(r.seq_no), String(r.id)]
     }))
-    const reviews = await supabase.from('pms_reviews').insert(
+
+    // 3. ONE KPI PER KRA, carrying the KRA's whole weightage.
+    //
+    // 220 made a rating name its KPI rather than its KRA, and kpi_id is NOT
+    // NULL — so without this the insert below is refused outright and the
+    // HR Head cannot record a direct appraisal at all. The shape is 220's own
+    // backfill: a KRA the Head typed in one box is one measure, and giving it
+    // the full weightage keeps pms_validate_kpis balanced.
+    const kpis = await supabase.from('pms_goal_kpi').insert(
       intent.kras.map(k => ({
         company_id: co, period_id: periodId, employee_id: e.id,
-        goal_id: bySeq.get(k.seq_no), rater_id: grant.employeeId ?? null,
-        rater_role: 'HR_HEAD', rating: intent.scores[k.seq_no] ?? null,
-        submitted: true, submitted_at: new Date().toISOString(),
-      })))
+        goal_id: bySeq.get(k.seq_no), seq_no: 1,
+        kpi_metric: k.kpi_metric || k.kra_title,
+        target_value: k.target_value, weightage: k.weightage,
+      }))).select('id, goal_id')
+    if (kpis.error) return `The KPIs could not be saved: ${kpis.error.message}`
+    const kpiByGoal = new Map((kpis.data ?? []).map(x => {
+      const r = x as { id: string; goal_id: string }
+      return [String(r.goal_id), String(r.id)]
+    }))
+
+    // 4. A rating against each, attributed to the HR Head.
+    const reviews = await supabase.from('pms_reviews').insert(
+      intent.kras.map(k => {
+        const goalId = bySeq.get(k.seq_no)
+        return {
+          company_id: co, period_id: periodId, employee_id: e.id,
+          goal_id: goalId, kpi_id: goalId ? kpiByGoal.get(goalId) : undefined,
+          rater_id: grant.employeeId ?? null,
+          rater_role: 'HR_HEAD', rating: intent.scores[k.seq_no] ?? null,
+          submitted: true, submitted_at: new Date().toISOString(),
+        }
+      }))
     if (reviews.error) return `The ratings could not be saved: ${reviews.error.message}`
 
-    // 4. The settled record. FINALISED, not PUBLISHED: it joins the publish
+    // 5. The settled record. FINALISED, not PUBLISHED: it joins the publish
     // queue, where 211 asks the HR Head the attestation like everybody else.
     const fin = await supabase.from('pms_overall_rating').update({
       final_rating: Number(intent.finalRating),

@@ -30,6 +30,7 @@
 
 import type { Line } from './scoring.ts'
 import type { Category } from './kra.ts'
+import { DEFAULT_RULES, type Rules } from './cycle.ts'
 
 export interface Kpi {
   /** Present once saved; absent on a row being typed. */
@@ -57,7 +58,25 @@ export interface KraWithKpis {
   kpis: Kpi[]
 }
 
-export const MIN_KPI_PER_KRA = 1
+/**
+ * THE FLOOR AND CEILING ARE POLICY, NOT CONSTANTS — 221.
+ *
+ * This used to be `MIN_KPI_PER_KRA = 1`, read directly by balance() and
+ * checkKpis(), with no ceiling at all. Requested: the minimum is 1 and the
+ * maximum is 5 BY DEFAULT, both changed from Setup and Configuration.
+ *
+ * So every function here that cares takes `r: Rules = DEFAULT_RULES`, exactly
+ * as kra.ts's checkKras/canAdd/canDelete do. The default is a FALLBACK for a
+ * screen rendered before the policy loads — never the rule. Reading
+ * DEFAULT_RULES.minKpi inside a component is the bug
+ * lib/pms/__tests__/rules-from-policy.test.ts exists to catch, and it is the
+ * same bug this constant was.
+ *
+ * Kept as a named export because the old name appears in tests and reads
+ * well in prose, but it is now only the DEFAULT, which is why it says so.
+ */
+export const DEFAULT_MIN_KPI_PER_KRA = DEFAULT_RULES.minKpi
+export const DEFAULT_MAX_KPI_PER_KRA = DEFAULT_RULES.maxKpi
 
 export interface KpiFault {
   /** The KRA this is about. */
@@ -77,12 +96,17 @@ export interface KpiBalance {
   ok: boolean
 }
 
-export function balance(kra: KraWithKpis): KpiBalance {
+export function balance(kra: KraWithKpis, r: Rules = DEFAULT_RULES): KpiBalance {
   const target = Number(kra.weightage) || 0
   const total = (kra.kpis ?? []).reduce((s, k) => s + (Number(k.weightage) || 0), 0)
+  const count = (kra.kpis ?? []).length
   return {
-    total, target, left: target - total, count: (kra.kpis ?? []).length,
-    ok: (kra.kpis ?? []).length >= MIN_KPI_PER_KRA && total === target,
+    total, target, left: target - total, count,
+    // Both ends, not just the floor. A KRA holding six KPIs under a policy
+    // that allows five is not submittable, so `ok` must not say it is —
+    // trg_pms_kpi_count refuses the sixth write and pms_validate_kpis
+    // refuses the set.
+    ok: count >= r.minKpi && count <= r.maxKpi && total === target,
   }
 }
 
@@ -94,15 +118,34 @@ export function balance(kra: KraWithKpis): KpiBalance {
  * order to deal with them — the set first, then the rows, because a row-level
  * complaint is noise while the KRA has no KPIs at all.
  */
-export function checkKpis(kra: KraWithKpis): KpiFault[] {
+export function checkKpis(kra: KraWithKpis, r: Rules = DEFAULT_RULES): KpiFault[] {
   const out: KpiFault[] = []
   const kpis = kra.kpis ?? []
-  const b = balance(kra)
+  const b = balance(kra, r)
 
-  if (kpis.length < MIN_KPI_PER_KRA) {
+  if (kpis.length === 0) {
     out.push({ seq: kra.seq_no, kpiSeq: null,
       says: 'Add a KPI. A KRA is the objective; the KPI is how it is measured, '
           + 'and without one there is nothing to rate.' })
+    return out
+  }
+
+  // A FLOOR ABOVE ONE NEEDS ITS OWN SENTENCE. "Add a KPI" is right for an
+  // empty KRA and useless at two-of-three: it does not say how many are
+  // wanted. Returning early on both keeps the weightage complaint out of the
+  // way until the set is the right size, since balancing a set you are about
+  // to add to is wasted work.
+  if (kpis.length < r.minKpi) {
+    out.push({ seq: kra.seq_no, kpiSeq: null,
+      says: `This KRA has ${kpis.length} of the ${r.minKpi} KPIs the policy `
+          + `asks for. Add ${r.minKpi - kpis.length} more.` })
+    return out
+  }
+
+  if (kpis.length > r.maxKpi) {
+    out.push({ seq: kra.seq_no, kpiSeq: null,
+      says: `This KRA has ${kpis.length} KPIs; the policy allows ${r.maxKpi}. `
+          + `Remove ${kpis.length - r.maxKpi}, or merge two measures into one.` })
     return out
   }
 
@@ -134,8 +177,49 @@ export function checkKpis(kra: KraWithKpis): KpiFault[] {
 }
 
 /** Every fault across a whole KRA set, in KRA order. */
-export function checkAllKpis(kras: KraWithKpis[]): KpiFault[] {
-  return kras.flatMap(checkKpis)
+export function checkAllKpis(kras: KraWithKpis[], r: Rules = DEFAULT_RULES): KpiFault[] {
+  // `kras.flatMap(checkKpis)` would pass the INDEX as the second argument,
+  // so KRA 0 would be checked against minKpi 0 and KRA 3 against minKpi 3.
+  // flatMap hands the callback three arguments and checkKpis now takes two.
+  return kras.flatMap(k => checkKpis(k, r))
+}
+
+/**
+ * Whether the + button is live, and what to say when it is not.
+ *
+ * Same shape as kra.ts's canAdd/canDelete so the two forms behave alike: the
+ * button is disabled rather than hidden, and the reason is the title, because
+ * a control that vanishes at the limit leaves the reader wondering whether
+ * they mis-clicked. The number comes from the policy, so the sentence changes
+ * when an admin changes the setting.
+ */
+export function canAddKpi(kpis: Kpi[], r: Rules = DEFAULT_RULES):
+  { allowed: boolean; reason?: string } {
+  const n = (kpis ?? []).length
+  return n < r.maxKpi
+    ? { allowed: true }
+    : { allowed: false,
+        reason: `${r.maxKpi} KPIs is the most this policy allows for one KRA. `
+              + 'Merge two measures, or raise the limit in Setup and Configuration.' }
+}
+
+/**
+ * Whether this KPI may be removed.
+ *
+ * Blocked at the remove rather than reported after it, for kra.ts's reason:
+ * letting the row go and then complaining leaves a set that cannot be
+ * submitted and no obvious way back, because what they need is the row they
+ * just deleted.
+ */
+export function canRemoveKpi(kpis: Kpi[], r: Rules = DEFAULT_RULES):
+  { allowed: boolean; reason?: string } {
+  const n = (kpis ?? []).length
+  if (n > r.minKpi) return { allowed: true }
+  return { allowed: false,
+    reason: r.minKpi === 1
+      ? 'A KRA needs at least one KPI — there would be nothing to rate.'
+      : `${r.minKpi} KPIs is the fewest this policy allows for one KRA. `
+      + 'Edit this one instead of removing it.' }
 }
 
 /**

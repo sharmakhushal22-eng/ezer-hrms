@@ -287,8 +287,13 @@ test('window edges are inclusive on both sides', () => {
 })
 
 test('the default rules match the shipped policy', () => {
+  // 221 added minKpi/maxKpi. Pinned whole rather than field by field, so a
+  // new rule cannot be added to the type without somebody deciding what its
+  // fallback should be — which is the decision that matters, since every
+  // screen renders against these before the policy loads.
   assert.deepEqual(DEFAULT_RULES,
-    { minKra: 4, maxKra: 10, totalWeightage: 100, minWeightagePerKra: 5 })
+    { minKra: 4, maxKra: 10, totalWeightage: 100, minWeightagePerKra: 5,
+      minKpi: 1, maxKpi: 5 })
 })
 
 test('dates shown to a reader are human, never ISO', () => {

@@ -306,9 +306,59 @@ test('it stops at the first failure', () => {
   // worse than none at all.
   const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
                         PAGE.indexOf('const saveFeedback = useCallback'))
-  for (const step of ['stamp.error', 'goals.error', 'reviews.error', 'fin.error']) {
+  for (const step of ['stamp.error', 'goals.error', 'kpis.error',
+                      'reviews.error', 'fin.error']) {
     assert.ok(fn.includes(`if (${step})`), `${step} is not checked`)
   }
+})
+
+// ── 220 moved the rating onto the KPI, and broke this path ───────────────
+//
+// 220 made pms_reviews.kpi_id NOT NULL. This function inserted reviews with a
+// goal_id and no kpi_id, so from the moment 220 was applied the HR Head's
+// direct appraisal was refused outright — "null value in column kpi_id" —
+// and the feature was dead.
+//
+// Nothing caught it. The ordering test above passed byte-for-byte, because
+// the order WAS still right; what was missing was a whole write. That is the
+// shape of this bug both times it has happened: a migration moves a key, the
+// test asserts the thing it always asserted, and the gap is the step nobody
+// thought to look for. So this test asserts the step EXISTS, not its order.
+
+test('a KRA written here gets a KPI, because a rating names one', () => {
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  const goals = fn.indexOf("from('pms_employee_goals')")
+  const kpis = fn.indexOf("from('pms_goal_kpi')")
+  const reviews = fn.indexOf("from('pms_reviews')")
+  assert.ok(kpis > 0,
+    'saveDirect writes no pms_goal_kpi row, so pms_reviews.kpi_id (NOT NULL '
+    + 'since 220) has nothing to point at and every direct appraisal is refused')
+  assert.ok(kpis > goals, 'the KPI is written before the KRA it hangs off')
+  assert.ok(reviews > kpis, 'the rating is written before the KPI it names')
+})
+
+test('every rating this writes carries its kpi_id', () => {
+  // Resolving the id is not enough — it has to reach the row. An insert that
+  // builds kpiByGoal and then forgets the field is refused exactly as before.
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  const insert = fn.slice(fn.indexOf("from('pms_reviews')"))
+  const row = insert.slice(0, insert.indexOf('reviews.error'))
+  assert.match(row, /kpi_id:/,
+    'the review rows name no kpi_id — the insert will be refused')
+})
+
+test('the KPI carries the whole KRA weightage, so the KRA stays balanced', () => {
+  // pms_validate_kpis refuses a KRA whose KPIs do not sum to its weightage.
+  // One KPI on a 25% KRA must therefore be 25%, not a default of 0.
+  const fn = PAGE.slice(PAGE.indexOf('const saveDirect = useCallback'),
+                        PAGE.indexOf('const saveFeedback = useCallback'))
+  const insert = fn.slice(fn.indexOf("from('pms_goal_kpi')"))
+  const row = insert.slice(0, insert.indexOf('kpis.error'))
+  assert.match(row, /weightage:\s*k\.weightage/,
+    'the KPI does not take the KRA\'s weightage, so the KRA will not balance')
+  assert.match(row, /seq_no:\s*1/, 'the single KPI is not numbered 1')
 })
 
 test('it does not publish — it joins the queue like everybody else', () => {

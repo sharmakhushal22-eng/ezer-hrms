@@ -200,6 +200,26 @@ read 100 and said yes.
 Also enforced: `count` between `min_kra_count` and `max_kra_count` (4 and 10),
 and every KRA ≥ `min_weightage_per_kra` (5).
 
+**How many KPIs a KRA may hold is policy too** *(migration 221)* —
+`min_kpi_per_kra` and `max_kpi_per_kra`, **1 and 5 by default**, edited in
+Setup & Controls beside the KRA counts.
+
+The two ends are enforced in different places, and the asymmetry is the point:
+
+| | Where | Why there |
+|---|---|---|
+| **Maximum** | `trg_pms_kpi_count`, `BEFORE INSERT` on `pms_goal_kpi` | The sixth INSERT is the one to refuse, exactly and cheaply. |
+| **Minimum** | `pms_validate_kpis`, read by `pms_lock_kras` | Nothing fires when a KRA has *no* KPIs — zero rows, zero trigger calls — so a floor can only be checked when somebody asserts the set is finished. |
+
+> **A floor enforced per-INSERT would refuse the first KPI of every KRA**,
+> because one is fewer than one until the row lands.
+
+The trigger is **INSERT-only** so that lowering the maximum never bricks data:
+a KRA already holding five KPIs keeps them and stays editable when the limit
+drops to three — only a *sixth* is refused. `pms_policies_kpi_range` refuses an
+inverted pair (min 5 / max 3), which would otherwise make every KRA
+simultaneously too small and too large.
+
 ### 5.2 The score
 
 For a given rater role, over **rated, submitted** KPIs only:
@@ -506,14 +526,14 @@ able to build a chain whose results can never be published.
 
 ### Built and verified
 
-Everything above. 1,045 PMS tests, migrations through 220, production build
+Everything above. 1,073 PMS tests, migrations through 221, production build
 compiles, `tsc` at the project's 39-error baseline.
 
 ### Not finished
 
 | | |
 |---|---|
-| **Multi-KPI UI** | The schema, scoring, validation and writes are KPI-shaped; the **employee form cannot yet add a second KPI**, and the manager rating stepper is not built. Functionally the system is still one KPI per KRA. |
+| **The manager's rating stepper** | Employees rate per KPI; the manager's path still rates at KRA level, and silently **drops any KRA with more than one KPI** (`kpiOf` returns null when it cannot resolve a single KPI, and those rows are filtered out of the upsert). Until the one-KRA-at-a-time stepper lands, a multi-KPI KRA cannot be rated by the chain. |
 | **Never run** | 388 of 395 appraisals never submitted. `pms_chain`, `pms_training_catalogue`, `pms_training_suggestion` and all three PIP tables are **empty** — the chain builder, the AI bin and the whole PIP flow have never been exercised on real data. |
 | **Rule 6 is dead code** | `canManagerRate` ("a manager cannot rate before the self rating") is defined and called from nowhere. SQL enforces it, so a manager meets a raw database refusal instead of a disabled button with a sentence. |
 | **A contradiction** | `EmployeeTabs` tells employees recognition is *"never a cash component"*, while `RECOGNITION_LABEL` offers raters **"Salary bonus"** and **"Out-of-cycle increment"**. One of the two is wrong — a product decision, not a bug to pick quietly. |

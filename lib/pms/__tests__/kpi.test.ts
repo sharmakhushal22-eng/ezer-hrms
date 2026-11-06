@@ -15,9 +15,16 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { balance, checkKpis, checkAllKpis, suggestKpiSplit, kraRating,
-         ratedCount, lines, blankKpi, renumber, MIN_KPI_PER_KRA,
+         ratedCount, lines, blankKpi, renumber, canAddKpi, canRemoveKpi,
+         DEFAULT_MIN_KPI_PER_KRA, DEFAULT_MAX_KPI_PER_KRA,
          type Kpi, type KraWithKpis } from '../kpi.ts'
 import { score } from '../scoring.ts'
+import { DEFAULT_RULES, type Rules } from '../cycle.ts'
+
+/** A policy with a different KPI range, for testing that the range is read
+ *  from the policy rather than from the defaults. */
+const rules = (minKpi: number, maxKpi: number): Rules =>
+  ({ ...DEFAULT_RULES, minKpi, maxKpi })
 
 const kpi = (seq: number, w: number, metric = `m${seq}`): Kpi =>
   ({ seq_no: seq, kpi_metric: metric, target_value: 't', weightage: w })
@@ -105,7 +112,94 @@ test('a KRA with no KPI is refused, and told what a KPI is for', () => {
   assert.equal(f.length, 1, 'row faults are noise while there are no rows')
   assert.equal(f[0].kpiSeq, null)
   assert.match(f[0].says, /nothing to rate/)
-  assert.equal(MIN_KPI_PER_KRA, 1)
+})
+
+// ── 221: the range is policy, and both ends are read from it ─────────────
+//
+// It used to be `MIN_KPI_PER_KRA = 1` with no ceiling. These tests are the
+// ones that would have failed before: every assertion below passes a policy
+// whose range is NOT the default, so a function that went on reading the
+// constant would answer the default's question.
+
+test('the shipped default is 1 to 5, as requested', () => {
+  assert.equal(DEFAULT_MIN_KPI_PER_KRA, 1)
+  assert.equal(DEFAULT_MAX_KPI_PER_KRA, 5)
+  assert.equal(DEFAULT_RULES.minKpi, 1)
+  assert.equal(DEFAULT_RULES.maxKpi, 5)
+})
+
+test('a floor above one asks for a count, not just "add a KPI"', () => {
+  // "Add a KPI" is right for an empty KRA and useless at 2 of 3: it does not
+  // say how many are wanted.
+  const f = checkKpis(kra(30, [kpi(1, 15), kpi(2, 15)]), rules(3, 5))
+  assert.equal(f.length, 1)
+  assert.equal(f[0].kpiSeq, null)
+  assert.match(f[0].says, /2 of the 3 KPIs/)
+  assert.match(f[0].says, /Add 1 more/)
+  // And the weightage is NOT complained about at the same time: this set
+  // balances at 30 already, and will not once the third row is added.
+  assert.ok(!/total/i.test(f[0].says))
+})
+
+test('a set over the ceiling is refused, and says how many to lose', () => {
+  const six = [kpi(1, 5), kpi(2, 5), kpi(3, 5), kpi(4, 5), kpi(5, 5), kpi(6, 5)]
+  const f = checkKpis(kra(30, six))            // default max 5
+  assert.equal(f.length, 1)
+  assert.match(f[0].says, /6 KPIs; the policy allows 5/)
+  assert.match(f[0].says, /Remove 1/)
+  // Under a policy that allows six, the same set is fine.
+  assert.deepEqual(checkKpis(kra(30, six), rules(1, 6)), [])
+})
+
+test('balance().ok respects both ends of the policy range', () => {
+  const six = [kpi(1, 5), kpi(2, 5), kpi(3, 5), kpi(4, 5), kpi(5, 5), kpi(6, 5)]
+  // Balanced at 30, but one too many: not ok, or the form would enable a
+  // submit the database refuses.
+  assert.equal(balance(kra(30, six)).ok, false)
+  assert.equal(balance(kra(30, six), rules(1, 6)).ok, true)
+  // And the floor, read from the policy rather than assumed to be 1.
+  assert.equal(balance(kra(30, [kpi(1, 30)]), rules(2, 5)).ok, false)
+  assert.equal(balance(kra(30, [kpi(1, 30)])).ok, true)
+})
+
+test('the add button closes at the ceiling and says why', () => {
+  const four = [kpi(1, 5), kpi(2, 5), kpi(3, 5), kpi(4, 5)]
+  assert.equal(canAddKpi(four).allowed, true)
+  const full = canAddKpi([...four, kpi(5, 5)])
+  assert.equal(full.allowed, false)
+  assert.match(full.reason ?? '', /5 KPIs is the most/)
+  // The sentence carries the POLICY's number, so it changes with the setting.
+  assert.match(canAddKpi(four, rules(1, 4)).reason ?? '', /4 KPIs is the most/)
+  // And it points at where the limit is changed, since an admin reading it
+  // can do something about it.
+  assert.match(full.reason ?? '', /Setup and Configuration/)
+})
+
+test('the remove button closes at the floor and says why', () => {
+  assert.equal(canRemoveKpi([kpi(1, 10), kpi(2, 10)]).allowed, true)
+  const last = canRemoveKpi([kpi(1, 10)])
+  assert.equal(last.allowed, false)
+  assert.match(last.reason ?? '', /nothing to rate/)
+  // At a floor above one the sentence is about the policy, not about rating:
+  // "there would be nothing to rate" is false when two of three remain.
+  const third = canRemoveKpi([kpi(1, 10), kpi(2, 10), kpi(3, 10)], rules(3, 5))
+  assert.equal(third.allowed, false)
+  assert.match(third.reason ?? '', /3 KPIs is the fewest/)
+  assert.ok(!/nothing to rate/.test(third.reason ?? ''))
+})
+
+test('checkAllKpis passes the policy down, not the array index', () => {
+  // `kras.flatMap(checkKpis)` compiles and is wrong: flatMap hands the
+  // callback (item, index, array), so KRA 0 would be checked against a
+  // "policy" of 0 and KRA 2 against 2. Every KRA here holds one KPI and
+  // balances, so the only way to see a fault is a floor of 2 reaching all
+  // of them.
+  const set = [kra(50, [kpi(1, 50)], 1), kra(30, [kpi(1, 30)], 2),
+               kra(20, [kpi(1, 20)], 3)]
+  assert.deepEqual(checkAllKpis(set), [])
+  const strict = checkAllKpis(set, rules(2, 5))
+  assert.equal(strict.length, 3, 'the floor did not reach every KRA')
+  assert.deepEqual(strict.map(f => f.seq), [1, 2, 3])
 })
 
 test('a KPI with no measure, or no weightage, is named individually', () => {

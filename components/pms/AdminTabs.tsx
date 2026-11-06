@@ -97,6 +97,11 @@ export interface PolicyConfig {
   maxKra: number
   totalWeightage: number
   minWeightagePerKra: number
+  /** 221. How many KPIs one KRA may hold. Shown here because this tab is
+   *  where somebody checks what the rule IS, and a config screen that omits
+   *  a live limit is how "my configuration is not reflected" gets reported. */
+  minKpi?: number
+  maxKpi?: number
   kraCreatedBy?: string | null
   oneToOneMandatory?: boolean | null
   midPeriodCheckin?: boolean | null
@@ -404,6 +409,9 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy,
                  hint="Exactly, not at least" />
           <Fixed label="Minimum weightage per KRA" value={String(policy?.minWeightagePerKra ?? DEFAULT_RULES.minWeightagePerKra)}
                  hint="Stops a token KRA carrying 1%" />
+          <Fixed label="KPIs per KRA"
+                 value={`${policy?.minKpi ?? DEFAULT_RULES.minKpi} to ${policy?.maxKpi ?? DEFAULT_RULES.maxKpi}`}
+                 hint="Each KPI is rated on its own and takes a share of the KRA's weightage" />
           <Fixed label="Who creates KRAs" value={
             policy?.kraCreatedBy === 'MANAGER' ? 'Their manager'
             : policy?.kraCreatedBy === 'BOTH' ? 'Either may write them'

@@ -22,7 +22,7 @@ import './pms.css'
 import { checkKras, canAdd, canDelete, meter, suggestSplit,
          CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@/lib/pms/kra'
 import { balance, checkKpis, suggestKpiSplit, blankKpi, renumber, selfKey,
-         kraRating, ratedCount, type Kpi } from '@/lib/pms/kpi'
+         kraRating, ratedCount, canAddKpi, canRemoveKpi, type Kpi } from '@/lib/pms/kpi'
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
          type Log, type DiscussionType, type Mode, type WeightageChange } from '@/lib/pms/oneToOne'
@@ -328,16 +328,30 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   oneToOneAlready?: boolean
   saving?: boolean
 }) {
-  const check = checkKras(kras)
+  /**
+   * ALL FOUR TAKE `rules`, AND ALL FOUR WERE CALLED WITHOUT IT.
+   *
+   * checkKras, meter, canAdd and canDelete each default their second argument
+   * to DEFAULT_RULES. Omitting it compiles, runs, and silently holds the
+   * employee to the shipped 4/10/100/5 — so this screen's COPY honoured the
+   * policy (it reads `rules.minKra`) while its ENFORCEMENT did not. An admin
+   * setting a minimum of 6 saw the sentence change and the submit button go
+   * on accepting 4.
+   *
+   * That is the same bug lib/pms/__tests__/rules-from-policy.test.ts was
+   * written for, hiding in the one form the test cannot see: the default is
+   * inside kra.ts, so there is no `DEFAULT_RULES.minKra` here to find.
+   */
+  const check = checkKras(kras, rules)
   // How many KRAs still have no rating. Only a blocker once rateRequired —
   // see the prop's note.
   const unrated = rateRequired
     ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) === null).length
     : 0
   const canGo = check.canSubmit && unrated === 0
-  const m = meter(check)
-  const add = canAdd(kras)
-  const del = canDelete(kras)
+  const m = meter(check, rules)
+  const add = canAdd(kras, rules)
+  const del = canDelete(kras, rules)
 
   const set = (i: number, patch: Partial<Kra>) =>
     onChange(kras.map((k, j) => j === i ? { ...k, ...patch } : k))
@@ -348,10 +362,18 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   const kpisOf = (k: Kra): Kpi[] => k.kpis ?? []
   const setKpi = (i: number, j: number, patch: Partial<Kpi>) =>
     set(i, { kpis: kpisOf(kras[i]).map((x, n) => n === j ? { ...x, ...patch } : x) })
-  const addKpi = (i: number) =>
+  // THE LIMIT IS CHECKED HERE AS WELL AS ON THE BUTTON. A disabled button is
+  // a hint, not a rule: this helper is also reachable by keyboard on a stale
+  // render, and the write it would make is one trg_pms_kpi_count refuses with
+  // a database error instead of a sentence.
+  const addKpi = (i: number) => {
+    if (!canAddKpi(kpisOf(kras[i]), rules).allowed) return
     set(i, { kpis: renumber([...kpisOf(kras[i]), blankKpi(kpisOf(kras[i]).length + 1)]) })
-  const removeKpi = (i: number, j: number) =>
+  }
+  const removeKpi = (i: number, j: number) => {
+    if (!canRemoveKpi(kpisOf(kras[i]), rules).allowed) return
     set(i, { kpis: renumber(kpisOf(kras[i]).filter((_, n) => n !== j)) })
+  }
   /** The even split of this KRA's weightage, offered rather than applied. */
   const splitKpis = (i: number) => {
     const list = kpisOf(kras[i])
@@ -513,11 +535,16 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                       balance line says which, because "15 of 30" is the only
                       number that tells somebody what to type next. */}
                   {(() => {
-                    const bal = balance({ seq_no: k.seq_no, kra_title: k.kra_title,
-                                          weightage: k.weightage, kpis: kpisOf(k) })
-                    const faults = checkKpis({ seq_no: k.seq_no, kra_title: k.kra_title,
-                                               weightage: k.weightage, kpis: kpisOf(k) })
+                    const mine = { seq_no: k.seq_no, kra_title: k.kra_title,
+                                   weightage: k.weightage, kpis: kpisOf(k) }
+                    // `rules` both times. balance() and checkKpis() default to
+                    // DEFAULT_RULES, so omitting it here would hold every KRA
+                    // to 1-to-5 whatever the policy says — the bug fixed at
+                    // the top of this component, in a second place.
+                    const bal = balance(mine, rules)
+                    const faults = checkKpis(mine, rules)
                     const setFault = faults.find(f => f.kpiSeq === null)
+                    const more = canAddKpi(kpisOf(k), rules)
                     return (
                       <div className="pms-kpis">
                         <div className="pms-kpis-h">
@@ -532,9 +559,22 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                                   Split {k.weightage} evenly
                                 </button>
                               )}
-                              <button type="button" className="btn ghost" onClick={() => addKpi(i)}>
+                              {/* DISABLED AT THE CEILING, NOT HIDDEN. A button
+                                  that disappears reads as a mis-click; one
+                                  that greys out with the reason in its title
+                                  says the limit exists and where to change it.
+                                  The count travels with it so "4 of 5" is
+                                  legible before the limit is reached, which is
+                                  when somebody is deciding how to split a KRA. */}
+                              <button type="button" className="btn ghost"
+                                      disabled={!more.allowed}
+                                      title={more.reason ?? 'Add another measure for this KRA'}
+                                      onClick={() => addKpi(i)}>
                                 + Add KPI
                               </button>
+                              <span className="pms-kpis-n">
+                                {kpisOf(k).length} of {rules.maxKpi}
+                              </span>
                             </div>
                           )}
                         </div>
@@ -569,18 +609,27 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                                   <span aria-hidden="true">%</span>
                                 </div>
                               </div>
-                              {/* The last KPI cannot go: a KRA with no measure
-                                  cannot be rated, and removing it would leave
-                                  a row nobody can fix from this screen. */}
-                              {!locked && (
+                              {/* The KPI that would take the KRA under the
+                                  policy's floor cannot go. Usually that is the
+                                  last one — a KRA with no measure cannot be
+                                  rated — but a policy asking for three makes
+                                  it the third, and the hardcoded `<= 1` here
+                                  said "A KRA needs at least one KPI" while the
+                                  submit refused the set for having two.
+                                  canRemoveKpi owns both the test and the
+                                  sentence so they cannot drift apart. */}
+                              {!locked && (() => {
+                                const fewer = canRemoveKpi(kpisOf(k), rules)
+                                return (
                                 <button className="pms-kpi-x" type="button"
-                                        disabled={kpisOf(k).length <= 1}
-                                        title={kpisOf(k).length <= 1
-                                          ? 'A KRA needs at least one KPI'
+                                        disabled={!fewer.allowed}
+                                        title={!fewer.allowed
+                                          ? fewer.reason
                                           : 'Remove this KPI'}
                                         aria-label={`Remove KRA ${i + 1} KPI ${j + 1}`}
                                         onClick={() => removeKpi(i, j)}>×</button>
-                              )}
+                                )
+                              })()}
 
                               {/* §3's merge, now per measure: you rate the
                                   thing that is measured, beside its target,

@@ -230,6 +230,41 @@ function PolicyPanel({ policies, companies, people, chains, reload }: {
         <Field label="Total weightage" hint="Usually 100"><input type="number" value={n(draft.total_weightage)} onChange={e => set('total_weightage', Number(e.target.value))} /></Field>
       </div>
 
+      {/* ── 221. HOW MANY KPIs ONE KRA MAY HOLD ──────────────────────────────
+          A KRA is the objective; a KPI is how it is measured, and each KPI is
+          rated on its own. The pair is editable here because it was neither:
+          the floor of one lived in lib/pms/kpi.ts and there was no ceiling at
+          all.
+
+          `min` on the max input is bound to the minimum rather than to 1, so
+          the browser refuses an inverted pair before the request is made.
+          pms_policies_kpi_range refuses it too — this only means the
+          administrator finds out while typing instead of on save. */}
+      <div className="grid g4">
+        <Field label="Minimum KPIs per KRA"
+               hint="At least one, or the KRA has nothing to rate">
+          <input type="number" min={1} max={n(draft.max_kpi_per_kra) || 20}
+                 value={n(draft.min_kpi_per_kra) || 1}
+                 onChange={e => set('min_kpi_per_kra', Number(e.target.value))} />
+        </Field>
+        <Field label="Maximum KPIs per KRA" hint="Default 5, 20 at most">
+          <input type="number" min={n(draft.min_kpi_per_kra) || 1} max={20}
+                 value={n(draft.max_kpi_per_kra) || 5}
+                 onChange={e => set('max_kpi_per_kra', Number(e.target.value))} />
+        </Field>
+        {/* Spanning the two columns the fields leave empty. In one column it
+            renders as a tall narrow ribbon beside two short inputs, which
+            reads as a warning about the field next to it rather than as a
+            note about the pair. */}
+        <div style={{ gridColumn: 'span 2' }}>
+          <Note tone="warn">
+            The KPIs under one KRA share that KRA's weightage — three KPIs on a
+            30% KRA might be 15, 10 and 5. Lowering the maximum leaves KRAs that
+            already hold more than that alone; it refuses the next one.
+          </Note>
+        </div>
+      </div>
+
       <div className="grid g4">
         <Field label="Minimum weightage per KRA"><input type="number" value={n(draft.min_weightage_per_kra)} onChange={e => set('min_weightage_per_kra', Number(e.target.value))} /></Field>
         <Field label="New joiner cut-off (days)"

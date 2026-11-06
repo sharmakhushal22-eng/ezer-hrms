@@ -37,14 +37,20 @@ const TODAY = '2026-09-04'
 
 const KRAS: Kra[] = [
   // 220: a KRA is measured by its KPIs, whose weightages total the KRA's.
-  // The first carries three, to show the case the single-metric form could
-  // not express; the rest carry one, which is how every KRA written before
-  // 220 was backfilled.
+  // 221: how many it may hold is policy, default 1 to 5.
+  //
+  // The first carries FIVE — the shipped maximum — so the harness shows the
+  // state nothing else does: the + Add KPI button disabled, with its reason
+  // in the title and "5 of 5" beside it. The last carries one, which is how
+  // every KRA written before 220 was backfilled and which shows the × button
+  // disabled at the floor. Both ends of the range are therefore on screen.
   { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25,
     kpis: [
-      { seq_no: 1, kpi_metric: 'Error rate per run', target_value: 'under 0.2%', weightage: 12 },
-      { seq_no: 2, kpi_metric: 'Reruns caused by input error', target_value: 'zero', weightage: 8 },
+      { seq_no: 1, kpi_metric: 'Error rate per run', target_value: 'under 0.2%', weightage: 8 },
+      { seq_no: 2, kpi_metric: 'Reruns caused by input error', target_value: 'zero', weightage: 6 },
       { seq_no: 3, kpi_metric: 'Payslips issued on the 1st', target_value: '100%', weightage: 5 },
+      { seq_no: 4, kpi_metric: 'Arrears cleared within the cycle', target_value: '100%', weightage: 4 },
+      { seq_no: 5, kpi_metric: 'Full-and-final within 45 days', target_value: '100%', weightage: 2 },
     ] },
   { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20,
     kpis: [

@@ -363,8 +363,20 @@ test('both new selects survive 211 not having run', () => {
   // One unknown column fails the whole request. The policy list feeds the
   // config tab and the company narrowing; the rating select feeds the
   // publish workspace and the ratings summary.
-  assert.match(PAGE, /if \(pol\.error && POLICY_SELECT\.includes\('hr_head_final_rating'\)\)/,
-    'the policy select has no retry')
+  //
+  // 221 generalised the policy retry: it used to name hr_head_final_rating
+  // and strip that one column, and now strips every column in
+  // FRESH_POLICY_COLS at once. What this test cares about is unchanged — that
+  // the retry EXISTS and that it covers 211's column — so it asserts both,
+  // rather than the shape of the `if`.
+  assert.match(PAGE, /if \(pol\.error\) \{/, 'the policy select has no retry')
+  assert.match(PAGE, /FRESH_POLICY_COLS\.reduce\(/,
+    'the retry does not strip the young columns')
+  const fresh = PAGE.slice(PAGE.indexOf('const FRESH_POLICY_COLS'),
+                           PAGE.indexOf('] as const', PAGE.indexOf('const FRESH_POLICY_COLS')))
+  assert.match(fresh, /'hr_head_final_rating'/,
+    '211\'s column is no longer in the retry list, so a database without 211 '
+    + 'loses the whole policy read again')
   assert.match(PAGE, /if \(pub\.error\) pub = await askPub\(PUB_BASE\)/,
     'the rating select has no retry')
 })
