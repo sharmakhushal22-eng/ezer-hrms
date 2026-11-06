@@ -62,6 +62,9 @@ import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { csvText, parseCsv } from '@/lib/pms/csv'
 import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
+import { type ChainAsks, type ChainAsk, publishWarnings, asksBadge, pipLine } from '@/lib/pms/hrQueue'
+import { HR_STATUS_LABEL, TRAINING_CATEGORY_LABEL, type HrStatus,
+         type TrainingCategory } from '@/lib/pms/training'
 
 /** §6.1's configuration, as the policy row holds it. Named in the screen's
  *  own terms rather than the column names, so the page does the mapping once
@@ -93,10 +96,15 @@ export interface PolicyConfig {
   newJoinerCutoffDays?: number | null
   includeNoticePeriod?: boolean | null
   includeExited?: boolean | null
+  /** 202: who runs the appraisal after the rating is settled. */
+  postFinalOwner?: string | null
+  /** 203: may this company's employees be published from a combined list. */
+  publishScope?: string | null
 }
 
 export type AdminTab =
-  | 'config' | 'setup' | 'policies' | 'fill' | 'publish' | 'upload' | 'pip' | 'reports'
+  | 'config' | 'setup' | 'policies' | 'fill' | 'publish' | 'summary' | 'upload'
+  | 'pip' | 'reports'
 
 export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'config',   label: 'PMS Configuration',  blurb: 'Frequency, windows and the KRA rules everyone is held to' },
@@ -104,7 +112,8 @@ export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'setup',    label: 'Setup & Controls',   blurb: 'Edit the policy, KRA library and rating scale; generate and open periods' },
   { k: 'policies', label: 'Policy Builder',     blurb: 'Different cycles for different groups, and who falls under which' },
   { k: 'fill',     label: 'Fill Status Tracker',blurb: 'Live status for everyone, and who to chase' },
-  { k: 'publish',  label: 'Publish Results',    blurb: 'Settled ratings waiting to be released to employees' },
+  { k: 'publish',  label: 'Publish Results',    blurb: 'Settled ratings: write the feedback, award recognition, release' },
+  { k: 'summary',  label: 'Ratings Summary',    blurb: 'Every employee\'s rating and where their appraisal stands' },
   { k: 'upload',   label: 'Final Rating Upload',blurb: 'Bulk override from an offline calibration' },
   { k: 'pip',      label: 'PIP Management',     blurb: 'Requests from managers, and the plans you have started' },
   { k: 'reports',  label: 'Reports & Export',   blurb: 'The fourteen reports, and Excel export' },
@@ -165,6 +174,31 @@ function Pill({ tone, children }: {
   children: React.ReactNode
 }) {
   return <span className={`pill p-${tone}`}>{children}</span>
+}
+
+/** The same three-up figure the manager surfaces use, so a count means the
+ *  same thing and looks the same on both sides of the product. */
+function Stat({ label, value, note, tone }: {
+  label: string; value: React.ReactNode; note?: string; tone?: 'accent' | 'warn'
+}) {
+  return (
+    <div className={tone === 'accent' ? 'stat accent' : tone === 'warn' ? 'stat warn' : 'stat'}>
+      <div className="lbl">{label}</div>
+      <div className="val">{value}</div>
+      {note && <div className="note">{note}</div>}
+    </div>
+  )
+}
+
+function Note({ tone = 'info', children }: {
+  tone?: 'info' | 'warn'; children: React.ReactNode
+}) {
+  return (
+    <div className={tone === 'warn' ? 'banner b-amber' : 'banner b-blue'}>
+      <span aria-hidden="true">{tone === 'warn' ? '!' : 'ℹ️'}</span>
+      <div>{children}</div>
+    </div>
+  )
 }
 
 function Empty({ what, why }: { what: string; why: string }) {
@@ -706,11 +740,40 @@ export interface PublishRow {
   employeeId: string
   name: string
   code: string
+  departmentId?: string | null
+  /**
+   * WHICH CYCLE AND WHICH COMPANY this row belongs to.
+   *
+   * HR Head spans companies, and each company runs its own period. Without
+   * these the summary is three organisations' ratings in one undifferentiated
+   * list, and publishing would have to guess which period it was acting on —
+   * so the actions take the period from the row rather than from the page.
+   */
+  periodId?: string | null
+  periodLabel?: string | null
+  companyName?: string | null
   finalRating: number | null
   finalRatingCode: string | null
   finalisedByRole: string | null
   finalisedAt: string | null
   published: boolean
+  /**
+   * The words that go out beside the number. HR writes these when the policy
+   * says post_final_owner = 'HR', which is the default — see migration 202.
+   */
+  appreciation?: string | null
+  improvement?: string | null
+  benefits?: { type: string; note: string }[]
+  /**
+   * Whether the final-review one-to-one carries BOTH acknowledgements.
+   *
+   * 200's trg_pms_publish_needs_signoff refuses a publish without it, so this
+   * has to be on the row: offering the button to HR and letting the database
+   * answer with a raw P0001 is the behaviour that gate exists to replace.
+   */
+  signedOff?: boolean
+  /** Whether the employee has confirmed reading the result. */
+  acknowledged?: boolean
 }
 
 /**
@@ -731,65 +794,406 @@ export interface PublishRow {
  * exists; stage HR says it has reached HR and nobody below has it any more.
  * Reading the status instead would list appraisals that are settled but still
  * sitting with a HOD who has not passed them on.
+ *//**
+ * §(none) — HR runs the appraisal after the rating is settled.
+ *
+ * Requested: once the HOD finalises, the result moves here and every step
+ * after the rating — the appreciation remark, the improvement feedback, the
+ * recognition awards, and the publish itself — is HR's. The HOD's part ends
+ * at the number.
+ *
+ * WHICH MEANS THIS TAB WRITES, and the previous version did not. It listed
+ * settled ratings and offered one button. The controls it now carries were on
+ * the HOD's Feedback & Recognition tab, which migration 202's default takes
+ * away from them.
+ *
+ * WHAT IT STILL CANNOT DO IS CHANGE THE RATING. That was settled earlier and
+ * has not moved: there is no rating input anywhere on this screen, and 188's
+ * guards would refuse one. HR writes the words beside the number and releases
+ * it; the number belongs to the chain.
+ *
+ * THE SIGN-OFF IS SHOWN, NOT DISCOVERED. 200's trg_pms_publish_needs_signoff
+ * refuses any publish before the final-review one-to-one carries both
+ * acknowledgements. Offering the button anyway and letting the database answer
+ * with a raw P0001 is exactly the behaviour that gate was written to replace,
+ * so the row says whether it is signed and the button waits.
  */
-export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }: {
+/**
+ * WHAT THE CHAIN ASKED FOR, on the card where HR decides.
+ *
+ * Requested: the PIP requests, training suggestions and recognition the
+ * raters proposed all reach the HR Head "at end so they can publish results
+ * and give recognizations and act accordingly".
+ *
+ * Placed inside the member card rather than on a tab of its own, because the
+ * decision it informs is the one being made right here — a separate screen
+ * would mean reading a proposal, navigating away, and publishing from memory.
+ *
+ * NONE OF THIS BLOCKS THE PUBLISH BUTTON. See publishWarnings: a rater can
+ * attach a proposal to anybody, so a pending one holding the result would
+ * let any rater stall any release. The warnings sit above the button and the
+ * button still works.
+ */
+function AskRow({ ask, onDecide }: {
+  ask: ChainAsk
+  onDecide?: (id: string, status: HrStatus, note: string) => void
+}) {
+  const [note, setNote] = useState(ask.hrNote ?? '')
+  const [open, setOpen] = useState(false)
+  const decided = ask.status !== 'PENDING'
+  return (
+    <div className={`askrow${decided ? ' decided' : ''}`}>
+      <div className="askhead">
+        <div>
+          <b>{ask.name || <span className="k">(unnamed)</span>}</b>
+          {ask.kind === 'TRAINING' && ask.category && (
+            <span className="k"> · {TRAINING_CATEGORY_LABEL[ask.category as TrainingCategory]
+                                    ?? ask.category.toLowerCase()}</span>
+          )}
+          <div className="k" style={{ marginTop: 2 }}>
+            Proposed by {ask.byName ?? ask.byRole ?? 'the chain'}
+            {ask.byName && ask.byRole ? ` (${ask.byRole.replace(/_/g, ' ')})` : ''}
+            {ask.at ? ` on ${ask.at.slice(0, 10)}` : ''}
+          </div>
+        </div>
+        <Pill tone={ask.status === 'ACCEPTED' ? 'green'
+                  : ask.status === 'DECLINED' ? 'grey' : 'amber'}>
+          {HR_STATUS_LABEL[ask.status]}
+        </Pill>
+      </div>
+
+      {ask.details && <div className="askdet">{ask.details}</div>}
+      {decided && ask.hrNote && (
+        <div className="askdet"><b>Your note.</b> {ask.hrNote}</div>
+      )}
+
+      {onDecide && ask.id && (
+        !open ? (
+          <div className="btnrow">
+            <button className="btn ghost sm" type="button" onClick={() => setOpen(true)}>
+              {decided ? 'Change this decision' : 'Decide'}
+            </button>
+          </div>
+        ) : (
+          <>
+            <div className="fld">
+              <label htmlFor={`ask-${ask.id}`}>
+                Note {ask.kind === 'RECOGNITION'
+                  ? '(the employee does not see this; add the award itself under Recognition below)'
+                  : '(for the record and for the manager who suggested it)'}
+              </label>
+              <input id={`ask-${ask.id}`} value={note}
+                     placeholder={ask.kind === 'RECOGNITION'
+                       ? 'e.g. approved for the January cycle'
+                       : 'e.g. budgeted for Q1, nominated'}
+                     onChange={e => setNote(e.target.value)} />
+            </div>
+            <div className="btnrow">
+              <button className="btn sm" type="button"
+                      onClick={() => { onDecide(ask.id!, 'ACCEPTED', note.trim()); setOpen(false) }}>
+                Accept
+              </button>
+              <button className="btn ghost sm" type="button"
+                      onClick={() => { onDecide(ask.id!, 'DECLINED', note.trim()); setOpen(false) }}>
+                Decline
+              </button>
+              <button className="btn ghost sm" type="button" onClick={() => setOpen(false)}>
+                Cancel
+              </button>
+            </div>
+          </>
+        )
+      )}
+    </div>
+  )
+}
+
+function ChainAsksBlock({ asks, onDecide }: {
+  asks: ChainAsks | undefined
+  onDecide?: (id: string, status: HrStatus, note: string) => void
+}) {
+  if (!asks || asks.empty) {
+    return (
+      <>
+        <Section>What the chain asked for</Section>
+        <div className="k" style={{ lineHeight: 1.6 }}>
+          Nobody in the chain proposed training, recognition or a PIP while
+          rating this person. That is the usual case — the blocks are optional
+          and a rater with nothing to add leaves them alone.
+        </div>
+      </>
+    )
+  }
+  return (
+    <>
+      <Section>What the chain asked for</Section>
+
+      {asks.recognition.length > 0 && (
+        <div className="askgroup">
+          <div className="asklbl">
+            Recognition proposed ({asks.recognition.length})
+            <span className="k"> — a proposal, not an award. Accepting one records
+              your decision; the award itself is the Recognition block below.</span>
+          </div>
+          {asks.recognition.map((a, i) => (
+            <AskRow key={a.id ?? i} ask={a} onDecide={onDecide} />
+          ))}
+        </div>
+      )}
+
+      {asks.training.length > 0 && (
+        <div className="askgroup">
+          <div className="asklbl">
+            Training suggested ({asks.training.length})
+            <span className="k"> — not shown to the employee. Your decision here
+              does not change what goes out with the rating.</span>
+          </div>
+          {asks.training.map((a, i) => (
+            <AskRow key={a.id ?? i} ask={a} onDecide={onDecide} />
+          ))}
+        </div>
+      )}
+
+      {asks.pips.length > 0 && (
+        <div className="askgroup">
+          <div className="asklbl">
+            PIP {asks.pips.length === 1 ? 'request' : 'requests'} ({asks.pips.length})
+            <span className="k"> — read-only here. A PIP has its own six-step
+              review in PIP Requests, and an RM cannot start one.</span>
+          </div>
+          {asks.pips.map((p, i) => (
+            <div className="askrow" key={p.id ?? i}>
+              <div className="askhead">
+                <div>
+                  <b>Raised by {p.byName ?? p.byRole ?? 'the chain'}</b>
+                  {p.triggerRating !== null && p.triggerRating !== undefined && (
+                    <span className="k"> · triggered at {p.triggerRating}</span>
+                  )}
+                  <div className="k" style={{ marginTop: 2 }}>
+                    {p.proposedStart && p.proposedEnd
+                      ? `Proposed ${p.proposedStart} to ${p.proposedEnd}` : 'No dates proposed'}
+                  </div>
+                </div>
+                <Pill tone={p.pip.status === 'REJECTED' || p.pip.status === 'CLOSED' ? 'grey'
+                          : p.pip.status === 'PENDING_HR' ? 'amber' : 'green'}>
+                  {STATUS_LABEL[p.pip.status]}
+                </Pill>
+              </div>
+              {p.reason && <div className="askdet">{p.reason}</div>}
+              <div className="k" style={{ marginTop: 6 }}>{pipLine(p)}</div>
+            </div>
+          ))}
+        </div>
+      )}
+    </>
+  )
+}
+
+export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishing,
+                             periodLabel, bands = [], canAct = true, note,
+                             company, onCompany, companies = [], allowAll = false,
+                             asks, onDecideAsk }: {
   rows: PublishRow[] | null
   loading?: boolean
   onPublish?: (employeeId: string) => void
+  /** Write the words that go out beside the rating. */
+  onSaveFeedback?: (employeeId: string, patch: {
+    appreciation: string; improvement: string
+    benefits: { type: string; note: string }[]
+  }) => void
   /** The id currently being published, so one button can show progress
    *  without freezing the whole table. */
   publishing?: string | null
   periodLabel?: string | null
+  /** The configured scale, for the improvement-feedback threshold. */
+  bands?: { value: number; label: string; improvementMandatory?: boolean }[]
+  /** Whether the viewer's role owns this step under the policy. False renders
+   *  the record read-only rather than hiding it — HR Admin still needs to see
+   *  where a cycle has got to even when a company runs docx Stage 6. */
+  canAct?: boolean
+  note?: string | null
+  /**
+   * WHICH COMPANY'S RESULTS THIS LIST SHOWS. 203.
+   *
+   * Publishing is irreversible and the names repeat across companies — two of
+   * the three here have an employee coded *9030. A combined list is the right
+   * shape for a report and the wrong shape for a release, so this one is
+   * always narrowed to a company unless every company in it has opted in.
+   */
+  company?: string | null
+  onCompany?: (company: string) => void
+  companies?: { name: string; allowsAll: boolean }[]
+  /** Whether an "all companies" option is offered at all — true only when at
+   *  least one company's policy sets publish_scope = 'ALL'. */
+  allowAll?: boolean
+  /**
+   * WHAT THE CHAIN ASKED FOR, keyed by employee. Loaded by the page, because
+   * three tables feed it and this component stays presentational.
+   */
+  asks?: Record<string, ChainAsks>
+  /** Accept or decline one proposal. Absent renders the block read-only. */
+  onDecideAsk?: (id: string, status: HrStatus, note: string) => void
 }) {
+  const [picked, setPicked] = useState<string | null>(null)
+  const [draft, setDraft] = useState<{ appreciation: string; improvement: string
+                                       benefits: { type: string; note: string }[] } | null>(null)
+
   if (loading || rows === null) return <div className="k">Loading…</div>
 
-  const waiting = rows.filter(r => !r.published)
-  const done = rows.filter(r => r.published)
+  /**
+   * NARROWED BEFORE ANYTHING ELSE IS COMPUTED, so no count, no editor and no
+   * button can reach a row outside the chosen company. Filtering further down
+   * would leave the stats describing a wider set than the list.
+   *
+   * 'ALL' lists only the companies that opted in — a company left at the
+   * default is reachable only by selecting it by name.
+   */
+  const optedIn = new Set(companies.filter(c => c.allowsAll).map(c => c.name))
+  const scoped = company === 'ALL'
+    ? rows.filter(r => optedIn.has(r.companyName ?? ''))
+    : rows.filter(r => (r.companyName ?? '') === (company ?? ''))
+
+  /**
+   * A RESULT HAS TO EXIST BEFORE IT CAN BE PUBLISHED.
+   *
+   * This listed every enrolment in the period that was not already
+   * published — which is almost all of them. MEASURED on the live database:
+   * 392 rows in "waiting to publish", of which 2 had a final rating. 386
+   * were NOT_STARTED. The card calls itself "finalised by the chain and now
+   * with you" and it was mostly people the chain had not begun with.
+   *
+   * That is not only noise. It is the one screen whose entire job is "which
+   * results are ready", answered with a list in which 99.5% of the rows are
+   * not — so the two that were ready were unfindable, and every count above
+   * the table was wrong.
+   *
+   * final_rating is the marker because pms_finalise is what sets it; a
+   * published row always has one, and the `|| r.published` keeps a
+   * hypothetical published row with a null rating visible rather than
+   * vanishing it from the record.
+   */
+  const settled = scoped.filter(r => r.finalRating !== null || r.published)
+  const waiting = settled.filter(r => !r.published)
+  const done = settled.filter(r => r.published)
+  /** Counted, not listed. Saying nothing about them would make a shrunken
+   *  list look like data loss to somebody who saw the old one. */
+  const stillInChain = scoped.length - settled.length
+  const member = scoped.find(r => r.employeeId === picked) ?? null
+
+  // Seeded from the row, so re-picking somebody shows what is actually on
+  // record rather than the last person's text — the bug a single shared draft
+  // always produces.
+  const d = draft ?? {
+    appreciation: member?.appreciation ?? '',
+    improvement: member?.improvement ?? '',
+    benefits: member?.benefits ?? [],
+  }
+  const band = bands.find(b => b.value === member?.finalRating)
+  const improvementRequired = !!band?.improvementMandatory
+  const faults: string[] = []
+  if (member) {
+    if (!d.appreciation.trim()) faults.push('An appreciation remark is needed.')
+    if (improvementRequired && !d.improvement.trim()) {
+      faults.push(`Improvement feedback is mandatory at a rating of ${member.finalRating}.`)
+    }
+    if (member.signedOff === false) {
+      // 207: the manager's acknowledgement, not both. The employee's is
+      // recorded when they give it and gates nothing.
+      faults.push('The final review one-to-one is not on record with the '
+                + 'manager\u2019s acknowledgement yet. The conversation has to '
+                + 'have happened before the rating reaches them.')
+    }
+  }
+  const publishable = !!member && faults.length === 0
+  /**
+   * REPORTED, NOT ENFORCED, and deliberately computed after `publishable` so
+   * nothing here can be folded into the gate by accident. A pending proposal
+   * must never hold a result: a rater can attach one to anybody.
+   */
+  const warnings = member ? publishWarnings(asks?.[member.employeeId]
+    ?? { training: [], recognition: [], pips: [], pendingRecommendations: 0,
+         pendingPips: 0, empty: true }) : []
 
   return (
     <>
       <div className="banner b-blue">
         <span aria-hidden="true">ℹ️</span>
         <div>
-          These ratings are settled. Publishing releases the rating and the
-          feedback to the employee{periodLabel ? ` for ${periodLabel}` : ''} —
-          it does not change either. A rating that needs changing goes back
-          through the HOD, not from here.
+          {note ?? <>
+            These ratings are settled{periodLabel ? ` for ${periodLabel}` : ''}. You
+            write the feedback and any recognition, then release the result. The
+            rating itself is the chain’s — a number that needs changing goes back
+            through the HOD.
+          </>}
         </div>
       </div>
 
+      {companies.length > 1 && onCompany && (
+        <Card title="Whose results"
+              sub="Publishing acts on one company at a time. A result released to the wrong person cannot be unreleased.">
+          <div className="grid g2">
+            <Field label="Company"
+                   hint={allowAll
+                     ? 'Companies that have opted in can also be worked on together.'
+                     : 'No company has enabled a combined list. Set publish scope in Setup & Controls to change that.'}>
+              <select value={company ?? ''} onChange={e => { onCompany(e.target.value); setPicked(null) }}>
+                {companies.map(c => (
+                  <option key={c.name} value={c.name}>{c.name}</option>
+                ))}
+                {allowAll && <option value="ALL">All companies that allow it</option>}
+              </select>
+            </Field>
+          </div>
+        </Card>
+      )}
+
+      <div className="grid g3" style={{ marginBottom: 16 }}>
+        <Stat label="Waiting on you" value={waiting.length} tone={waiting.length ? 'accent' : undefined} />
+        <Stat label="Published" value={done.length} />
+        <Stat label="Acknowledged by the employee"
+              value={done.filter(r => r.acknowledged).length} />
+      </div>
+
       <Card title={`Waiting to publish (${waiting.length})`}
-            sub="Finalised by the chain and now with you.">
+            sub={`Finalised by the chain and now with you.${
+              stillInChain ? ` ${stillInChain} other${stillInChain === 1 ? ' appraisal is' : ' appraisals are'}`
+                + ' still with the chain and will appear here once settled.' : ''}`}>
         {!waiting.length
           ? <Empty what="Nothing is waiting"
-                   why="A rating reaches this list once the last approver in the chain has settled it." />
+                   why={stillInChain
+                     ? `A rating reaches this list once the last approver in the chain has settled it. ${stillInChain} ${stillInChain === 1 ? 'appraisal is' : 'appraisals are'} still in the chain.`
+                     : 'A rating reaches this list once the last approver in the chain has settled it.'} />
           : (
             <div className="tblwrap">
               <table>
                 <thead>
                   <tr>
-                    <th>Employee</th><th>Code</th><th>Final rating</th>
-                    <th>Settled by</th><th>Settled on</th><th>Action</th>
+                    <th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Settled by</th><th>Settled on</th><th>Sign-off</th>
+                    <th>Chain asked for</th><th />
                   </tr>
                 </thead>
                 <tbody>
                   {waiting.map(r => (
                     <tr key={r.employeeId}>
-                      <td>{r.name}</td>
-                      <td className="k">{r.code}</td>
-                      <td>
-                        {r.finalRating == null
-                          ? <span className="k">—</span>
+                      <td>{r.code}</td>
+                      <td style={{ fontWeight: 600 }}>{r.name}</td>
+                      <td className="num">
+                        {r.finalRating == null ? <span className="k">—</span>
                           : <b>{r.finalRating}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</b>}
                       </td>
                       <td className="k">{r.finalisedByRole ?? '—'}</td>
                       <td className="k">{r.finalisedAt ? r.finalisedAt.slice(0, 10) : '—'}</td>
+                      <td>{r.signedOff === false
+                        ? <Pill tone="amber">not signed</Pill>
+                        : <Pill tone="green">signed</Pill>}</td>
+                      <td className="k">
+                        {asksBadge(asks?.[r.employeeId]) ?? <span className="k">—</span>}
+                      </td>
                       <td>
-                        <button className="btn sm" type="button"
-                                disabled={!onPublish || publishing === r.employeeId
-                                          || r.finalRating == null}
-                                onClick={() => onPublish?.(r.employeeId)}>
-                          {publishing === r.employeeId ? 'Publishing…' : 'Publish'}
+                        <button className="btn ghost sm" type="button"
+                                onClick={() => { setPicked(r.employeeId); setDraft(null) }}>
+                          {picked === r.employeeId ? 'Open' : 'Work on this'}
                         </button>
                       </td>
                     </tr>
@@ -799,27 +1203,165 @@ export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }
             </div>
           )}
         <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
-          A row with no final rating cannot be published: there would be nothing
-          to show. That means the chain has not finished with it, however far
+          A row with no rating cannot be published: there would be nothing to
+          show. That means the chain has not finished with it, however far
           along it looks.
         </div>
       </Card>
 
+      {member && (
+        <Card title={`${member.name} — ${member.code}`}
+              sub={`Rated ${member.finalRating ?? '—'}${band ? ` · ${band.label}` : ''} by ${member.finalisedByRole ?? 'the chain'}`
+                   + `${member.companyName ? ` · ${member.companyName}` : ''}`
+                   + `${member.periodLabel ? ` · ${member.periodLabel}` : ''}`
+                   + '. You are writing what they read.'}>
+          {!canAct ? (
+            <Note tone="warn">
+              Under this policy the finaliser writes the feedback and publishes.
+              This is here so you can see where the cycle has got to.
+            </Note>
+          ) : (
+            <>
+              {/* READ BEFORE WRITING. This sat below the recognition editor,
+                  which put what the chain proposed AFTER the box HR writes
+                  the result in — the input arriving after the decision it is
+                  supposed to inform. */}
+              <ChainAsksBlock asks={asks?.[member.employeeId]} onDecide={onDecideAsk} />
+
+              <div className="fld">
+                <label htmlFor="pf-appr">Appreciation remark</label>
+                <textarea id="pf-appr" rows={3} value={d.appreciation}
+                          placeholder="What they did well, in their own terms."
+                          onChange={e => setDraft({ ...d, appreciation: e.target.value })} />
+              </div>
+              <div className="fld">
+                <label htmlFor="pf-impr">
+                  Improvement feedback{improvementRequired ? ' (mandatory at this rating)' : ''}
+                </label>
+                <textarea id="pf-impr" rows={3} value={d.improvement}
+                          placeholder={improvementRequired
+                            ? 'Required: what has to change, and the support for it.'
+                            : 'Optional.'}
+                          onChange={e => setDraft({ ...d, improvement: e.target.value })} />
+              </div>
+
+              <Section>Recognition</Section>
+              {d.benefits.map((b, i) => (
+                <div className="grid g2" key={i} style={{ marginBottom: 8 }}>
+                  <Field label="Award">
+                    <select value={b.type}
+                            onChange={e => setDraft({ ...d, benefits: d.benefits.map(
+                              (x, j) => j === i ? { ...x, type: e.target.value } : x) })}>
+                      {['CERTIFICATE','SPOT_AWARD','TRAINING_NOMINATION',
+                        'SPECIAL_MENTION','STAR_PERFORMER','OTHER'].map(k => (
+                        <option key={k} value={k}>{k.replace(/_/g, ' ').toLowerCase()}</option>
+                      ))}
+                    </select>
+                  </Field>
+                  <Field label="Note">
+                    <input value={b.note}
+                           onChange={e => setDraft({ ...d, benefits: d.benefits.map(
+                             (x, j) => j === i ? { ...x, note: e.target.value } : x) })} />
+                  </Field>
+                </div>
+              ))}
+              <div className="btnrow">
+                <button className="btn ghost sm" type="button"
+                        onClick={() => setDraft({ ...d, benefits: [...d.benefits,
+                          { type: 'CERTIFICATE', note: '' }] })}>
+                  + Add recognition
+                </button>
+                {d.benefits.length > 0 && (
+                  <button className="btn ghost sm" type="button"
+                          onClick={() => setDraft({ ...d, benefits: d.benefits.slice(0, -1) })}>
+                    Remove the last
+                  </button>
+                )}
+              </div>
+
+              {warnings.length > 0 && (
+                <div className="banner b-blue" style={{ marginTop: 12 }}>
+                  <span aria-hidden="true">i</span>
+                  <div>
+                    <b>Worth knowing before you release this:</b>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                      {warnings.map((w, i) => <li key={i}>{w}</li>)}
+                    </ul>
+                    {/* Said plainly, because an amber list that does not block
+                        trains people to ignore the amber list that does. */}
+                    <div className="k" style={{ marginTop: 6 }}>
+                      None of these stops the publication.
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              {faults.length > 0 && (
+                <div className="banner b-amber" style={{ marginTop: 12 }}>
+                  <span aria-hidden="true">!</span>
+                  <div>
+                    <b>Before this can be published:</b>
+                    <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                      {faults.map((f, i) => <li key={i}>{f}</li>)}
+                    </ul>
+                  </div>
+                </div>
+              )}
+
+              <div className="btnrow">
+                <button className="btn ghost" type="button"
+                        disabled={!onSaveFeedback}
+                        onClick={() => onSaveFeedback?.(member.employeeId, d)}>
+                  Save without publishing
+                </button>
+                <button className="btn" type="button"
+                        disabled={!publishable || !onPublish || publishing === member.employeeId}
+                        onClick={() => { onSaveFeedback?.(member.employeeId, d)
+                                         onPublish?.(member.employeeId) }}>
+                  {publishing === member.employeeId ? 'Publishing…'
+                    : publishable ? 'Save and publish' : 'Cannot publish yet'}
+                </button>
+              </div>
+            </>
+          )}
+        </Card>
+      )}
+
       {done.length > 0 && (
         <Card title={`Already published (${done.length})`}
-              sub="The employee can see these.">
+              sub="The employee can see these. Read-only.">
           <div className="tblwrap">
             <table>
               <thead>
-                <tr><th>Employee</th><th>Code</th><th>Final rating</th><th /></tr>
+                <tr><th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Read by them</th><th>What they were told</th></tr>
               </thead>
               <tbody>
                 {done.map(r => (
                   <tr key={r.employeeId}>
-                    <td>{r.name}</td>
-                    <td className="k">{r.code}</td>
-                    <td>{r.finalRating ?? '—'}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</td>
-                    <td><Pill tone="green">published</Pill></td>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num">{r.finalRating ?? '—'}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</td>
+                    <td>{r.acknowledged
+                      ? <Pill tone="green">✓ acknowledged</Pill>
+                      : <Pill tone="amber">not yet</Pill>}</td>
+                    <td style={{ maxWidth: 340 }}>
+                      {!r.appreciation && !r.improvement
+                        ? <span className="k">No written feedback went out.</span>
+                        : <div style={{ display: 'grid', gap: 4 }}>
+                            {r.appreciation && <div><b>Appreciation.</b> {r.appreciation}</div>}
+                            {r.improvement && <div><b>Improvement.</b> {r.improvement}</div>}
+                            {!!r.benefits?.length && (
+                              <div className="chips">
+                                {r.benefits.map((b, i) => (
+                                  <Pill key={i} tone="brand">
+                                    {b.type.replace(/_/g, ' ').toLowerCase()}{b.note ? ` · ${b.note}` : ''}
+                                  </Pill>
+                                ))}
+                              </div>
+                            )}
+                          </div>}
+                    </td>
                   </tr>
                 ))}
               </tbody>
@@ -827,6 +1369,174 @@ export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }
           </div>
         </Card>
       )}
+    </>
+  )
+}
+
+// ── the whole company, on one screen ─────────────────────────────────────
+
+/**
+ * §(none) — "hr head also show a summary of all the employees ratings and pms
+ * details".
+ *
+ * WHY NOT THE FILL STATUS TRACKER, which already lists everybody. That answers
+ * "who has not done their part yet" — it is a chase list, ordered by what is
+ * missing. This answers "what did the company score", which is a different
+ * question with a different shape: the distribution first, then the detail.
+ * Collapsing them would make one screen that serves neither.
+ *
+ * READ-ONLY. Releasing a result is Publish Results; this is the view HR reads
+ * before and after. No control here writes anything.
+ */
+export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLabel }: {
+  rows: PublishRow[] | null
+  deptNames?: Record<string, string>
+  bands?: { value: number; label: string }[]
+  loading?: boolean
+  periodLabel?: string | null
+}) {
+  const [dept, setDept] = useState('all')
+  const [co, setCo] = useState('all')
+  if (loading || rows === null) return <div className="k">Loading…</div>
+
+  /**
+   * COMPANY FIRST, then department.
+   *
+   * An HR Head over three companies gets all of them here — the loader stopped
+   * narrowing to one open period, which was quietly showing a third of the
+   * organisation. Department names are not unique across companies, so the
+   * department list has to follow the company choice or "Operations" means two
+   * different teams in one dropdown.
+   */
+  const byCo = co === 'all' ? rows : rows.filter(r => (r.companyName ?? '') === co)
+  const inScope = dept === 'all' ? byCo : byCo.filter(r => (r.departmentId ?? '') === dept)
+  const rated = inScope.filter(r => r.finalRating != null)
+  const avg = rated.length
+    ? rated.reduce((s, r) => s + (r.finalRating ?? 0), 0) / rated.length : null
+
+  // The configured scale, not a hardcoded 1-5: a company on a 1-4 scale would
+  // otherwise get a phantom band with nobody in it and a missing one at the top.
+  const buckets = bands.map(b => ({
+    ...b, n: rated.filter(r => r.finalRating === b.value).length,
+  }))
+  const widest = Math.max(1, ...buckets.map(b => b.n))
+
+  const depts = [...new Set(byCo.map(r => r.departmentId ?? '').filter(Boolean))]
+  const cos = [...new Set(rows.map(r => r.companyName ?? '').filter(Boolean))].sort()
+  const spansCompanies = cos.length > 1
+
+  return (
+    <>
+      <div className="grid g4" style={{ marginBottom: 16 }}>
+        <Stat tone="accent" label="Rated" value={rated.length}
+              note={`of ${inScope.length} enrolled`} />
+        <Stat label="Average rating" value={avg === null ? '—' : avg.toFixed(2)} />
+        <Stat label="Published" value={inScope.filter(r => r.published).length} />
+        <Stat label="Acknowledged" value={inScope.filter(r => r.acknowledged).length} />
+      </div>
+
+      <Card title={`Distribution${periodLabel ? ` — ${periodLabel}` : ''}`}
+            sub="Against the configured rating scale.">
+        <div className="grid g2" style={{ marginBottom: 12 }}>
+          {spansCompanies && (
+            <Field label="Company"
+                   hint={`${cos.length} companies are running a cycle.`}>
+              <select value={co}
+                      onChange={e => { setCo(e.target.value); setDept('all') }}>
+                <option value="all">All companies</option>
+                {cos.map(c => <option key={c} value={c}>{c}</option>)}
+              </select>
+            </Field>
+          )}
+          <Field label="Department">
+            <select value={dept} onChange={e => setDept(e.target.value)}>
+              <option value="all">All departments</option>
+              {depts.map(d => (
+                <option key={d} value={d}>{deptNames[d] ?? d.slice(0, 8)}</option>
+              ))}
+            </select>
+          </Field>
+        </div>
+        {!buckets.length ? (
+          <Empty what="No rating scale configured"
+                 why="Set the scale in Setup & Controls and the distribution appears here." />
+        ) : (
+          <div style={{ display: 'grid', gap: 6 }}>
+            {buckets.map(b => (
+              <div key={b.value} style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <div style={{ width: 150, fontSize: 12 }}>
+                  <b>{b.value}</b> · {b.label}
+                </div>
+                {/* A bar, because 11 of 390 and 190 of 390 read identically as
+                    numerals in a column and not at all alike as lengths. */}
+                <div style={{ flex: 1, minWidth: 60 }}>
+                  <div style={{ height: 14, borderRadius: 7, width: `${(b.n / widest) * 100}%`,
+                                minWidth: b.n ? 6 : 0,
+                                background: 'var(--ez-brand)' }} />
+                </div>
+                <div className="num" style={{ width: 70, fontSize: 12 }}>
+                  {b.n}{rated.length ? ` · ${Math.round((b.n / rated.length) * 100)}%` : ''}
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
+      </Card>
+
+      <Card title={`Every employee (${inScope.length})`}
+            sub="Highest rating first; unrated at the bottom.">
+        {!inScope.length ? (
+          <Empty what="Nobody enrolled"
+                 why="Open a period in Setup & Controls and enrolments appear here." />
+        ) : (
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr>
+                  <th>Code</th><th>Employee</th>
+                  {spansCompanies && <th>Company</th>}
+                  <th>Department</th>
+                  <th className="num">Rating</th><th>Settled by</th>
+                  <th>Stage</th><th>Recognition</th>
+                </tr>
+              </thead>
+              <tbody>
+                {[...inScope].sort((a, b) =>
+                  (b.finalRating ?? -1) - (a.finalRating ?? -1)
+                  || a.code.localeCompare(b.code)).map(r => (
+                  <tr key={r.employeeId}>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    {spansCompanies && <td className="k">{r.companyName ?? '—'}</td>}
+                    <td className="k">{deptNames[r.departmentId ?? ''] ?? '—'}</td>
+                    <td className="num">
+                      {r.finalRating == null ? <span className="k">not rated</span>
+                        : <b>{r.finalRating}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</b>}
+                    </td>
+                    <td className="k">{r.finalisedByRole ?? '—'}</td>
+                    <td>
+                      {r.acknowledged ? <Pill tone="green">acknowledged</Pill>
+                        : r.published ? <Pill tone="blue">published</Pill>
+                        : r.finalRating != null ? <Pill tone="amber">with you</Pill>
+                        : <Pill tone="grey">in the chain</Pill>}
+                    </td>
+                    <td>
+                      {!r.benefits?.length ? <span className="k">—</span>
+                        : <div className="chips">
+                            {r.benefits.map((b, i) => (
+                              <Pill key={i} tone="brand">
+                                {b.type.replace(/_/g, ' ').toLowerCase()}
+                              </Pill>
+                            ))}
+                          </div>}
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
     </>
   )
 }

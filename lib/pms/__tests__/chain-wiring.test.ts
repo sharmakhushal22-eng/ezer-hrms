@@ -92,19 +92,25 @@ test('the approval queue filters on the viewer\'s own rung', () => {
 })
 
 test('the rating field appears only where approval finalises', () => {
-  // Asking every rung for a final rating invites a manager to set a number
-  // they have no authority to set; asking none means the last rung's approval
-  // is refused for want of one.
-  assert.match(MGR, /finalises\s*&&\s*\(\s*<input type="number"/)
-  assert.match(MGR, /finalises \? 'Approve & finalise' : 'Approve'/)
+  // THE RULE SURVIVED; THE PLACE CHANGED. The final rating used to be a
+  // number box in the queue's action column. Rating and approving are one act
+  // now, so it is a select in the review panel — offered after the manager
+  // has read and scored every KRA, which is when the judgement is actually
+  // made.
+  //
+  // What must still hold: it appears ONLY at the rung that settles the
+  // rating. Asking every rung for one invites a manager to set a number they
+  // have no authority to set; asking none means the last rung's approval is
+  // refused for want of it.
+  assert.match(MGR, /\{finalises && \(\s*\n?\s*<div className="fld"/,
+    'the final rating is not gated on this rung being the one that finalises')
+  assert.match(MGR, /<select id="pf-final"/, 'there is no final rating control')
+  assert.match(MGR, /finalises \? 'Rate, confirm and finalise'/,
+    'the button does not say that this approval settles the rating')
   // AND IT MUST ASK ABOUT THE HOLDERS, not just the policy's chain. On a
   // collapsed line — 190 of 395 enrolments — RM L2 is unfilled, so the RM L1's
-  // approval finalises. Computed from the chain alone the button would say
-  // "Approve", offer no rating field, and the database would answer "a final
-  // rating is needed to finalise" with nowhere to type one.
-  assert.match(MGR, /const held = heldBy\(r\.member\)/,
-    'the approval card does not resolve who actually fills each rung')
-  assert.match(MGR, /approvalFinalises\(chain, myStage, held\)/,
+  // approval finalises.
+  assert.match(PERF, /approvalFinalises\(\s*\n?\s*\(policy\?\.approval_chain as Chain \| undefined\) \?\? 'SELF_RM1_RM2_HOD',\s*\n?\s*rung, held\)/,
     'whether approval finalises is computed without the rung holders')
 })
 
@@ -155,51 +161,86 @@ test('HR has a publish screen, reachable through a seeded permission', () => {
   assert.match(ADMIN, /export function PublishTab/, 'no publish tab')
   assert.match(ADMIN, /k: 'publish'/, 'the tab is not listed in ADMIN_TABS')
   assert.match(PAGE, /<PublishTab/, 'the tab is never rendered')
-  // canSeeScreen denies any key absent from the seeded screen config, so a
-  // brand-new 'pms.publish' key would hide the tab from everybody including
-  // admins. It borrows the existing HR-only key instead of the roles module
-  // being touched.
-  assert.match(PAGE, /SCREEN_KEY[\s\S]{0,80}publish:\s*'pms\.upload'/,
-    'the publish tab does not borrow a seeded screen key')
-  assert.ok(!/'pms\.' ?\+ ?t\.k\)/.test(PAGE),
-    'the tab bar still builds the screen key by concatenation, so the mapping '
-    + 'is bypassed and the publish tab will be invisible')
+  // IT HAS ITS OWN KEY NOW, and borrowing is what had to stop.
+  //
+  // It used to ride on 'pms.upload' because canSeeScreen denies any key
+  // absent from the seeded config, and a new key would have hidden the tab.
+  // But 'pms.upload' is held by L1_MANAGER, L2_MANAGER and HOD in
+  // role_screen_access — so HR's publish workspace, where the feedback an
+  // employee reads is written and the result released, was reachable by
+  // every line manager.
+  //
+  // 'pms.publish' is a registered screen instead (lib/rms/screens.ts), which
+  // resolves correctly without seeding anything: the three line roles have
+  // PMS rows and no row for this key, so they are denied; HR Head, HR
+  // Manager and Admin have no PMS rows at all, so the module is
+  // unconfigured for them and they keep it.
+  assert.ok(!/publish:\s*'pms\.upload'/.test(PAGE),
+    'the publish tab still borrows the bulk-upload key, which line managers hold')
+  const screens = read('lib/rms/screens.ts')
+  const pms = screens.slice(screens.indexOf("moduleKey: 'pms'"),
+                            screens.indexOf("moduleKey: 'attendance'"))
+  assert.match(pms, /\{ key: 'publish', label: 'Publish Results' \}/,
+    'pms.publish is not a registered screen, so it cannot be set in Roles & Access')
 })
 
 test('the publish queue cannot miss a settled rating', () => {
-  // THIS ASSERTION WAS BACKWARDS AT FIRST. It demanded a chain_stage IN
-  // ('HR','DONE') filter, which reads naturally and silently drops every row
-  // finalised before 197 existed: their chain_stage is NULL, and an IN filter
-  // does not match NULL. Nikhil Reddy (SRS9088) is finalised with a null
-  // stage, and his rating was invisible to the only screen that can release
-  // it — a test enforcing the bug.
+  // THIS ASSERTION HAS BEEN WRONG TWICE, in opposite directions, and both
+  // times it was encoding the implementation rather than the rule.
   //
-  // workflow_status is the honest question: FINALISED is exactly when HR may
-  // publish, whatever route the rating took and whenever it was settled.
-  assert.match(PAGE,
-    /\.in\('workflow_status',\s*\['FINALISED',\s*'PUBLISHED',\s*'ACKNOWLEDGED'\]\)/,
-    'the publish queue does not select on workflow_status, so it can miss '
-    + 'settled ratings whose chain_stage is NULL or was never advanced')
-  // And it must NOT narrow by chain_stage, which would reintroduce the hole.
+  // First it demanded a chain_stage IN ('HR','DONE') filter, which silently
+  // dropped every row finalised before 197 existed — their chain_stage is
+  // NULL and an IN filter does not match NULL. Then it demanded a
+  // workflow_status filter, which 202 removed: one query now feeds both
+  // Publish Results and Ratings Summary, and the summary's whole job is "all
+  // the employees", including the ones still in the chain.
+  //
+  // The RULE is that the loader must not narrow in a way that can drop a
+  // settled rating. Narrowing by nothing satisfies it; the tab filters what
+  // it shows.
   const q = PAGE.slice(PAGE.indexOf('const pub = await supabase'),
-                       PAGE.indexOf('const pub = await supabase') + 600)
+                       PAGE.indexOf('const pub = await supabase') + 700)
+  assert.ok(q.length > 200, 'could not find the publish/summary loader')
   assert.ok(!/\.in\('chain_stage'/.test(q),
-    'the publish queue filters on chain_stage again, excluding NULL-stage rows')
+    'the loader filters on chain_stage, which excludes NULL-stage rows — the '
+    + 'bug that hid finalised appraisals from HR entirely')
+  assert.ok(!/\.eq\('workflow_status'/.test(q),
+    'the loader pins a single workflow_status and will miss the rest')
+  // It must still be scoped to periods, or it reads the whole table. `in`
+  // rather than `eq` since the summary spans every open period: an HR Head
+  // over three companies was seeing one company's cycle.
+  assert.match(q, /\.in\('period_id', periodIds\)/,
+    'the loader is not scoped to the open periods')
 })
 
 test('HR cannot change a rating or a KRA from the publish screen', () => {
-  // THE REQUIREMENT, not an unfinished tab: HR sees and publishes, and the
-  // absence of these controls is the enforcement on this side. 197 enforces
-  // the same thing from the database side by giving HR's rung no reject path.
+  // NARROWED, deliberately. This used to assert the tab had no input,
+  // textarea, select or onChange at all — true when HR could only publish.
+  // 202 moved the appreciation remark, the improvement feedback and the
+  // recognition awards to HR, so the tab writes now and that assertion was
+  // enforcing a rule that no longer exists.
+  //
+  // What has NOT moved is the number. HR writes the words beside the rating
+  // and releases it; the rating belongs to the chain, and 188's guards would
+  // refuse one from here anyway.
+  // COMMENTS STRIPPED FIRST. The rule is about what the code writes, and
+  // the code that enforces it has to be able to SAY "final_rating" while
+  // explaining itself — which is exactly how this broke: a comment
+  // describing why final_rating is the marker for a settled result read as
+  // the workspace writing one.
   const tab = ADMIN.slice(ADMIN.indexOf('export function PublishTab'),
-                          ADMIN.indexOf('// ── §6.4 Final Rating Upload'))
-  assert.ok(tab.length > 500, 'could not isolate the publish tab body')
-  assert.ok(!/<input/.test(tab), 'the publish tab has an input — HR must not edit here')
-  assert.ok(!/<textarea/.test(tab), 'the publish tab has a textarea')
-  assert.ok(!/<select/.test(tab), 'the publish tab has a select')
-  assert.ok(!/onChange/.test(tab), 'the publish tab has an editable control')
-  // And no reject path, which would make HR an approver.
-  assert.ok(!/[Rr]eject/.test(tab), 'the publish tab offers a rejection')
+                          ADMIN.indexOf('// ── the whole company, on one screen'))
+    .replace(/\/\*[\s\S]*?\*\//g, ' ').replace(/^\s*\/\/.*$/gm, ' ')
+  assert.ok(tab.length > 1000, 'could not isolate the publish workspace')
+  assert.ok(!/type="number"/.test(tab),
+    'the publish workspace offers a numeric input — HR must not set a rating')
+  assert.ok(!/final_rating|finalRating:\s/.test(tab.replace(/finalRating[\s)}\]]/g, '')),
+    'the workspace writes a final rating')
+  // No KRA editing either: that is the employee's set, locked long before.
+  assert.ok(!/weightage|kra_title/i.test(tab), 'the workspace touches KRAs')
+  // And no reject path — a rating that needs changing goes back through the
+  // HOD, which is what the banner tells them.
+  assert.ok(!/[Rr]eject/.test(tab), 'the workspace offers a rejection')
 })
 
 test('publishing writes only delivery columns', () => {
@@ -245,35 +286,79 @@ test('the HOD publish path also closes the stage out', () => {
 
 // ── the final-review gate must be openable from BOTH sides ───────────────
 
-test('a manager or HOD can LOG the final review, not only acknowledge one', () => {
-  // THE BUG: pms_finalise refuses until a FINAL_REVIEW one-to-one carries both
-  // acknowledgements, and the ONLY code that could create that row was the
-  // employee's own one-to-one form. The manager's acknowledge path updates an
-  // existing row; it cannot bring one into being. So a HOD with every other
-  // gate satisfied was blocked permanently and told to go ask the employee to
-  // log a meeting the HOD runs. Observed on Anil Verma (STC9030).
-  assert.match(PERF, /async function insertFinalReview/,
-    'nothing can create a FINAL_REVIEW row from the manager side')
-  // At MODULE scope, because the RM surface and the HOD surface are separate
-  // components and the first version of this fix lived inside the RM one —
-  // where the HOD, the person actually blocked, could not reach it.
-  const fnAt = PERF.indexOf('async function insertFinalReview')
-  const firstComponent = PERF.indexOf('function usePeriod')
-  assert.ok(fnAt < firstComponent || /^async function insertFinalReview/m.test(PERF),
-    'insertFinalReview is nested inside a component, so only one surface has it')
-  // Both surfaces must call it.
-  const calls = [...PERF.matchAll(/insertFinalReview\(\{/g)]
-  assert.ok(calls.length >= 2,
-    `only ${calls.length} surface(s) can log a final review; the RM and HOD sides both need it`)
-  // And it must set the manager's own tick as it creates the row — logging it
-  // IS the manager asserting the conversation happened.
-  const body = PERF.slice(fnAt, fnAt + 2500)
-  assert.match(body, /manager_ack: true/)
-  // It must NOT set the employee's tick: a two-party gate the manager can
-  // satisfy alone is not a gate.
-  assert.ok(!/employee_ack: true/.test(body),
-    'logging from the manager side also ticks the employee — that lets a HOD '
-    + 'satisfy a two-party gate unilaterally')
+test('one recorder creates the one-to-one for EVERY stage', () => {
+  // THE BUG THIS STARTED AS: pms_finalise refuses until a FINAL_REVIEW row
+  // exists, and the ONLY code that could create one was the employee's own
+  // one-to-one form. A HOD with every other gate satisfied was blocked
+  // permanently — observed on Anil Verma (STC9030).
+  //
+  // The fix was a manager-side insert; it has since become ONE recorder for
+  // all four stages, because they are the same act seen from different sides
+  // and four near-copies is how they drift. This test followed the rename
+  // rather than being deleted: the property it guards is still "something can
+  // create the log from the manager side", only now it is stage-aware.
+  assert.match(PERF, /async function recordOneToOne/,
+    'nothing can create a one-to-one from the manager side')
+  // AT MODULE SCOPE, checked by INDENTATION rather than by position. The
+  // first version of this compared the offset against usePeriod, which is
+  // itself module-scope and happens to appear earlier in the file — so a
+  // correct implementation failed. A declaration at column 0 is the actual
+  // property: nested inside a component it would be indented, and only one
+  // surface could reach it. That mattered: the first cut of this fix lived
+  // inside the RM component, where the HOD — the person actually blocked —
+  // could not reach it.
+  assert.match(PERF, /^async function recordOneToOne/m,
+    'the recorder is nested inside a component, so only one surface has it')
+  const fnAt = PERF.indexOf('async function recordOneToOne')
+
+  const body = PERF.slice(fnAt, fnAt + 3500)
+  // IDEMPOTENT: ticking twice must not leave two records of one meeting.
+  assert.match(body, /if \(existing\.data\?\.length\)/,
+    'the recorder does not check for an existing row')
+  assert.match(body, /return 'ALREADY'/)
+  // manager_role, which NOTHING had ever written: every row in the database
+  // says RM_L1 because that is the column default, including FINAL_REVIEW
+  // rows a HOD logged.
+  assert.match(body, /manager_role: spec\.manager_role/,
+    'the log still cannot say which stage it belongs to')
+  // The side is decided by the stage, not hardcoded, so the employee's tick
+  // writes employee_ack and a manager's writes manager_ack.
+  assert.match(body, /spec\.side === 'employee' \? 'employee_ack' : 'manager_ack'/)
+})
+
+test('every stage records through the one recorder, and RM L1 before it locks', () => {
+  // Requested: a checkbox at every stage, mandatory to move further, which
+  // records the log when ticked.
+  for (const stage of ["'EMPLOYEE'", "'RM_L1'", "'HOD'"]) {
+    assert.ok(PERF.includes(`stage: ${stage}`), `no recorder call for stage ${stage}`)
+  }
+  // RM L2 and HOD come through the chain approval, which passes the viewer's
+  // own rung rather than a literal.
+  assert.match(PERF, /stage: myRung/,
+    'the chain approval does not record the rung it is acting as')
+
+  // ORDER IS LOAD-BEARING at RM L1: the approval calls pms_lock_kras, which
+  // counts a KRA_SETTING row carrying BOTH acknowledgements. Recording after
+  // approving would make the lock look for a row that does not exist yet and
+  // refuse, and the manager would read "not locked" on an approval that had
+  // just succeeded.
+  const rec = PERF.indexOf('stage: myRung')
+  const rpc = PERF.indexOf("rpc('pms_chain_approve'")
+  assert.ok(rec > 0 && rpc > 0 && rec < rpc,
+    'the one-to-one is recorded AFTER the approval, so the weightage lock will '
+    + 'refuse for want of a row that is about to exist')
+})
+
+test('the employee\'s tick names the FROZEN manager, not the live one', () => {
+  // employees.l1_manager_id is the live value; every gate reads the frozen
+  // pms_overall_rating.rm_l1_id. Three of the 395 enrolments have them
+  // pointing at different people — Meera Singh, Meera Verma and Amit Gupta
+  // changed manager mid-cycle, so their appraisals route to Ishaan Gupta while
+  // the live field names Yash Dhawan. A log naming the live manager records
+  // the conversation against somebody the appraisal was never with.
+  assert.match(PERF, /const counterpart = overall\?\.rm_l1_id \?\? managerId/,
+    'the employee\'s one-to-one is logged against the live manager')
+  assert.match(PERF, /rm_l1_id/, 'the frozen L1 is never selected')
 })
 
 test('the employee can acknowledge a one-to-one somebody else logged', () => {
@@ -300,14 +385,19 @@ test('the finalise queue offers an action instead of a dead label', () => {
   // the blocker — a true sentence about a gate with no door.
   assert.match(MGR, /onLogFinalReview\?\.\(r\.member\.employeeId\)/,
     'the finalise queue has no Log final review action')
-  assert.match(MGR, /onAcknowledgeFinalReview\?\.\(r\.member\.employeeId\)/,
-    'the finalise queue has no acknowledge action')
-  // Three distinct states; one button cannot serve them.
-  assert.match(MGR, /!r\.member\.finalReviewLogged \? \(/)
-  assert.match(MGR, /!r\.member\.finalReviewMgrAcked \? \(/)
-  // And the HOD surface must pass both handlers, since that is who gets stuck.
+  // ONE BUTTON, not three. This test originally pinned a three-state cell —
+  // log / acknowledge / waiting-on-them — and 200 collapsed it deliberately:
+  // the mutual sign-off gates PUBLICATION, not finalisation, so once the log
+  // exists the row is finalisable and the other two states belong on the tab
+  // that publishes. The test failed against correct code and was the right
+  // kind of failure: it had encoded a structure that turned out to be wrong.
+  assert.match(MGR, /finalReviewRequired && !r\.member\.finalReviewLogged && r\.precedingDone/,
+    'the finalise cell no longer keys off whether the review is logged')
+  assert.ok(!/!r\.member\.finalReviewMgrAcked \? \(/.test(MGR),
+    'the finalise queue still branches on the manager acknowledgement, which '
+    + '200 moved to the publishing tab')
+  // The HOD surface must still pass the log handler — that is who gets stuck.
   assert.match(PERF, /onLogFinalReview=\{logFinalReview\}/)
-  assert.match(PERF, /onAcknowledgeFinalReview=\{acknowledgeFinalReview\}/)
 })
 
 test('finalising hands the appraisal to HR, whichever path was used', () => {

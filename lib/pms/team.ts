@@ -71,6 +71,17 @@ export interface TeamMember extends Employment {
    */
   finalReviewMgrAcked?: boolean
   /**
+   * Has RM L2 confirmed their one-to-one about these KRAs?
+   *
+   * Its own row, unlike RM L1's: the KRA-setting conversation is one meeting
+   * with two acknowledgements, while an L2's review is a separate
+   * conversation. The schema has carried manager_role ('RM_L1' | 'RM_L2' |
+   * 'HOD') since 066 and nothing had ever written it — every row in the
+   * database says RM_L1 because that is the column default — so this is the
+   * first thing that can tell the stages apart.
+   */
+  rmL2ConfirmedOneToOne?: boolean
+  /**
    * Are the weightages actually locked — from pms_employee_goals.status, not
    * inferred from the one-to-one.
    *
@@ -83,6 +94,19 @@ export interface TeamMember extends Employment {
    * undefined, and undefined is not treated as "not locked".
    */
   kraLocked?: boolean
+  /**
+   * Has the result been RELEASED to the employee?
+   *
+   * Distinct from `finalised`, which only means a rating exists. Between the
+   * two sits the whole point of §8: a settled rating nobody has seen yet is
+   * still the HOD's to write feedback against, and a published one is not —
+   * the employee has read it, so editing the feedback underneath them would
+   * change a document they have already been shown.
+   */
+  published?: boolean
+  publishedAt?: string | null
+  /** Whether the employee has confirmed they read it. */
+  resultAcknowledged?: boolean
   /**
    * Has the FINAL_REVIEW one-to-one been held AND acknowledged by both sides?
    *
@@ -211,6 +235,24 @@ export interface FinaliseRow<T extends TeamMember = TeamMember> extends QueueRow
    * accounts for the final review itself being done.
    */
   precedingDone: boolean
+  /**
+   * May the finaliser CHOOSE a rating yet — as opposed to settle one?
+   *
+   * THE TWO WERE THE SAME CONTROL AND THAT WAS THE BUG. The rating select
+   * was disabled on canFinalise, which is false until the final-review
+   * one-to-one is on record. So a HOD with every other gate satisfied saw a
+   * dead dropdown and read it, reasonably, as "I am not allowed to rate".
+   *
+   * It also put the cycle in the wrong order. The final review is the
+   * conversation ABOUT the rating; being made to log it before deciding the
+   * number asks somebody to minute a meeting they have not had the
+   * conclusion of yet.
+   *
+   * So: choose on precedingDone, log once a number is chosen, settle once
+   * the log exists. Same three gates the database enforces, in the order a
+   * person would actually do them.
+   */
+  canChoose: boolean
   /** What to do instead when it cannot. Null when it can. */
   insteadDo: string | null
 }
@@ -248,7 +290,22 @@ export function finaliseQueue<T extends TeamMember>(
     // person, and the screen's only advice was to chase the rung that is not
     // there. That is the last gate in the cycle, so nothing could complete.
     const waiting = hasRmL2(r.member, chain) && r.member.rmL2Score === null
-    const needsFinalReview = finalReviewRequired && r.member.finalReviewDone === false
+    /**
+     * 200: FINALISING NEEDS THE LOG, NOT THE SIGNATURES.
+     *
+     * This read finalReviewDone — both sides acknowledged — which is the
+     * PUBLICATION gate, not the finalisation one. The spec separates them:
+     * §389 has pms_finalise abort "if final review 1-on-1 dialogue logs are
+     * missing", while Stage 6 and §230 halt PUBLICATION until the log is
+     * "mutually signed off".
+     *
+     * Conflating them left a HOD waiting on an employee to acknowledge a
+     * conversation about a rating that did not exist yet. The employee's
+     * acknowledgement still gates the result reaching them — canPublishResult
+     * in lib/pms/oneToOne.ts, and trg_pms_publish_needs_signoff in the
+     * database — which is the step it actually protects.
+     */
+    const needsFinalReview = finalReviewRequired && !r.member.finalReviewLogged
 
     /**
      * 199's PRECEDING-RUNG RULE, mirrored so the screen and the database
@@ -295,13 +352,15 @@ export function finaliseQueue<T extends TeamMember>(
     // form — so a HOD read a true sentence about a gate they had no way to
     // open. Observed on Anil Verma (STC9030): every other condition satisfied,
     // permanently stuck. The Finalise tab now offers "Log final review" on
-    // exactly these rows (§2's matrix always permitted it), 198 rewrote the
-    // refusal to say who can do what, and this text says whose turn it is.
-    else if (needsFinalReview) insteadDo = r.member.finalReviewLogged
-      ? (r.member.finalReviewMgrAcked
-          ? 'Waiting on them to acknowledge the final review one-to-one.'
-          : 'The final review is logged. Acknowledge it to settle the rating.')
-      : 'No final review one-to-one yet. Log it here, or ask them to log it — this policy needs both of you to acknowledge it before the rating can be settled.'
+    // exactly these rows (§2's matrix always permitted it).
+    //
+    // IT NO LONGER MENTIONS THEIR ACKNOWLEDGEMENT, because 200 established
+    // that the signatures gate PUBLICATION and not this step. A sentence here
+    // about waiting on the employee would send a HOD to chase somebody whose
+    // acknowledgement cannot change what this screen is for.
+    else if (needsFinalReview) insteadDo =
+      'No final review one-to-one on record. Log it here, or ask them to log '
+      + 'it — the conversation has to be on record before the rating is settled.'
     /**
      * Is everyone BEFORE this actor finished? 199's question, and the one that
      * decides whether the final review may even be logged — the trigger it
@@ -316,7 +375,10 @@ export function finaliseQueue<T extends TeamMember>(
       ...r,
       // 199's gates added. Without them this said yes to a row with no RM
       // rating at all, and the function would have accepted it.
-      canFinalise: allowed && precedingDone && !needsFinalReview
+      canFinalise: allowed && precedingDone && !needsFinalReview,
+      // Choosing is not settling: the number can be picked as soon as the
+      // chain ahead is clear, which is what makes the final review loggable.
+      canChoose: allowed && precedingDone
                    && !r.member.finalised,
       precedingDone,
       insteadDo,
@@ -360,3 +422,19 @@ export function distribution(rows: QueueRow[]): { rating: number; n: number }[] 
 }
 
 export { FLAG_LABEL }
+
+/**
+ * Initials, for the avatar on a queue card.
+ *
+ * First and last of however many words there are, so "Anil Verma" is AV and
+ * a single-word name still gets a letter rather than an empty circle. Indian
+ * names in this database run to four words; taking the first two would make
+ * half a department share initials.
+ */
+export function initials(name: string): string {
+  const w = (name || '').trim().split(/\s+/).filter(Boolean)
+  if (!w.length) return '—'
+  const first = w[0][0] ?? ''
+  const last = w.length > 1 ? w[w.length - 1][0] ?? '' : ''
+  return (first + last).toUpperCase()
+}

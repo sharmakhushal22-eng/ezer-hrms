@@ -125,8 +125,8 @@ function useSaver(reload: () => Promise<void>) {
 }
 
 // ══ 1. POLICIES ═══════════════════════════════════════════════════════════
-function PolicyPanel({ policies, companies, reload }: {
-  policies: Row[]; companies: Row[]; reload: () => Promise<void>
+function PolicyPanel({ policies, companies, people, reload }: {
+  policies: Row[]; companies: Row[]; people: Row[]; reload: () => Promise<void>
 }) {
   const [id, setId] = useState<string>('')
   const [draft, setDraft] = useState<Row>({})
@@ -234,6 +234,63 @@ function PolicyPanel({ policies, companies, reload }: {
           <select value={s(draft.who_can_finalise) || 'RM1_RM2_HOD'}
                   onChange={e => set('who_can_finalise', e.target.value)}>
             {FINALISERS.map(f => <option key={f} value={f}>{FINALISER_LABEL[f]}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      {/* 202: WHO RUNS THE APPRAISAL AFTER THE RATING IS SETTLED.
+          A select and not a boolean, because neither value is the negation of
+          the other — both name a person. 'HR' is the default and diverges from
+          docx Stage 6, which gives the finaliser the appreciation remark, the
+          improvement feedback and the recognition awards along with the
+          rating; 'FINALISER' is that behaviour. Offered here so a company can
+          choose, which is the whole reason the column exists rather than the
+          split being hardcoded. */}
+      <div className="grid g2">
+        {/* 203: whether this company's employees may be published from a
+            cross-company list. Default COMPANY — the restriction, not the
+            permission, because a default that widens reach is the wrong way
+            round for an irreversible action and the employee codes repeat
+            across companies. */}
+        <Field label="Publishing across companies"
+               hint="Company only: these employees are published from their own company's list. Allow combined: they also appear when HR works on several companies at once.">
+          <select value={String(draft.publish_scope ?? 'COMPANY')}
+                  onChange={e => set('publish_scope', e.target.value)}>
+            <option value="COMPANY">Company only</option>
+            <option value="ALL">Allow a combined list</option>
+          </select>
+        </Field>
+        <Field label="After the rating is settled"
+               hint="HR: HR writes the feedback, awards recognition and publishes. Finaliser: whoever finalised does all of it, as docx Stage 6 describes.">
+          <select value={String(draft.post_final_owner ?? 'HR')}
+                  onChange={e => set('post_final_owner', e.target.value)}>
+            <option value="HR">HR writes the feedback and publishes</option>
+            <option value="FINALISER">The finaliser does all of it</option>
+          </select>
+        </Field>
+        {/* 205: WHO the HR Head is, as a person.
+            The HOD's Published Results banner said "a rating that genuinely
+            needs correcting goes through HR" — a department, on the one
+            screen where the HOD has no other control, about a result the
+            employee has already read. Nothing in the database recorded a
+            person: user_roles is empty, and the near-misses were all wrong
+            (a free-text designation match found one "Hr Executive" in one of
+            three companies; pms_feedback.given_by is the RM or the HOD).
+            Scoped to the policy's own company, because employee codes repeat
+            across the three organisations here. */}
+        <Field label="HR Head"
+               hint="Named on the HOD's published results, so a correction has somebody to go to. Leave unset and that screen says &ldquo;HR&rdquo; as before.">
+          <select value={String(draft.hr_head_id ?? '')}
+                  onChange={e => set('hr_head_id', e.target.value || null)}>
+            <option value="">Nobody named yet</option>
+            {people
+              .filter(pp => !current?.company_id
+                         || s(pp.company_id) === s(current.company_id))
+              .map(pp => (
+                <option key={s(pp.id)} value={s(pp.id)}>
+                  {s(pp.emp_code)} · {s(pp.full_name)}
+                </option>
+              ))}
           </select>
         </Field>
       </div>
@@ -425,6 +482,40 @@ function ScalePanel({ scale, companyId, reload }: {
             <Field label="Score to"><input type="number" step="0.01" value={n(draft.score_to)} onChange={e => set('score_to', Number(e.target.value))} /></Field>
             <Field label="Minimum comment length"><input type="number" value={n(draft.min_comment_chars)} onChange={e => set('min_comment_chars', Number(e.target.value))} /></Field>
             <Field label="Sort order"><input type="number" value={n(draft.sort_order)} onChange={e => set('sort_order', Number(e.target.value))} /></Field>
+          </div>
+          {/* THE THREE BAND BEHAVIOURS, none of which had a control.
+              All three are columns that have existed for a while and were
+              edited nowhere — and two of them are now ENFORCED, which makes
+              their absence a trap rather than a gap: the rating form demands
+              a comment of min_comment_chars and refuses to send without
+              improvement wording at a mandatory band, and the PIP checkbox
+              appears or does not according to a flag an admin could not see.
+              A rule you cannot find is a rule that reads as a bug. */}
+          <div className="grid g3" style={{ marginTop: 4 }}>
+            <Field label="Improvement feedback mandatory"
+                   hint="At this band the rater's remark must say what would change, and the result cannot publish without improvement feedback.">
+              <select value={draft.improvement_feedback_mandatory ? 'yes' : 'no'}
+                      onChange={e => set('improvement_feedback_mandatory', e.target.value === 'yes')}>
+                <option value="no">Not required</option>
+                <option value="yes">Required</option>
+              </select>
+            </Field>
+            <Field label="May raise a PIP"
+                   hint="Scoring in this band offers the rater an optional checkbox to request a performance improvement plan. HR still decides.">
+              <select value={draft.allows_pip_request ? 'yes' : 'no'}
+                      onChange={e => set('allows_pip_request', e.target.value === 'yes')}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </Field>
+            <Field label="May propose recognition"
+                   hint="Scoring in this band offers the rater a box to recommend a bonus, promotion or other recognition. HR still decides.">
+              <select value={draft.allows_recognition ? 'yes' : 'no'}
+                      onChange={e => set('allows_recognition', e.target.value === 'yes')}>
+                <option value="no">No</option>
+                <option value="yes">Yes</option>
+              </select>
+            </Field>
           </div>
           <SaveRow busy={busy} error={error} saved={saved}
                    label={draft.id ? 'Save band' : 'Add band'}
@@ -697,7 +788,8 @@ export default function AdminEditor() {
         ))}
       </div>
 
-      {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies} reload={reload} />}
+      {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies}
+                                              people={snap.people ?? []} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
