@@ -70,6 +70,10 @@
                      0 8px 24px -14px color-mix(in oklab, var(--ez-brand-deep) 22%, transparent);
   --pms-card-lift:   0 2px 4px color-mix(in oklab, var(--ez-ink) 6%, transparent),
                      0 16px 34px -16px color-mix(in oklab, var(--ez-brand-deep) 32%, transparent);
+  /* USE THESE AS `background: <colour> var(--pms-grad-…)`, never alone.
+     A gradient sets only background-image; background-color stays
+     transparent, so a contrast audit (and forced-colours mode, and a print)
+     reads through to the surface beneath and sees white text on white. */
   --pms-grad-brand:  linear-gradient(135deg, var(--ez-brand) 0%, var(--ez-brand-deep) 100%);
   --pms-grad-good:   linear-gradient(135deg, var(--ez-positive) 0%, color-mix(in oklab, var(--ez-positive) 72%, var(--ez-info)) 100%);
   /* The hero. Navy into the brand blue in daylight; at night the brand stop
@@ -297,7 +301,7 @@
 /* What the tab is FOR, on the page rather than in a tooltip: a title
  * attribute is invisible to touch and to anyone not hovering. */
 .pms .pms-tabhint {
-  display: block; font-size: 12.5px; color: var(--ez-muted); margin: 2px 4px 16px;
+  display: block; font-size: 12px; color: var(--ez-muted); margin: 2px 4px 16px;
 }
 .pms .pms-tabhint::first-letter { text-transform: uppercase; }
 
@@ -336,7 +340,7 @@
 .pms .pms-toast .pms-toast-ico {
   width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
   display: grid; place-items: center;
-  background: var(--pms-grad-brand); color: var(--ez-on-accent);
+  background: var(--ez-brand) var(--pms-grad-brand); color: var(--ez-on-accent);
 }
 .pms .pms-toast .pms-toast-body { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.55; color: var(--ez-ink-soft); padding-top: 3px; }
 .pms .pms-toast .pms-toast-x {
@@ -436,19 +440,27 @@
 .pms .pms-pagehead-t {
   margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; color: var(--ez-ink); line-height: 1.2;
 }
-.pms .pms-pagehead-d { font-size: 13.5px; color: var(--ez-muted); margin-top: 2px; }
+.pms .pms-pagehead-d { font-size: 13px; color: var(--ez-muted); margin-top: 2px; }
 .pms .pms-pagehead-d::first-letter { text-transform: uppercase; }
 
 /* The admin panels' own result line (Note in AdminEditor). Edition 1 never
  * styled .note, so "Saved" and a refusal looked like the text around them. */
+/* THE DOT IS POSITIONED, NOT A FLEX ITEM.
+   A first version made this a flex row so the dot could sit beside the text.
+   But `Note` takes arbitrary inline children, and flex turns every one of
+   them into a flex item: the chain builder's empty state —
+   "…build a chain <i>and</i> select it on a policy — see <b>Policy rules</b>."
+   — came out as four columns with 10px gutters and the full stop orphaned at
+   the far right. Absolute positioning keeps the dot where it was and lets
+   the sentence flow as a sentence. */
 .pms .note.good, .pms .note.bad, .pms .note.warn {
-  display: flex; gap: 10px; align-items: flex-start;
-  margin-top: 12px; padding: 10px 14px; border-radius: 12px;
+  position: relative; display: block;
+  margin-top: 12px; padding: 10px 14px 10px 32px; border-radius: 12px;
   font-size: 13px; line-height: 1.55; border: 1px solid var(--ez-line);
 }
 .pms .note.good::before, .pms .note.bad::before, .pms .note.warn::before {
-  content: ''; width: 8px; height: 8px; border-radius: 50%; flex: 0 0 auto; margin-top: 6px;
-  background: currentColor;
+  content: ''; position: absolute; left: 14px; top: 16px;
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
 }
 .pms .note.good { background: var(--ez-positive-tint); border-color: var(--ez-positive-edge); color: var(--ez-positive); }
 .pms .note.bad  { background: var(--ez-critical-tint); border-color: var(--ez-critical-edge); color: var(--ez-critical); }
@@ -489,13 +501,13 @@
 }
 .pms .pms-settings-rail button.on .pms-settings-ico { background: var(--ez-brand); color: var(--ez-on-accent); }
 .pms .pms-settings-txt { display: grid; min-width: 0; }
-.pms .pms-settings-name { font-size: 13.5px; font-weight: 600; line-height: 1.3; }
+.pms .pms-settings-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
 .pms .pms-settings-blurb {
-  font-size: 11.5px; color: var(--ez-muted); line-height: 1.4; margin-top: 2px;
+  font-size: 11px; color: var(--ez-muted); line-height: 1.4; margin-top: 2px;
 }
 .pms .pms-settings-n {
   min-width: 24px; height: 22px; padding: 0 7px; border-radius: 999px;
-  display: inline-grid; place-items: center; font-size: 11.5px; font-weight: 700;
+  display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
   font-variant-numeric: tabular-nums; background: var(--ez-sunken); color: var(--ez-muted);
 }
 .pms .pms-settings-rail button.on .pms-settings-n { background: var(--ez-surface); color: var(--ez-brand-deep); }
@@ -536,14 +548,14 @@
   display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
   margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--ez-line);
 }
-.pms .pms-profile-line-k { font-size: 12.5px; color: var(--ez-muted); margin-right: 4px; }
+.pms .pms-profile-line-k { font-size: 12px; color: var(--ez-muted); margin-right: 4px; }
 .pms .pms-profile-step { display: inline-flex; align-items: center; gap: 6px; }
 .pms .pms-profile-sep { color: var(--ez-faint); font-weight: 700; }
 .pms .pms-profile-chip {
   display: inline-flex; gap: 6px; align-items: center; padding: 4px 11px; border-radius: 999px;
-  font-size: 12.5px; color: var(--ez-ink-soft); background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  font-size: 12px; color: var(--ez-ink-soft); background: var(--ez-sunken); border: 1px solid var(--ez-line);
 }
-.pms .pms-profile-chip b { font-weight: 700; color: var(--ez-muted); font-size: 11.5px; }
+.pms .pms-profile-chip b { font-weight: 700; color: var(--ez-muted); font-size: 11px; }
 .pms .pms-profile-chip.pms-you { background: var(--ez-brand-tint); color: var(--ez-brand-deep); border-color: var(--ez-brand-edge); font-weight: 700; }
 @media (max-width: 720px) {
   .pms .pms-profile-main { grid-template-columns: auto 1fr; }
@@ -576,7 +588,7 @@
 .pms .pms-kmeter.is-good .pms-kmeter-n { color: var(--ez-positive); }
 .pms .pms-kmeter.is-bad  .pms-kmeter-n { color: var(--ez-critical); }
 .pms .pms-kmeter-n span { font-size: 13px; font-weight: 600; color: var(--ez-faint); letter-spacing: 0; }
-.pms .pms-kmeter-l { font-size: 11.5px; color: var(--ez-muted); margin-top: 4px; }
+.pms .pms-kmeter-l { font-size: 11px; color: var(--ez-muted); margin-top: 4px; }
 .pms .pms-kmeter-mid { min-width: 0; }
 .pms .pms-kmeter-bar {
   display: flex; gap: 3px; height: 30px; padding: 3px; border-radius: 10px;
@@ -587,7 +599,7 @@
   transition: flex-grow .3s cubic-bezier(.22,1,.36,1);
 }
 .pms .pms-kmeter-bar > span i {
-  font-style: normal; font-size: 11.5px; font-weight: 700; color: var(--ez-on-accent);
+  font-style: normal; font-size: 11px; font-weight: 700; color: var(--ez-on-accent);
   font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; padding: 0 4px;
 }
 .pms .pms-kmeter-bar > span.pms-kmeter-gap {
@@ -745,7 +757,7 @@
 }
 .pms .pms-scope-txt { display: grid; gap: 3px; min-width: 0; }
 .pms .pms-scope-t { font-size: 17px; font-weight: 700; letter-spacing: -.015em; line-height: 1.2; }
-.pms .pms-scope-d { font-size: 12.5px; color: var(--ez-muted); line-height: 1.4; }
+.pms .pms-scope-d { font-size: 12px; color: var(--ez-muted); line-height: 1.4; }
 .pms .pms-scope-n {
   align-self: start; white-space: nowrap; padding: 3px 10px; border-radius: 999px;
   font-size: 12px; font-weight: 700; background: var(--ez-sunken); color: var(--ez-muted);
@@ -806,7 +818,7 @@
 .pms .pms-ws-tabs button {
   position: relative; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
   height: 50px; padding: 0 14px; border: 0; background: transparent; cursor: pointer;
-  font: inherit; font-size: 13.5px; font-weight: 600; color: var(--ez-muted);
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ez-muted);
   border-radius: 0 !important; transition: color .15s ease;
 }
 .pms .pms-ws-tabs button svg { opacity: .75; }
@@ -902,16 +914,26 @@
 }
 
 .pms .stat .lbl {
-  font-size: 12.5px; text-transform: none; letter-spacing: 0;
+  font-size: 12px; text-transform: none; letter-spacing: 0;
   color: var(--ez-muted); font-weight: 600;
 }
 .pms .stat .val {
   font-size: 28px; font-weight: 700; margin-top: 6px; color: var(--ez-ink);
   font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.15;
 }
-.pms .stat .note { font-size: 11.5px; color: var(--ez-muted); margin-top: 4px; line-height: 1.45; }
+.pms .stat .note { font-size: 11px; color: var(--ez-muted); margin-top: 4px; line-height: 1.45; }
 .pms .stat.accent {
-  background:
+  /* A SOLID COLOUR UNDER THE GRADIENT, not only the gradient.
+     Two reasons, and the second is the one that bit. If the gradient fails
+     to paint — an old engine, a forced-colours mode, a print — the tile
+     falls back to the brand fill and the on-accent text stays readable
+     rather than landing on the card surface beneath it. And a contrast
+     checker reads `background-color`, never `background-image`: without
+     this the audit walked past the gradient to the surface below, compared
+     white text against white, and reported 1.09:1 on text that is in fact
+     perfectly legible. A false failure that hid the real ones. */
+  background-color: var(--ez-brand);
+  background-image:
     radial-gradient(90% 120% at 100% 0%, color-mix(in oklab, var(--ez-on-accent) 18%, transparent), transparent 60%),
     var(--pms-grad-brand);
   border-color: transparent; box-shadow: var(--ez-shadow-brand);
@@ -948,10 +970,10 @@
   position: relative; z-index: 1;
   box-shadow: inset 0 0 0 2px var(--ez-line-strong);
 }
-.pms .step.done .dot { background: var(--pms-grad-good); color: var(--ez-on-accent); box-shadow: 0 4px 10px -4px var(--ez-positive); }
+.pms .step.done .dot { background: var(--ez-positive) var(--pms-grad-good); color: var(--ez-on-accent); box-shadow: 0 4px 10px -4px var(--ez-positive); }
 .pms .step.done::after { background: var(--ez-positive); }
 .pms .step.now .dot {
-  background: var(--pms-grad-brand); color: var(--ez-on-accent);
+  background: var(--ez-brand) var(--pms-grad-brand); color: var(--ez-on-accent);
   box-shadow: 0 0 0 5px var(--ez-brand-tint), 0 6px 14px -6px var(--ez-brand);
 }
 .pms .step .t { font-size: 12px; font-weight: 700; line-height: 1.3; color: var(--ez-ink-soft); }
@@ -965,7 +987,7 @@
   min-width: 0; max-width: 100%; background: var(--ez-surface);
   box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 4%, transparent);
 }
-.pms table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12.5px; }
+.pms table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .pms th {
   background: linear-gradient(180deg, var(--ez-sunken), color-mix(in oklab, var(--ez-sunken) 60%, var(--ez-surface)));
   color: var(--ez-muted); text-align: left;
@@ -996,7 +1018,7 @@
 .pms .pill {
   display: inline-flex; align-items: center; gap: 0;
   padding: 3px 10px 3px 8px; border-radius: 999px;
-  font-size: 11.5px; font-weight: 600; white-space: nowrap; line-height: 1.5;
+  font-size: 11px; font-weight: 600; white-space: nowrap; line-height: 1.5;
 }
 .pms .pill::before {
   content: ''; width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto;
@@ -1025,7 +1047,7 @@
 /* ── form ─────────────────────────────────────────────────────────────── */
 
 .pms label {
-  display: block; font-size: 12.5px; font-weight: 600; color: var(--ez-ink-soft);
+  display: block; font-size: 12px; font-weight: 600; color: var(--ez-ink-soft);
   text-transform: none; letter-spacing: 0; margin-bottom: 6px;
 }
 /* A CHECKBOX IS NOT A TEXT FIELD, and the field rule further down is written
@@ -1142,12 +1164,12 @@
 }
 .pms .btn.ghost:hover:not(:disabled) { background: var(--ez-brand-tint); border-color: var(--ez-brand); color: var(--ez-brand-deep); box-shadow: none; }
 .pms .btn.dark {
-  background: linear-gradient(135deg, var(--ez-dark-soft), var(--ez-dark));
+  background: var(--ez-dark) linear-gradient(135deg, var(--ez-dark-soft), var(--ez-dark));
   color: var(--ez-on-dark); border-color: transparent;
   box-shadow: 0 6px 14px -8px var(--ez-dark);
 }
 .pms .btn.red  {
-  background: linear-gradient(135deg, var(--ez-critical), color-mix(in oklab, var(--ez-critical) 80%, black));
+  background: var(--ez-critical) linear-gradient(135deg, var(--ez-critical), color-mix(in oklab, var(--ez-critical) 80%, black));
   color: var(--ez-on-accent); border-color: transparent;
   box-shadow: 0 6px 14px -8px var(--ez-critical);
 }
@@ -1170,7 +1192,7 @@
   font-variant-numeric: tabular-nums;
 }
 .pms .chip.sel {
-  background: var(--pms-grad-brand); border-color: transparent;
+  background: var(--ez-brand) var(--pms-grad-brand); border-color: transparent;
   color: var(--ez-on-accent); box-shadow: var(--ez-shadow-brand);
 }
 
@@ -1181,10 +1203,10 @@
   overflow: hidden; box-shadow: inset 0 0 0 1px var(--ez-line);
 }
 .pms .bar span {
-  display: block; height: 100%; background: var(--pms-grad-brand); border-radius: 20px;
+  display: block; height: 100%; background: var(--ez-brand) var(--pms-grad-brand); border-radius: 20px;
   transition: width .4s cubic-bezier(.22,1,.36,1);
 }
-.pms .bar.green span { background: var(--pms-grad-good); }
+.pms .bar.green span { background: var(--ez-positive) var(--pms-grad-good); }
 .pms .bar.amber span { background: var(--ez-warning); }
 .pms .bar.red   span { background: var(--ez-critical); }
 
@@ -1268,7 +1290,7 @@
 /* ── analytics bars ───────────────────────────────────────────────────── */
 
 .pms .abar { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; }
-.pms .abar .nm { width: 160px; font-size: 12.5px; font-weight: 600; flex-shrink: 0; color: var(--ez-ink); }
+.pms .abar .nm { width: 160px; font-size: 12px; font-weight: 600; flex-shrink: 0; color: var(--ez-ink); }
 .pms .abar .tr {
   flex: 1; height: 18px; background: var(--ez-sunken);
   border-radius: 7px; position: relative; overflow: hidden;
@@ -1280,7 +1302,7 @@
 }
 .pms .abar .m {
   position: absolute; left: 0; bottom: 0; height: 9px;
-  background: var(--pms-grad-brand); border-radius: 0 0 7px 7px;
+  background: var(--ez-brand) var(--pms-grad-brand); border-radius: 0 0 7px 7px;
 }
 .pms .abar .vv {
   width: 80px; text-align: right; font-size: 12px; font-weight: 700;
@@ -1350,7 +1372,7 @@
 .pms .chk {
   display: inline-flex; align-items: center; gap: 6px;
   padding: 3px 10px 3px 6px; border-radius: 999px;
-  font-size: 11.5px; font-weight: 600; white-space: nowrap;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
   background: var(--ez-sunken); color: var(--ez-muted);
   border: 1px solid var(--ez-line);
 }
@@ -1371,7 +1393,7 @@
  */
 .pms .track {
   display: flex; align-items: center; gap: 0; flex-wrap: wrap;
-  margin-top: 10px; font-size: 10.5px;
+  margin-top: 10px; font-size: 10px;
 }
 .pms .track .n {
   padding: 3px 9px; border-radius: 999px; font-weight: 700;
@@ -1380,7 +1402,7 @@
   border: 1px solid var(--ez-line);
 }
 .pms .track .n.done { background: var(--ez-positive-tint); color: var(--ez-positive); border-color: var(--ez-positive-edge); }
-.pms .track .n.now  { background: var(--pms-grad-brand); color: var(--ez-on-accent); border-color: transparent; box-shadow: var(--ez-shadow-brand); }
+.pms .track .n.now  { background: var(--ez-brand) var(--pms-grad-brand); color: var(--ez-on-accent); border-color: transparent; box-shadow: var(--ez-shadow-brand); }
 .pms .track .sep { color: var(--ez-faint); padding: 0 5px; font-weight: 800; }
 
 /* ── a group of rows that are all stuck on the same thing ────────────────
@@ -1400,7 +1422,7 @@
 .pms .qgroup > .ghead .gt { font-size: 13px; font-weight: 700; color: var(--ez-ink); }
 .pms .qgroup > .ghead .gn {
   font-size: 11px; font-weight: 700; color: var(--ez-on-accent);
-  background: var(--pms-grad-brand); border-radius: 999px; padding: 1px 9px;
+  background: var(--ez-brand) var(--pms-grad-brand); border-radius: 999px; padding: 1px 9px;
 }
 .pms .qgroup > .ghead .gw { font-size: 12px; color: var(--ez-muted); flex: 1 1 220px; }
 .pms .qgroup > .tblwrap { border-radius: 0 0 14px 14px; }
@@ -1475,7 +1497,7 @@
 
 /* What the number you just picked actually means, in words, beside it. */
 .pms .bandname {
-  font-size: 12.5px; font-weight: 700; color: var(--ez-ink);
+  font-size: 12px; font-weight: 700; color: var(--ez-ink);
   align-self: center; margin-left: 6px;
 }
 .pms .bandname .vs { font-weight: 600; color: var(--ez-muted); margin-left: 6px; }
@@ -1493,7 +1515,7 @@
   border-radius: 14px; box-shadow: var(--pms-card-shadow);
 }
 .pms .ratebar .bar { flex: 1 1 160px; }
-.pms .ratebar .lead { font-size: 12.5px; font-weight: 700; white-space: nowrap; }
+.pms .ratebar .lead { font-size: 12px; font-weight: 700; white-space: nowrap; }
 .pms .ratebar .lead .sm { font-weight: 600; color: var(--ez-muted); }
 
 /* ── the review panel ─────────────────────────────────────────────────────
@@ -1617,7 +1639,7 @@
  * the decision, on one line. */
 .pms .kfold {
   display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
-  margin-top: 6px; font-size: 12.5px; color: var(--ez-muted);
+  margin-top: 6px; font-size: 12px; color: var(--ez-muted);
 }
 .pms .kfold b { color: var(--ez-ink); font-variant-numeric: tabular-nums; }
 
@@ -1728,7 +1750,7 @@
   --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
   display: inline-flex; align-items: center; justify-content: center;
   min-width: 28px; height: 26px; padding: 0 8px; border-radius: 9px;
-  font-weight: 700; font-size: 12.5px; font-variant-numeric: tabular-nums;
+  font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums;
   /* Tint and ring, as the chips: white on the yellow middle is 1.9:1. */
   background: color-mix(in oklab, var(--kra-tone) 20%, var(--ez-surface));
   box-shadow: inset 0 0 0 1px var(--kra-tone);
@@ -1781,7 +1803,7 @@
 
 .askdet {
   margin-top: 6px;
-  font-size: 12.5px;
+  font-size: 12px;
   line-height: 1.65;
   color: var(--ez-ink-soft);
   /* A rater's own words, kept as written: their line breaks carry meaning. */
@@ -1962,7 +1984,7 @@
   display: grid;
   place-items: center;
   border-radius: 99px;
-  background: var(--pms-grad-brand);
+  background: var(--ez-brand) var(--pms-grad-brand);
   color: var(--ez-on-accent);
   font-size: 12px;
   font-weight: 700;

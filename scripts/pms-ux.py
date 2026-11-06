@@ -95,6 +95,14 @@ AUDIT = r"""(() => {
     if (el.children.length || !vis(el)) return;
     const txt = (el.textContent||'').trim(); if (!txt) return;
     const cs = getComputedStyle(el);
+    // TEXT THAT IS NOT PAINTED HAS NO CONTRAST TO MEASURE.
+    // The banner icons keep their emoji in the DOM for assistive tech that
+    // wants it, hidden with font-size:0 and painted over with a masked SVG.
+    // Measuring a glyph that renders at zero pixels reported 1:1 and buried
+    // the real findings under three false ones. font-size:0 is the airtight
+    // test — `color: transparent` alone is not, because background-clip text
+    // uses it and IS visible.
+    if (parseFloat(cs.fontSize) === 0) return;
     const fg = px(cs.color); if (!fg) return;
     const bg = ground(el);
     const size = parseFloat(cs.fontSize), weight = +cs.fontWeight || 400;
