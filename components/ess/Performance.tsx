@@ -662,6 +662,15 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const [confirmOneToOne, setConfirmOneToOne] = useState(false)
   const [who, setWho] = useState<Who>({ name: '', code: '' })
   const [goals, setGoals] = useState<Record<string, unknown>[]>([])
+  /**
+   * THE KPIs UNDER THOSE KRAs (220).
+   *
+   * A rating belongs to a KPI now, not to a KRA: pms_reviews.kpi_id is NOT
+   * NULL and the unique key is (period, employee, kpi, rater_role). Every
+   * write below has to name one, so the map has to be loaded wherever a
+   * rating is saved.
+   */
+  const [kpis, setKpis] = useState<Record<string, unknown>[]>([])
   /** Last period's locked KRAs, offered as this period's starting point.
    *  Null when there is nothing to carry or this period already has its own. */
   /** The employee's rating of each KRA while they write it, keyed by seq_no.
@@ -696,10 +705,20 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
 
   const loadPeriodData = useCallback(async () => {
     if (!period) return
-    const g = await supabase.from('pms_employee_goals')
-      .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage,status')
-      .eq('employee_id', employeeId).eq('period_id', period.id).order('seq_no')
+    // 220: the KPIs come with the KRAs. One round trip, because a rating
+    // cannot be written without a kpi_id and a screen that knows the KRAs but
+    // not their KPIs can draw a form it cannot save.
+    const [g, kp] = await Promise.all([
+      supabase.from('pms_employee_goals')
+        .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage,status')
+        .eq('employee_id', employeeId).eq('period_id', period.id).order('seq_no'),
+      supabase.from('pms_goal_kpi')
+        .select('id,goal_id,seq_no,kpi_metric,target_value,weightage')
+        .eq('employee_id', employeeId).eq('period_id', period.id).order('seq_no'),
+    ])
     setGoals(g.data ?? [])
+    if (kp.error) logFail('could not read the KPIs', kp.error)
+    setKpis(kp.data ?? [])
 
     /**
      * CARRY-FORWARD. §3's update: last quarter's KRAs/KPIs remain the default.
@@ -903,6 +922,23 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   }, [goals, reviews])
   const selfForKras = selfBySeq ?? selfSeeded
 
+  /**
+   * THE KPI A RATING BELONGS TO, from its KRA.
+   *
+   * 220 moved the rating off the KRA and onto the KPI, so every write needs
+   * one. While a KRA holds a single KPI this is unambiguous; once the form
+   * can add a second, the rating rows are built per KPI and this resolver
+   * falls out of use rather than quietly picking the first of several.
+   *
+   * Returns null rather than guessing when a KRA has more than one, because
+   * writing a rating against the wrong measure is worse than refusing to
+   * write it — the refusal is visible and a wrong number is not.
+   */
+  const kpiIdFor = useCallback((goalId: string): string | null => {
+    const mine = kpis.filter(k => String(k.goal_id) === String(goalId))
+    return mine.length === 1 ? String(mine[0].id) : null
+  }, [kpis])
+
   const selfRows: SelfRow[] = selfDraft ?? goals.map(g => {
     const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
     return {
@@ -1052,20 +1088,26 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
         .select('id,seq_no').eq('employee_id', employeeId).eq('period_id', period.id)
       const idBySeq = new Map((saved.data ?? [])
         .map(g => [Number((g as { seq_no: number }).seq_no), String((g as { id: string }).id)]))
+      // 220: a rating names its KPI. A KRA whose KPI cannot be resolved is
+      // left out rather than written against a guess — see kpiIdFor.
       const rated = kras
-        .map(k => ({ k, sr: selfForKras[k.seq_no], goalId: idBySeq.get(k.seq_no) }))
-        .filter(x => x.goalId && x.sr && x.sr.rating !== null)
+        .map(k => {
+          const goalId = idBySeq.get(k.seq_no)
+          return { k, sr: selfForKras[k.seq_no], goalId,
+                   kpiId: goalId ? kpiIdFor(String(goalId)) : null }
+        })
+        .filter(x => x.goalId && x.kpiId && x.sr && x.sr.rating !== null)
       ratedCount = rated.length
       if (rated.length) {
         const rv = await supabase.from('pms_reviews').upsert(
-          rated.map(({ sr, goalId }) => ({
+          rated.map(({ sr, goalId, kpiId }) => ({
             company_id: companyId, period_id: period.id, employee_id: employeeId,
-            goal_id: goalId, rater_id: employeeId, rater_role: 'SELF',
+            goal_id: goalId, kpi_id: kpiId, rater_id: employeeId, rater_role: 'SELF',
             achievement_value: sr!.achievement || null, rating: sr!.rating,
             comments: sr!.comment || null, submitted: true,
             submitted_at: new Date().toISOString(),
           })),
-          { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+          { onConflict: 'period_id,employee_id,kpi_id,rater_role' })
         if (rv.error) {
           logFail('self rating refused', rv.error)
           ratingWarning = ' Your ratings did not save, though — send it again.'
@@ -1172,16 +1214,20 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const submitSelf = async () => {
     setSaving(true); setMsg(null)
     if (!companyId) { setSaving(false); setMsg(NO_COMPANY); return }
-    const rows = selfRows.map(r => ({
-      company_id: companyId,
-      period_id: period.id, employee_id: employeeId, goal_id: r.goalId,
-      rater_id: employeeId, rater_role: 'SELF',
-      achievement_value: r.achievement || null, rating: r.rating,
-      comments: r.comment || null, submitted: true,
-      submitted_at: new Date().toISOString(),
-    }))
+    const rows = selfRows
+      .map(r => ({ r, kpiId: kpiIdFor(r.goalId) }))
+      .filter(x => x.kpiId)
+      .map(({ r, kpiId }) => ({
+        company_id: companyId,
+        period_id: period.id, employee_id: employeeId,
+        goal_id: r.goalId, kpi_id: kpiId,
+        rater_id: employeeId, rater_role: 'SELF',
+        achievement_value: r.achievement || null, rating: r.rating,
+        comments: r.comment || null, submitted: true,
+        submitted_at: new Date().toISOString(),
+      }))
     const { error } = await supabase.from('pms_reviews')
-      .upsert(rows, { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+      .upsert(rows, { onConflict: 'period_id,employee_id,kpi_id,rater_role' })
     setSaving(false)
     if (error) { logFail('self rating refused', error); setMsg(SAVE_FAILED('self rating')); return }
 
@@ -1814,6 +1860,8 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    */
   const [kraFor, setKraFor] = useState<string | null>(null)
   const [kraLines, setKraLines] = useState<KraLine[] | null>(null)
+  /** 220: the KPIs of whoever's panel is open. A rating names one. */
+  const [panelKpis, setPanelKpis] = useState<Record<string, unknown>[]>([])
   /**
    * THIS RATER'S SCORES, while the panel is open.
    *
@@ -1828,9 +1876,13 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   const openKras = useCallback(async (id: string) => {
     setKraFor(id); setKraLines(null)
     if (!period) return
-    const [g, rv] = await Promise.all([
+    const [g, rv, kp] = await Promise.all([
       supabase.from('pms_employee_goals')
         .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage,status,source')
+        .eq('employee_id', id).eq('period_id', period.id).order('seq_no'),
+      // 220: this employee's KPIs, so the ratings written below can name one.
+      supabase.from('pms_goal_kpi')
+        .select('id,goal_id,seq_no,kpi_metric,target_value,weightage')
         .eq('employee_id', id).eq('period_id', period.id).order('seq_no'),
       // The employee's OWN rating, which is the half a manager most needs to
       // read before approving: rater_role SELF, not their own rating of them.
@@ -1840,6 +1892,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     ])
     // What this rater has already said about each KRA. Loaded alongside the
     // employee's own ratings, in the same round trip.
+    setPanelKpis(kp.data ?? [])
     const mine = chainRoleFor(id)
     const mineRows = mine ? await supabase.from('pms_reviews')
       .select('goal_id,rating,comments')
@@ -2087,15 +2140,26 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     }
 
     setSaving(true); setMsg(null)
+    // 220: a rating names its KPI. A KRA whose KPI cannot be resolved is left
+    // out rather than rated against a guess — writing a number against the
+    // wrong measure is worse than not writing it, because the refusal is
+    // visible and a wrong rating is not.
+    const kpiOf = (goalId: string): string | null => {
+      const mine = panelKpis.filter(k => String(k.goal_id) === String(goalId))
+      return mine.length === 1 ? String(mine[0].id) : null
+    }
     const rv = await supabase.from('pms_reviews').upsert(
-      lines.map(l => ({
-        company_id: companyId, period_id: period!.id, employee_id: id,
-        goal_id: l.goalId, rater_id: employeeId, rater_role: myRung,
-        rating: kraRate[l.goalId!]!.rating,
-        comments: kraRate[l.goalId!]!.comment || null,
-        submitted: true, submitted_at: new Date().toISOString(),
-      })),
-      { onConflict: 'period_id,employee_id,goal_id,rater_role' })
+      lines
+        .map(l => ({ l, kpiId: l.goalId ? kpiOf(l.goalId) : null }))
+        .filter(x => x.kpiId)
+        .map(({ l, kpiId }) => ({
+          company_id: companyId, period_id: period!.id, employee_id: id,
+          goal_id: l.goalId, kpi_id: kpiId, rater_id: employeeId, rater_role: myRung,
+          rating: kraRate[l.goalId!]!.rating,
+          comments: kraRate[l.goalId!]!.comment || null,
+          submitted: true, submitted_at: new Date().toISOString(),
+        })),
+      { onConflict: 'period_id,employee_id,kpi_id,rater_role' })
     if (rv.error) {
       setSaving(false)
       logFail('manager rating refused', rv.error)

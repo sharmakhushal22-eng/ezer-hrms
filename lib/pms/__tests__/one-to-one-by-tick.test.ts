@@ -425,16 +425,38 @@ test('the ratings are written BEFORE the approval', () => {
     'a failed rating write does not stop the approval')
 })
 
-test('each rater writes under their OWN rung', () => {
-  // pms_reviews is UNIQUE on (period, employee, goal, rater_role). Writing an
-  // RM L2's rating under RM_L1 does not mislabel it — it overwrites the L1's.
+test('each rater writes under their OWN rung, against a KPI', () => {
+  // pms_reviews is UNIQUE on (period, employee, KPI, rater_role) since 220.
+  // Writing an RM L2's rating under RM_L1 does not mislabel it — it
+  // overwrites the L1's.
   const fn = PERF.slice(PERF.indexOf('const rateAndApprove'),
                         PERF.indexOf('const approveInChain'))
   assert.match(fn, /rater_role: myRung/, 'the rung is hardcoded or assumed')
   assert.match(fn, /const myRung = chainRoleFor\(id\)/,
     'the rung is not resolved per employee')
-  assert.match(fn, /onConflict: 'period_id,employee_id,goal_id,rater_role'/,
+
+  // ── THE KEY 220 CREATED, AND WHY THIS ASSERTION EARNED ITS KEEP ────────
+  //
+  // 220 dropped (period, employee, goal, rater_role) and replaced it with a
+  // key naming the KPI. The app still said the old one, so every rating
+  // write failed live with "there is no unique or exclusion constraint
+  // matching the ON CONFLICT specification" — a migration applied without
+  // the code that depends on it. This test is what names the coupling.
+  assert.match(fn, /onConflict: 'period_id,employee_id,kpi_id,rater_role'/,
     'the upsert does not match the table\'s unique key')
+  assert.match(fn, /kpi_id: kpiId/, 'the rating does not name a KPI, which is NOT NULL')
+  // And a KRA whose KPI cannot be resolved is dropped rather than guessed at.
+  assert.match(fn, /\.filter\(x => x\.kpiId\)/,
+    'a rating could be written against a guessed KPI')
+})
+
+test('nothing anywhere still names the key 220 dropped', () => {
+  // Repo-wide, because the same stale onConflict appeared in three places
+  // and two of them were nowhere near the manager panel.
+  for (const [label, src] of [['Performance.tsx', PERF]] as const) {
+    assert.ok(!/onConflict: 'period_id,employee_id,goal_id,rater_role'/.test(src),
+      `${label} still upserts against the dropped unique key`)
+  }
 })
 
 test('the panel seeds from what this rater already wrote', () => {
