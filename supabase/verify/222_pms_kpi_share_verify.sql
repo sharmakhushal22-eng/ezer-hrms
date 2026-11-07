@@ -29,7 +29,7 @@ RETURNS TABLE (seq int, check_name text, result text, detail text)
 LANGUAGE plpgsql AS $fn$
 DECLARE g record; kr record; k2 uuid; msg text;
         before_s numeric; after_s numeric; res text; stage_now text;
-        before_n int; after_n int;
+        before_n int; after_n int; ar record;
 BEGIN
   SELECT gg.* INTO g
     FROM public.pms_employee_goals gg
@@ -152,39 +152,75 @@ BEGIN
       'FAIL'::text, format('returned %s with a measure unrated', left(res, 60));
   END IF;
 
-  -- 24. THE APPROVE GATE, from the rung that is actually holding it.
+  -- 24. THE APPROVE GATE, on an appraisal MADE to be approvable.
   --
-  -- Read off pms_overall_rating rather than assumed to be RM_L1: approve
-  -- checks identity against the frozen chain, so guessing the rung means
-  -- being refused for the wrong reason and learning nothing. The rating is
-  -- removed for THAT rung, and the holder of it is the actor.
-  SELECT o.chain_stage INTO stage_now
-    FROM public.pms_overall_rating o
-   WHERE o.employee_id = kr.employee_id AND o.period_id = kr.period_id;
+  -- The previous version read chain_stage off whatever appraisal the self
+  -- rating happened to belong to, and skipped when it was NULL — which it
+  -- was. Same mistake as checks 21 to 23 had, one level down: the rating
+  -- state was forced and the STAGE was still left to chance.
+  --
+  -- So this finds an appraisal with a real rung holder, parks it on that
+  -- rung, strips that rung's ratings, and approves as the holder. Every bit
+  -- of that is undone by the ROLLBACK.
+  --
+  -- The rung is searched for rather than assumed to be RM_L1: 190 of 395
+  -- enrolments have a collapsed reporting line with no RM L2, and some have
+  -- no L1 either, so guessing means being refused for the wrong reason and
+  -- learning nothing about the gate.
+  SELECT k.employee_id, k.period_id, r.rung, r.holder
+    INTO ar
+    FROM public.pms_goal_kpi k
+    CROSS JOIN LATERAL (
+      SELECT g2.rung, public.pms_chain_holder(k.employee_id, k.period_id, g2.rung) AS holder
+        FROM unnest(ARRAY['RM_L1','RM_L2','HOD']) AS g2(rung)
+       WHERE public.pms_chain_holder(k.employee_id, k.period_id, g2.rung) IS NOT NULL
+       LIMIT 1) r
+    JOIN public.pms_employee_goals g3
+      ON g3.id = k.goal_id AND g3.status <> 'SENT_BACK'
+   ORDER BY k.employee_id, k.period_id
+   LIMIT 1;
 
-  IF stage_now IS NULL OR stage_now IN ('DONE', 'EMPLOYEE', 'HR') THEN
+  IF ar IS NULL OR ar.holder IS NULL THEN
     RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
-      'SKIP'::text, format('this appraisal is at %s, which has no rating to '
-                           'be missing', COALESCE(stage_now, 'no stage'));
-  ELSE
+      'SKIP'::text, 'no employee in this database has a resolvable chain '
+                    'holder on any rung'::text;
+    RETURN;
+  END IF;
+
+  -- WRAPPED, because this one WRITES before it asks. A trigger refusing the
+  -- stage update — 201's acknowledged-stays-acknowledged, 202's post-final
+  -- owner — would otherwise abort the whole function, and the reader would
+  -- get an error message instead of the other eighteen checks. A verify
+  -- script that can take itself down is worth less than one check.
+  BEGIN
+    UPDATE public.pms_overall_rating
+       SET chain_stage = ar.rung, is_readonly = false
+     WHERE employee_id = ar.employee_id AND period_id = ar.period_id;
+
     DELETE FROM public.pms_reviews
-     WHERE employee_id = kr.employee_id AND period_id = kr.period_id
-       AND rater_role = stage_now;
-    res := public.pms_chain_approve(kr.employee_id, kr.period_id,
-             public.pms_chain_holder(kr.employee_id, kr.period_id, stage_now),
-             stage_now, 3);
+     WHERE employee_id = ar.employee_id AND period_id = ar.period_id
+       AND rater_role = ar.rung;
+
+    res := public.pms_chain_approve(ar.employee_id, ar.period_id,
+                                    ar.holder, ar.rung, 3);
     IF res LIKE '%still need your rating%' THEN
       RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
-        'PASS'::text, format('at %s: %s', stage_now, left(res, 70));
+        'PASS'::text, format('at %s: %s', ar.rung, left(res, 70));
     ELSIF res LIKE 'BLOCKED:%' THEN
+      -- An earlier guard. Named, so it is diagnosable rather than ambiguous.
       RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
-        'INFO'::text, format('at %s, refused earlier: %s', stage_now, left(res, 60));
+        'INFO'::text, format('at %s, refused earlier: %s', ar.rung, left(res, 60));
     ELSE
       RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
-        'FAIL'::text, format('at %s it returned %s with NOTHING rated',
-                             stage_now, left(res, 50));
+        'FAIL'::text, format('at %s it returned %s with NOTHING rated by that '
+                             'rung', ar.rung, left(res, 45));
     END IF;
-  END IF;
+  EXCEPTION WHEN OTHERS THEN
+    GET STACKED DIAGNOSTICS msg = MESSAGE_TEXT;
+    RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
+      'INFO'::text, format('could not stage a fixture at %s: %s',
+                           ar.rung, left(msg, 60));
+  END;
 
 END $fn$;
 
