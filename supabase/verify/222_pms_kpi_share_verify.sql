@@ -27,7 +27,9 @@ BEGIN;
 CREATE FUNCTION pg_temp.verify_kpi_share()
 RETURNS TABLE (seq int, check_name text, result text, detail text)
 LANGUAGE plpgsql AS $fn$
-DECLARE g record; k2 uuid; msg text; before_s numeric; after_s numeric; res text;
+DECLARE g record; kr record; k2 uuid; msg text;
+        before_s numeric; after_s numeric; res text; stage_now text;
+        before_n int; after_n int;
 BEGIN
   SELECT gg.* INTO g
     FROM public.pms_employee_goals gg
@@ -76,42 +78,114 @@ BEGIN
 
   DELETE FROM public.pms_goal_kpi WHERE id = k2;
 
-  -- ── 21. the submit gate refuses while a measure is unrated ──────────────
-  -- pms_chain_submit asked only whether SOME self score existed. The whole
-  -- point of 222's gate is that it now counts.
-  IF public.pms_unrated_kpis(g.employee_id, g.period_id, 'SELF') > 0 THEN
-    res := public.pms_chain_submit(g.employee_id, g.period_id);
-    IF res LIKE 'BLOCKED:%' THEN
-      RETURN QUERY SELECT 21, 'the submit gate refuses an unrated set'::text,
-        'PASS'::text, left(res, 90);
-    ELSE
-      RETURN QUERY SELECT 21, 'the submit gate refuses an unrated set'::text,
-        'FAIL'::text, format('returned %s with unrated measures', left(res, 60));
-    END IF;
-  ELSE
-    RETURN QUERY SELECT 21, 'the submit gate refuses an unrated set'::text,
-      'SKIP'::text, 'this employee has rated every measure already'::text;
+  -- ── 21 to 24. THE GATE, TESTED BY FORCING THE CONDITION ────────────────
+  --
+  -- The first version of these asked whether a real appraisal HAPPENED to
+  -- have an unrated measure and a rung it HAPPENED to be sitting on. On a
+  -- live database it did not: check 21 skipped and 22 reported "this
+  -- appraisal is already complete". So the two claims that matter most in
+  -- 222 — that the gates actually refuse — were the two nothing exercised.
+  --
+  -- A check that only fires on data you happen to have is not a check. The
+  -- whole script is inside BEGIN … ROLLBACK, so it can MAKE the state it
+  -- needs: unsubmit a rating, ask the question, and let the rollback put it
+  -- back. Nothing here survives the transaction.
+
+  SELECT k.* INTO kr
+    FROM public.pms_goal_kpi k
+    JOIN public.pms_reviews r
+      ON r.kpi_id = k.id AND r.rater_role = 'SELF' AND r.submitted = true
+         AND r.rating IS NOT NULL
+   LIMIT 1;
+
+  IF kr IS NULL THEN
+    RETURN QUERY SELECT 21, 'the gate counts a draft as unrated'::text,
+      'SKIP'::text, 'no submitted self rating anywhere to borrow'::text;
+    RETURN;
   END IF;
 
-  -- ── 22. the approve gate refuses while the RATER has not rated ──────────
-  BEGIN
-    res := public.pms_chain_approve(g.employee_id, g.period_id,
-             public.pms_chain_holder(g.employee_id, g.period_id, 'RM_L1'),
-             'RM_L1', NULL);
+  -- 21. A DRAFT IS NOT A RATING. submitted = false has to count as unrated,
+  -- or a half-filled form walks through the gate.
+  before_n := public.pms_unrated_kpis(kr.employee_id, kr.period_id, 'SELF');
+  UPDATE public.pms_reviews SET submitted = false
+   WHERE kpi_id = kr.id AND rater_role = 'SELF';
+  after_n := public.pms_unrated_kpis(kr.employee_id, kr.period_id, 'SELF');
+  IF after_n = before_n + 1 THEN
+    RETURN QUERY SELECT 21, 'the gate counts a draft as unrated'::text,
+      'PASS'::text, format('%s unrated before, %s after un-submitting one',
+                           before_n, after_n);
+  ELSE
+    RETURN QUERY SELECT 21, 'the gate counts a draft as unrated'::text,
+      'FAIL'::text, format('%s unrated before, %s after — a draft is being '
+                           'counted as a rating', before_n, after_n);
+  END IF;
+
+  -- 22. AND SO IS A ROW WITH NO NUMBER IN IT. A comment typed against a
+  -- measure creates the row; it does not rate it.
+  UPDATE public.pms_reviews SET submitted = true, rating = NULL
+   WHERE kpi_id = kr.id AND rater_role = 'SELF';
+  after_n := public.pms_unrated_kpis(kr.employee_id, kr.period_id, 'SELF');
+  IF after_n = before_n + 1 THEN
+    RETURN QUERY SELECT 22, 'the gate counts a null rating as unrated'::text,
+      'PASS'::text, format('%s unrated with the rating nulled', after_n);
+  ELSE
+    RETURN QUERY SELECT 22, 'the gate counts a null rating as unrated'::text,
+      'FAIL'::text, format('%s unrated, expected %s', after_n, before_n + 1);
+  END IF;
+
+  -- 23. THE SUBMIT GATE ITSELF, with that measure still unrated.
+  --
+  -- pms_chain_submit has other guards ahead of this one — read-only, not
+  -- enrolled, an unrunnable chain. Any of those is a legitimate BLOCKED that
+  -- says nothing about 222, so the message is matched rather than the prefix,
+  -- and a different refusal is reported with its reason instead of being
+  -- counted either way.
+  res := public.pms_chain_submit(kr.employee_id, kr.period_id);
+  IF res LIKE '%still need your rating%' THEN
+    RETURN QUERY SELECT 23, 'the submit gate refuses an unrated set'::text,
+      'PASS'::text, left(res, 90);
+  ELSIF res LIKE 'BLOCKED:%' THEN
+    RETURN QUERY SELECT 23, 'the submit gate refuses an unrated set'::text,
+      'INFO'::text, format('refused earlier, by another guard: %s', left(res, 60));
+  ELSE
+    RETURN QUERY SELECT 23, 'the submit gate refuses an unrated set'::text,
+      'FAIL'::text, format('returned %s with a measure unrated', left(res, 60));
+  END IF;
+
+  -- 24. THE APPROVE GATE, from the rung that is actually holding it.
+  --
+  -- Read off pms_overall_rating rather than assumed to be RM_L1: approve
+  -- checks identity against the frozen chain, so guessing the rung means
+  -- being refused for the wrong reason and learning nothing. The rating is
+  -- removed for THAT rung, and the holder of it is the actor.
+  SELECT o.chain_stage INTO stage_now
+    FROM public.pms_overall_rating o
+   WHERE o.employee_id = kr.employee_id AND o.period_id = kr.period_id;
+
+  IF stage_now IS NULL OR stage_now IN ('DONE', 'EMPLOYEE', 'HR') THEN
+    RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
+      'SKIP'::text, format('this appraisal is at %s, which has no rating to '
+                           'be missing', COALESCE(stage_now, 'no stage'));
+  ELSE
+    DELETE FROM public.pms_reviews
+     WHERE employee_id = kr.employee_id AND period_id = kr.period_id
+       AND rater_role = stage_now;
+    res := public.pms_chain_approve(kr.employee_id, kr.period_id,
+             public.pms_chain_holder(kr.employee_id, kr.period_id, stage_now),
+             stage_now, 3);
     IF res LIKE '%still need your rating%' THEN
-      RETURN QUERY SELECT 22, 'the approve gate refuses an unrated rater'::text,
-        'PASS'::text, left(res, 90);
+      RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
+        'PASS'::text, format('at %s: %s', stage_now, left(res, 70));
+    ELSIF res LIKE 'BLOCKED:%' THEN
+      RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
+        'INFO'::text, format('at %s, refused earlier: %s', stage_now, left(res, 60));
     ELSE
-      -- Blocked for an unrelated reason — not with this stage, read-only,
-      -- nothing submitted. That is not a failure of 222.
-      RETURN QUERY SELECT 22, 'the approve gate refuses an unrated rater'::text,
-        'INFO'::text, format('not reached: %s', left(res, 70));
+      RETURN QUERY SELECT 24, 'the approve gate refuses an unrated rater'::text,
+        'FAIL'::text, format('at %s it returned %s with NOTHING rated',
+                             stage_now, left(res, 50));
     END IF;
-  EXCEPTION WHEN OTHERS THEN
-    GET STACKED DIAGNOSTICS msg = MESSAGE_TEXT;
-    RETURN QUERY SELECT 22, 'the approve gate refuses an unrated rater'::text,
-      'INFO'::text, left(msg, 90);
-  END;
+  END IF;
+
 END $fn$;
 
 SELECT v.seq, v.check_name, v.result, v.detail
@@ -247,15 +321,30 @@ FROM (
             HAVING count(*) > 1
                AND min(weightage) <> max(weightage)) q41)
   UNION ALL
+  -- WHO IS NOW BLOCKED, not how many. Since 222 these cannot be submitted or
+  -- approved until the missing measures are rated, so this is a worklist
+  -- rather than a statistic — and if it is long, that is 222 reporting a
+  -- backlog it did not create.
   SELECT 42, 'appraisals with a measure nobody has rated'::text, 'INFO'::text,
-         (SELECT count(*)::text FROM (
-            SELECT DISTINCT k.employee_id, k.period_id
-              FROM pms_goal_kpi k
-              JOIN pms_employee_goals g
-                ON g.id = k.goal_id AND g.status <> 'SENT_BACK'
-             WHERE NOT EXISTS (SELECT 1 FROM pms_reviews r
-                                WHERE r.kpi_id = k.id AND r.submitted = true
-                                  AND r.rating IS NOT NULL)) q42)
+         COALESCE((
+           SELECT string_agg(format('%s %s (%s of %s unrated)',
+                                    q.code, q.period_code, q.unrated, q.total),
+                             '; ' ORDER BY q.code)
+             FROM (
+             SELECT COALESCE(e.emp_code, k.employee_id::text) AS code,
+                    COALESCE(pe.period_code, '?')             AS period_code,
+                    count(*) FILTER (
+                      WHERE NOT EXISTS (SELECT 1 FROM pms_reviews r
+                                         WHERE r.kpi_id = k.id AND r.submitted = true
+                                           AND r.rating IS NOT NULL)) AS unrated,
+                    count(*)                                   AS total
+               FROM pms_goal_kpi k
+               JOIN pms_employee_goals g
+                 ON g.id = k.goal_id AND g.status <> 'SENT_BACK'
+               LEFT JOIN employees e   ON e.id = k.employee_id
+               LEFT JOIN pms_periods pe ON pe.id = k.period_id
+              GROUP BY e.emp_code, k.employee_id, pe.period_code, k.period_id) q
+            WHERE q.unrated > 0), 'none')
 
 ) AS v (seq, check_name, result, detail)
 ORDER BY v.seq;
