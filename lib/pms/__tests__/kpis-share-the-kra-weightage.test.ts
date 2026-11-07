@@ -12,7 +12,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import { readFileSync, readdirSync } from 'node:fs'
-import { shareOf, lines, type Kpi, type KraWithKpis } from '../kpi.ts'
+import { shareOf, lines, blankKpi, type Kpi, type KraWithKpis } from '../kpi.ts'
 import { score } from '../scoring.ts'
 
 const read = (p: string) => readFileSync(p, 'utf8')
@@ -309,7 +309,7 @@ test('the stepper does not own the step — the chips do', () => {
   assert.ok(!/useState\(0\)/.test(fn), 'the stepper holds its own position')
   assert.match(fn, /at: number/)
   assert.match(fn, /onAt: \(n: number\) => void/)
-  assert.ok(!/pms-step-dots/.test(MGR),
+  assert.ok(!/pms-ratestep-dots/.test(MGR),
     'the duplicate dot row survived beside the panel chips')
 })
 
@@ -368,4 +368,131 @@ test('the queries are named for what they hold', () => {
   assert.ok(!/panelKpis/.test(PERF),
     'panelKpis is still here — it is dead state now that the tree carries '
     + 'the measures, and a stale buffer is what caused the bug above')
+})
+
+// ── the write path, which no test covered ───────────────────────────────
+//
+// FOUND BY RUNNING THE FEATURE, not by a test. Adding a second measure to a
+// real KRA failed with:
+//
+//   [pms] could not save the KPIs: [23502] null value in column "weightage"
+//   of relation "pms_goal_kpi" violates not-null constraint
+//
+// 222 took the weightage off Kpi and out of blankKpi, and the insert still
+// said `weightage: x.weightage` — which is undefined, which PostgREST sends
+// as null, which the NOT NULL column refuses. Every new measure was dropped
+// and the KRA silently kept the ones it already had.
+//
+// Every test I wrote for 222 asked whether the READS had stopped using the
+// column. None asked whether the WRITES had. That is the whole gap: a
+// retired column is only retired if nothing writes it either.
+
+test('no write names the retired weightage column', () => {
+  // Repo-wide over the two files that write pms_goal_kpi, because the same
+  // omission in the HR-direct path would fail the same way.
+  for (const f of ['components/ess/Performance.tsx', 'app/dashboard/pms/page.tsx']) {
+    const src = read(f)
+    let from = src.indexOf("from('pms_goal_kpi')")
+    while (from !== -1) {
+      // The row literal sits just before the call in a .upsert/.insert chain,
+      // so take a window around it and look for the field being assigned.
+      const win = src.slice(Math.max(0, from - 900), from + 300)
+      const writes = /\.(upsert|insert)\(/.test(win)
+      if (writes) {
+        assert.ok(!/\n\s*weightage:/.test(win),
+          `${f} writes pms_goal_kpi.weightage, which 222 retired. The column `
+          + 'is NOT NULL DEFAULT 0, so sending the field as undefined is a '
+          + 'refused insert, and sending 0 on purpose is indistinguishable '
+          + 'from a real old split')
+      }
+      from = src.indexOf("from('pms_goal_kpi')", from + 1)
+    }
+  }
+})
+
+test('blankKpi and the insert agree about the column not existing', () => {
+  // The two halves of the bug. blankKpi stopped producing a weightage and
+  // the insert went on reading one off it — each correct alone.
+  const b = blankKpi(1)
+  assert.ok(!('weightage' in b))
+  const perf = read('components/ess/Performance.tsx')
+  const win = perf.slice(perf.indexOf('const kpiRows = kras.flatMap'),
+                         perf.indexOf('const kpiRows = kras.flatMap') + 1200)
+  assert.ok(win.length > 100, 'the KPI insert moved')
+  assert.ok(!/\n\s*weightage: x\.weightage/.test(win),
+    'the insert still reads a weightage off a Kpi that has none')
+})
+
+test('the rating stepper does not borrow the cycle stepper\'s class', () => {
+  // FOUND BY RUNNING THE APP. The rating stepper shipped using `.pms-step`,
+  // which CycleStepper.tsx has used for each stage of the cycle timeline all
+  // along — and `.pms .pms-step` outranks CycleStepper's own `.pms-step`, so
+  // my grid silently replaced its flex column on every PMS screen.
+  //
+  // Nothing caught it: the collision is between a component's scoped <style>
+  // and a global stylesheet, and both files were individually correct.
+  const css = read('components/pms/pms.css')
+  const cycle = read('components/pms/CycleStepper.tsx')
+  assert.match(cycle, /className="pms-step"/,
+    'CycleStepper no longer uses .pms-step — re-check this guard')
+  assert.ok(!/\.pms \.pms-step\s*[,{]/.test(css),
+    'pms.css styles .pms-step, which is CycleStepper\'s class for a cycle '
+    + 'stage — the rating stepper must use its own name')
+  assert.match(css, /\.pms \.pms-ratestep\s*\{/,
+    'the rating stepper has no styles of its own')
+  assert.match(read('components/pms/ManagerTabs.tsx'), /className="pms-ratestep"/)
+})
+
+test('the read-only ratings table rolls up, it does not pick one measure', () => {
+  // THE THIRD PLACE WITH THE SAME BUG, found by reading the screen after a
+  // real multi-measure appraisal reached it. RateTab's rows were built with
+  // a Map keyed on goal_id, so three SELF rows for one KRA overwrote each
+  // other and the table showed whichever came back last.
+  //
+  // MEASURED LIVE: a KRA whose measures were rated 5, 4 and 4 displayed "4".
+  // The KRA is worth 4.33.
+  const perf = read('components/ess/Performance.tsx')
+  const fn = perf.slice(perf.indexOf('could not read the KRAs to rate'),
+                        perf.indexOf('could not read the KRAs to rate') + 4200)
+  assert.ok(fn.length > 500, 'the rateRows builder moved')
+  assert.ok(!/byGoal\.set\(k, \{ \.\.\.\(byGoal\.get\(k\) \?\? \{\}\), \[role\]: \{/.test(fn),
+    'the last review for a goal still overwrites the others')
+  assert.match(fn, /cur\.ratings\.push\(Number\(row\.rating\)\)/,
+    'the ratings for a KRA are not collected before being averaged')
+  assert.match(fn, /const mean = /, 'there is no rollup')
+  assert.match(fn, /kpi_id/, 'the select does not name kpi_id')
+  // And every measure's sentence survives, not just one.
+  assert.match(fn, /v\.comments\.join\(' · '\)/,
+    'two of three comments are dropped on the floor')
+})
+
+test('the rating panel is reachable for everyone whose rating is owed', () => {
+  // THE BUG THAT MADE THE STEPPER UNREACHABLE IN PRODUCTION.
+  //
+  // "Review, rate & approve" is the only entry to the rating panel, and it
+  // renders on ApproveTab's first queue. That queue filtered to people who
+  // still owed a self rating or a one-to-one — so the moment a manager
+  // acknowledged the one-to-one on an already-submitted set, the employee
+  // left the queue and took the button with them, while the Team Dashboard
+  // went on saying "Your rating is owed" about the same person.
+  //
+  // Found by walking a real chain: acknowledge and lock, then look for
+  // anywhere to rate. There was nowhere.
+  const mgr = read('components/pms/ManagerTabs.tsx')
+  // SCOPED TO ApproveTab. TeamTab opens with the same `const rows =
+  // teamQueue(...)` line, so an unscoped indexOf finds the wrong component
+  // and the assertion passes or fails for reasons unrelated to this queue.
+  const body = mgr.slice(mgr.indexOf('export function ApproveTab'))
+  const q = body.slice(body.indexOf('const rows = teamQueue('),
+                       body.indexOf('const finalRows = teamQueue('))
+  assert.ok(q.length > 50 && q.length < 1200, 'the ApproveTab queue moved')
+  assert.match(q, /r\.next === 'Your rating is owed\.'/,
+    'the approval queue excludes people whose rating is owed, which is the '
+    + 'only place the rating panel can be opened from')
+  // The entry point itself still exists and still opens the panel.
+  assert.match(mgr, /onClick=\{\(\) => onOpenKras\?\.\(id\)\}/)
+  assert.match(mgr, /'Review & send on' : 'Review, rate & approve'/)
+  // And the sentence is the one teamQueue actually produces, so the queue
+  // and the dashboard cannot disagree about who is waiting.
+  assert.match(read('lib/pms/team.ts'), /return 'Your rating is owed\.'/)
 })

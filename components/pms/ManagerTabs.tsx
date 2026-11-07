@@ -623,8 +623,30 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
   const [reason, setReason] = useState<Record<string, string>>({})
   /** Which rows have opened the send-back box. See the cell below. */
   const [backing, setBacking] = useState<Record<string, boolean>>({})
+  /**
+   * THE RATING PANEL WAS UNREACHABLE FOR EXACTLY THE PEOPLE WHO NEEDED IT.
+   *
+   * This filter was `!selfSubmitted || !oneToOneDone` — people who still owe
+   * their self rating or their one-to-one. "Review, rate & approve" is the
+   * ONLY way into the rating panel, and it lives on these rows.
+   *
+   * So the moment a manager acknowledged the one-to-one on a set that had
+   * already been self-submitted, the employee dropped out of this queue and
+   * the button went with them — while the Team Dashboard went on saying
+   * "Your rating is owed." about the same person. There was no way to open
+   * the panel and rate them at all.
+   *
+   * FOUND BY WALKING THE CHAIN on live data: acknowledge and lock, then look
+   * for somewhere to rate, and there is nowhere. Every screen agreed a rating
+   * was owed and none of them would take one.
+   *
+   * `r.next` is the canonical sentence teamQueue already computes and
+   * teamStats already counts on — using it here means the queue and the
+   * dashboard cannot disagree about who is waiting.
+   */
   const rows = teamQueue(members, today, flagRules)
-    .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone)
+    .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone
+              || r.next === 'Your rating is owed.')
   // Logged by the employee, still waiting on this manager's half. Not merged
   // into the card above: that one is about getting a KRA set locked before
   // the period runs, this one is the last thing standing between a rated
@@ -1462,17 +1484,17 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
   const firstUnrated = lines.findIndex(l => !full(l))
 
   return (
-    <div className="pms-step">
+    <div className="pms-ratestep">
       {/* WHERE YOU ARE, in words and in dots. The words are not decoration:
           a dot row alone is unreadable to anybody who cannot see it, and the
           count is the thing being communicated. */}
       {/* The heading only. The dots that used to live here are the panel's
           own progress chips — see KraDetail. */}
-      <div className="pms-step-h">
-        <span className="pms-step-n">
+      <div className="pms-ratestep-h">
+        <span className="pms-ratestep-n">
           {onReview ? 'Review before sending' : `KRA ${at + 1} of ${n}`}
         </span>
-        <span className="pms-step-sub">
+        <span className="pms-ratestep-sub">
           {onReview
             ? `${lines.filter(full).length} of ${n} KRAs fully rated`
             : `${lines.filter(full).length} of ${n} KRAs done`}
@@ -1484,11 +1506,11 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
            you cannot see KRA 1 while deciding KRA 6 — so before anything is
            sent, every KRA and its rolled-up rating is on one screen, and any
            row can be clicked to go back and change it. */
-        <div className="pms-step-rev">
+        <div className="pms-ratestep-rev">
           <p className="k">
             Every KRA, as you have rated it. Click one to go back and change it.
           </p>
-          <table className="pms-step-tbl">
+          <table className="pms-ratestep-tbl">
             <thead>
               <tr>
                 <th>KRA</th><th className="num">Weightage</th>
@@ -1521,7 +1543,7 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
             </tbody>
           </table>
           {firstUnrated >= 0 && (
-            <p className="pms-step-warn">
+            <p className="pms-ratestep-warn">
               KRA {firstUnrated + 1} is not fully rated.{' '}
               <button type="button" className="linklike"
                       onClick={() => setAt(firstUnrated)}>Go to it</button>
@@ -1529,17 +1551,17 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
           )}
         </div>
       ) : (
-        <div className="pms-step-body">
-          <div className="pms-step-kra">
+        <div className="pms-ratestep-body">
+          <div className="pms-ratestep-kra">
             <div>
-              <span className="pms-step-seq">{at + 1}</span>
+              <span className="pms-ratestep-seq">{at + 1}</span>
               <b>{lines[at]?.title}</b>
             </div>
-            <span className="pms-step-wt">{lines[at]?.weightage}%</span>
+            <span className="pms-ratestep-wt">{lines[at]?.weightage}%</span>
           </div>
 
           {(lines[at]?.kpis ?? []).length === 0 ? (
-            <p className="pms-step-warn">
+            <p className="pms-ratestep-warn">
               This KRA has no measure under it, so there is nothing to rate.
               Send it back and ask for one.
             </p>
@@ -1547,17 +1569,17 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
             const mine = rate?.[k.kpiId]?.rating ?? null
             const differs = mine != null && k.selfRating != null && mine !== k.selfRating
             return (
-              <div key={k.kpiId} className={`pms-step-kpi${mine != null ? ' is-rated' : ''}`}>
-                <div className="pms-step-m">
+              <div key={k.kpiId} className={`pms-ratestep-kpi${mine != null ? ' is-rated' : ''}`}>
+                <div className="pms-ratestep-m">
                   <b>{k.metric}</b>
                   {k.target && <span className="k"> · target {k.target}</span>}
-                  <span className="pms-step-share">{k.share % 1 === 0 ? k.share : k.share.toFixed(2)}%</span>
+                  <span className="pms-ratestep-share">{k.share % 1 === 0 ? k.share : k.share.toFixed(2)}%</span>
                 </div>
 
                 {/* THEIR ANSWER FIRST. A manager rates against what the
                     employee claimed, so it has to be readable without
                     leaving the row. */}
-                <div className="pms-step-self">
+                <div className="pms-ratestep-self">
                   <span className="l">They said</span>
                   {k.selfRating == null
                     ? <span className="k">Not rated</span>
@@ -1569,7 +1591,7 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
                   {k.selfComment && <div className="k q">&ldquo;{k.selfComment}&rdquo;</div>}
                 </div>
 
-                <div className="pms-step-mine">
+                <div className="pms-ratestep-mine">
                   <span className="l">Your rating</span>
                   <RatingChips bands={bands} value={mine}
                                label={`Your rating for ${lines[at]?.title}, ${k.metric}`}
@@ -1593,7 +1615,7 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
           {/* The KRA's own number, as it stands. Shown here rather than only
               on the review step so the effect of each measure is visible
               while it is being decided. */}
-          <div className="pms-step-roll">
+          <div className="pms-ratestep-roll">
             <span className="k">This KRA so far</span>
             <b>{rollup(lines[at]) === null ? '—' : rollup(lines[at])!.toFixed(2)}</b>
             <span className="k">{done(lines[at])} of {(lines[at]?.kpis ?? []).length} measures rated</span>
@@ -1601,7 +1623,7 @@ export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
         </div>
       )}
 
-      <div className="pms-step-nav">
+      <div className="pms-ratestep-nav">
         <button type="button" className="btn ghost" disabled={at === 0}
                 onClick={() => setAt(a => Math.max(0, a - 1))}>← Back</button>
         {!onReview && (

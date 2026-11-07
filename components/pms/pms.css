@@ -2215,13 +2215,13 @@
  * rating rows gives the rater no way to know how much is left without
  * scrolling back and counting.
  */
-.pms .pms-step { display: grid; gap: 12px; }
+.pms .pms-ratestep { display: grid; gap: 12px; }
 
-.pms .pms-step-h {
+.pms .pms-ratestep-h {
   display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
   padding-bottom: 10px; border-bottom: 1px solid var(--ez-line);
 }
-.pms .pms-step-n { font-size: 13px; font-weight: 700; color: var(--ez-ink); }
+.pms .pms-ratestep-n { font-size: 13px; font-weight: 700; color: var(--ez-ink); }
 
 /* Text that belongs to assistive tech only. */
 .pms .vh {
@@ -2229,7 +2229,7 @@
   overflow: hidden; clip-path: inset(50%); white-space: nowrap;
 }
 
-.pms .pms-step-sub {
+.pms .pms-ratestep-sub {
   margin-left: auto; font-size: 11px; color: var(--ez-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -2244,69 +2244,69 @@
 }
 .pms .kstep.rev { border-style: dashed; }
 
-.pms .pms-step-body { display: grid; gap: 10px; }
+.pms .pms-ratestep-body { display: grid; gap: 10px; }
 
-.pms .pms-step-kra {
+.pms .pms-ratestep-kra {
   display: flex; align-items: center; gap: 10px; justify-content: space-between;
   padding: 10px 12px; border-radius: var(--ez-r-md, 10px);
   background: var(--ez-sunken); border: 1px solid var(--ez-line);
 }
-.pms .pms-step-kra > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
-.pms .pms-step-seq {
+.pms .pms-ratestep-kra > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pms .pms-ratestep-seq {
   display: inline-grid; place-items: center; width: 22px; height: 22px;
   border-radius: 50%; background: var(--ez-brand); color: var(--ez-on-accent);
   font-size: 11px; font-weight: 700; flex: none;
 }
-.pms .pms-step-wt {
+.pms .pms-ratestep-wt {
   font-size: 12px; font-weight: 700; color: var(--ez-ink-soft);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
 
-.pms .pms-step-kpi {
+.pms .pms-ratestep-kpi {
   display: grid; gap: 8px; padding: 11px 12px;
   border: 1px solid var(--ez-line); border-radius: var(--ez-r-md, 10px);
   background: var(--ez-surface);
 }
 /* A rated measure tints, so what is left shows by scanning rather than by
  * reading every row. */
-.pms .pms-step-kpi.is-rated {
+.pms .pms-ratestep-kpi.is-rated {
   background: var(--ez-positive-tint); border-color: var(--ez-positive-edge);
 }
-.pms .pms-step-m { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
-.pms .pms-step-share {
+.pms .pms-ratestep-m { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.pms .pms-ratestep-share {
   margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ez-muted);
   font-variant-numeric: tabular-nums; white-space: nowrap;
 }
-.pms .pms-step-self, .pms .pms-step-mine {
+.pms .pms-ratestep-self, .pms .pms-ratestep-mine {
   display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
 }
-.pms .pms-step-self .l, .pms .pms-step-mine .l {
+.pms .pms-ratestep-self .l, .pms .pms-ratestep-mine .l {
   font-size: 10px; font-weight: 700; letter-spacing: .05em;
   text-transform: uppercase; color: var(--ez-muted); white-space: nowrap;
 }
-.pms .pms-step-self .n { font-size: 15px; font-weight: 700; color: var(--ez-ink); }
-.pms .pms-step-self .q { flex-basis: 100%; font-style: italic; }
+.pms .pms-ratestep-self .n { font-size: 15px; font-weight: 700; color: var(--ez-ink); }
+.pms .pms-ratestep-self .q { flex-basis: 100%; font-style: italic; }
 
-.pms .pms-step-roll {
+.pms .pms-ratestep-roll {
   display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
   padding: 9px 12px; border-radius: var(--ez-r-md, 10px);
   background: var(--ez-brand-tint); border: 1px solid var(--ez-brand-edge);
 }
-.pms .pms-step-roll b { font-size: 15px; font-variant-numeric: tabular-nums; }
+.pms .pms-ratestep-roll b { font-size: 15px; font-variant-numeric: tabular-nums; }
 
-.pms .pms-step-rev { display: grid; gap: 10px; }
-.pms .pms-step-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
-.pms .pms-step-tbl th {
+.pms .pms-ratestep-rev { display: grid; gap: 10px; }
+.pms .pms-ratestep-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pms .pms-ratestep-tbl th {
   text-align: left; font-size: 10px; font-weight: 700; letter-spacing: .05em;
   text-transform: uppercase; color: var(--ez-muted);
   padding: 6px 8px; border-bottom: 1px solid var(--ez-line);
 }
-.pms .pms-step-tbl th.num, .pms .pms-step-tbl td.num {
+.pms .pms-ratestep-tbl th.num, .pms .pms-ratestep-tbl td.num {
   text-align: right; font-variant-numeric: tabular-nums;
 }
-.pms .pms-step-tbl td { padding: 8px; border-bottom: 1px solid var(--ez-line); }
+.pms .pms-ratestep-tbl td { padding: 8px; border-bottom: 1px solid var(--ez-line); }
 /* A KRA that is not fully rated is the reason the review step exists. */
-.pms .pms-step-tbl tr.is-short td { background: var(--ez-warning-tint); }
+.pms .pms-ratestep-tbl tr.is-short td { background: var(--ez-warning-tint); }
 
 .pms .linklike {
   background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
@@ -2315,16 +2315,16 @@
 }
 .pms .linklike:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
 
-.pms .pms-step-warn {
+.pms .pms-ratestep-warn {
   margin: 0; font-size: 12px; color: var(--ez-warning); font-weight: 600;
 }
 
-.pms .pms-step-nav {
+.pms .pms-ratestep-nav {
   display: flex; gap: 8px; justify-content: space-between;
   padding-top: 10px; border-top: 1px solid var(--ez-line);
 }
 
 @media (max-width: 860px) {
-  .pms .pms-step-tbl { font-size: 12px; }
-  .pms .pms-step-tbl th, .pms .pms-step-tbl td { padding: 6px 5px; }
+  .pms .pms-ratestep-tbl { font-size: 12px; }
+  .pms .pms-ratestep-tbl th, .pms .pms-ratestep-tbl td { padding: 6px 5px; }
 }

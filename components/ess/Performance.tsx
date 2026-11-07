@@ -1183,7 +1183,17 @@ function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
             company_id: companyId, period_id: period.id, employee_id: employeeId,
             goal_id: goalId, seq_no: x.seq_no,
             kpi_metric: x.kpi_metric, target_value: x.target_value || null,
-            weightage: x.weightage,
+            // 222: THE COLUMN IS NOT NAMED. It is retired, and blankKpi no
+            // longer produces one — so `weightage: x.weightage` sent
+            // undefined, which PostgREST writes as null, which the NOT NULL
+            // column refuses. Every new measure failed with
+            // "null value in column weightage violates not-null constraint"
+            // and the KRA silently kept the measures it already had.
+            //
+            // Omitted rather than sent as 0: the column keeps DEFAULT 0, so
+            // leaving it out is what lets the database fill it, and a 0 we
+            // wrote on purpose would be indistinguishable from a real old
+            // split of 0 to anybody reading the retired column later.
           }))
         })
         if (kpiRows.length) {
@@ -1803,20 +1813,61 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
       // rows are kept apart by ROLE, which is also what pms_reviews is
       // unique on.
       const r = await supabase.from('pms_reviews')
-        .select('goal_id,rater_id,rater_role,rating,comments,achievement_value')
+        .select('goal_id,kpi_id,rater_id,rater_role,rating,comments,achievement_value')
         .eq('employee_id', picked).eq('period_id', period.id)
         .in('rater_role', ['SELF', ...CHAIN_RATERS])
       if (r.error) logFail('could not read the ratings', r.error)
-      const byGoal = new Map<string, Partial<Record<RaterRole,
-        { rating: number | null; comment: string; achievement?: string }>>>()
+
+      /**
+       * ONE RATING PER KRA PER ROLE, ROLLED UP — 222.
+       *
+       * There is one pms_reviews row per MEASURE per role, so a KRA with
+       * three of them has three SELF rows. Keyed on goal_id alone, each
+       * overwrote the last and this table showed whichever came back
+       * last — a single measure's score standing in for the KRA, and which
+       * one depended on row order, which Postgres does not promise.
+       *
+       * MEASURED: a KRA whose three measures were rated 5, 4 and 4 showed
+       * "4". The KRA is worth 4.33.
+       *
+       * Collected then averaged, the same plain mean kraRating applies and
+       * the stepper's review step shows, because the measures under a KRA
+       * carry equal share. Unrated measures leave the divisor rather than
+       * counting as zero.
+       */
+      type Acc = { ratings: number[]; comments: string[]; achievements: string[] }
+      const acc = new Map<string, Map<RaterRole, Acc>>()
       for (const row of (r.data ?? []) as Record<string, unknown>[]) {
         const k = String(row.goal_id)
         const role = String(row.rater_role) as RaterRole
-        byGoal.set(k, { ...(byGoal.get(k) ?? {}), [role]: {
-          rating: row.rating == null ? null : Number(row.rating),
-          comment: String(row.comments ?? ''),
-          achievement: String(row.achievement_value ?? ''),
-        } })
+        if (!acc.has(k)) acc.set(k, new Map())
+        const forGoal = acc.get(k)!
+        const cur = forGoal.get(role) ?? { ratings: [], comments: [], achievements: [] }
+        if (row.rating != null) cur.ratings.push(Number(row.rating))
+        const c = String(row.comments ?? '').trim()
+        if (c) cur.comments.push(c)
+        const ach = String(row.achievement_value ?? '').trim()
+        if (ach) cur.achievements.push(ach)
+        forGoal.set(role, cur)
+      }
+      const mean = (xs: number[]) =>
+        xs.length === 0 ? null : Math.round((xs.reduce((a2, b2) => a2 + b2, 0) / xs.length) * 100) / 100
+      const byGoal = new Map<string, Partial<Record<RaterRole,
+        { rating: number | null; comment: string; achievement?: string }>>>()
+      for (const [k, roles] of acc) {
+        const out: Partial<Record<RaterRole, { rating: number | null; comment: string; achievement?: string }>> = {}
+        for (const [role, v] of roles) {
+          out[role] = {
+            rating: mean(v.ratings),
+            // EVERY measure's sentence, not one of them. A reader looking at
+            // a rolled-up number needs the reasons behind it, and silently
+            // dropping two of three is how a comment nobody can find gets
+            // reported as a comment nobody wrote.
+            comment: v.comments.join(' · '),
+            achievement: v.achievements.join(' · '),
+          }
+        }
+        byGoal.set(k, out)
       }
 
       if (!live) return
