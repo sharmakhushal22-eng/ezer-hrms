@@ -313,6 +313,42 @@ The screen shows **every** reason the button is off, in the order to fix them:
 weightage and counts first, then KPIs, then ratings — rating a set you are
 about to add a KRA to is wasted work.
 
+### 5.3b The manager's rating stepper
+
+A rater works through the set **one KRA at a time**; a reader gets the whole
+record at once. Rating is not reading, and paginating a record away from
+somebody who opened the panel to look is worse than a long page.
+
+```
+ 3 of 5 rated · 2 to go  ▓▓▓▓▓▓░░░░   [1] [2] [✓]   2 need a reason
+
+ KRA 1 of 2                                   1 of 2 KRAs done
+ ┌─────────────────────────────────────────────────────────────┐
+ │ 1  Close the month-end books in three days            60%   │
+ ├─────────────────────────────────────────────────────────────┤
+ │ Days to signed-off trial balance · target <=3 days    20%   │
+ │ THEY SAID 4 Exceeds · Closed in 2.6 days on average         │
+ │ YOUR RATING [5][4][3][2][1]                                 │
+ │ [ why — they will read this                             ]   │
+ └─────────────────────────────────────────────────────────────┘
+ This KRA so far  4.00   3 of 3 measures rated
+                                   [ ← Back ]  [ Next KRA → ]
+```
+
+The last step is a **review of every KRA with its rolled-up rating**, because
+a stepper's real weakness is that you cannot compare KRA 1 against KRA 6 while
+deciding. Any row there jumps back to that KRA.
+
+> **The chips are the only progress control.** The first draft put a second
+> row of dots inside the stepper, beside the panel's existing per-KRA chips —
+> two controls for one position, each able to be right while the other was
+> wrong. The chips drive the stepper; the stepper holds no position of its own.
+
+Every count on the panel — the bar, the chips, the "needs a reason" pill, the
+unsaved-work guard, the footer and the approval gate — is derived from **one**
+`compareRatings` call over measures. They each derived their own before, and
+the footer said *"2 still unrated"* while the bar said *"5 to go"*.
+
 ### 5.4 Score → rating band
 
 The band is the row whose window contains the score:
@@ -576,14 +612,13 @@ able to build a chain whose results can never be published.
 
 ### Built and verified
 
-Everything above. 1,107 PMS tests, migrations through 222, production build
+Everything above. 1,117 PMS tests, migrations through 222, production build
 compiles, `tsc` at the project's 39-error baseline.
 
 ### Not finished
 
 | | |
 |---|---|
-| **The manager's rating stepper** | Employees rate per KPI; the manager's path still rates at KRA level, and silently **drops any KRA with more than one KPI** (`kpiOf` returns null when it cannot resolve a single KPI, and those rows are filtered out of the upsert). Until the one-KRA-at-a-time stepper lands, a multi-KPI KRA cannot be rated by the chain. |
 | **Never run** | 388 of 395 appraisals never submitted. `pms_chain`, `pms_training_catalogue`, `pms_training_suggestion` and all three PIP tables are **empty** — the chain builder, the AI bin and the whole PIP flow have never been exercised on real data. |
 | **Rule 6 is dead code** | `canManagerRate` ("a manager cannot rate before the self rating") is defined and called from nowhere. SQL enforces it, so a manager meets a raw database refusal instead of a disabled button with a sentence. |
 | **A contradiction** | `EmployeeTabs` tells employees recognition is *"never a cash component"*, while `RECOGNITION_LABEL` offers raters **"Salary bonus"** and **"Out-of-cycle increment"**. One of the two is wrong — a product decision, not a bug to pick quietly. |

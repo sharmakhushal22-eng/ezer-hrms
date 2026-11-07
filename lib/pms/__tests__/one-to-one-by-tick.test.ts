@@ -392,7 +392,7 @@ test('every PMS checkbox uses it', () => {
 
 // ── rating and approving are one act ────────────────────────────────────
 
-test('approving requires a rating on EVERY KRA', () => {
+test('approving requires a rating on EVERY MEASURE', () => {
   // THE BUG THIS CLOSES: 199 will not let a rung settle anything until every
   // rung ahead has rated, so a manager who approved without visiting Rate My
   // Team passed the set up and blocked it there — with no sign of why, since
@@ -402,9 +402,15 @@ test('approving requires a rating on EVERY KRA', () => {
   assert.match(MGR, /Rate every KRA — \{rated\.length\} of \{total\} done/,
     'an unrated set gives no count of what is outstanding')
   // And the write side refuses too, not just the button.
-  assert.match(PERF, /Rate every KRA before sending it on/,
+  //
+  // 222 COUNTS MEASURES, NOT KRAs. pms_chain_approve refuses while any KPI
+  // is unrated by the person acting, so counting KRAs here would let the
+  // screen wave through a set the database then rejects — the manager is
+  // told it went, and it did not.
+  assert.match(PERF, /Rate every measure before sending it on/,
     'the handler accepts a partial set')
-  assert.match(PERF, /const missing = lines\.filter\(l => l\.goalId && kraRate\[l\.goalId\]\?\.rating == null\)/)
+  assert.match(PERF, /const missing = measures\.filter\(m => kraRate\[m\.kpi\.kpiId\]\?\.rating == null\)/,
+    'the handler counts KRAs, which is not what the database checks')
 })
 
 test('the ratings are written BEFORE the approval', () => {
@@ -444,10 +450,16 @@ test('each rater writes under their OWN rung, against a KPI', () => {
   // the code that depends on it. This test is what names the coupling.
   assert.match(fn, /onConflict: 'period_id,employee_id,kpi_id,rater_role'/,
     'the upsert does not match the table\'s unique key')
-  assert.match(fn, /kpi_id: kpiId/, 'the rating does not name a KPI, which is NOT NULL')
-  // And a KRA whose KPI cannot be resolved is dropped rather than guessed at.
-  assert.match(fn, /\.filter\(x => x\.kpiId\)/,
-    'a rating could be written against a guessed KPI')
+  assert.match(fn, /kpi_id: kpi\.kpiId/,
+    'the rating does not name a KPI, which is NOT NULL')
+  // 222: THERE IS NOTHING TO RESOLVE. This used to take a goal_id and look
+  // for the KRA's only KPI, dropping the row when a KRA had two — so a
+  // multi-measure KRA silently wrote nothing and the feature was unreachable.
+  // The measure carries its own id now, and the gate above has already
+  // refused if any is unrated, so every measure gets a row or nothing does.
+  assert.ok(!/const kpiOf = \(goalId: string\)/.test(fn),
+    'the single-KPI resolver is back, and it drops multi-measure KRAs')
+  assert.match(fn, /measures\.map\(\(\{ kra, kpi \}\) =>/)
 })
 
 test('nothing anywhere still names the key 220 dropped', () => {

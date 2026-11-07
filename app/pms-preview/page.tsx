@@ -287,16 +287,39 @@ function KraDetailReviewPreview() {
   const [overall, setOverall] = useState('')
   return (
     <KraDetail member={TEAM[0]} myRung="RM_L1" finalises
+      /* 222: THE CASE THE OLD PANEL COULD NOT EXPRESS. The first KRA carries
+         THREE measures, which the goal-keyed version collapsed to one — and
+         the save silently wrote nothing for. Each measure carries an equal
+         share of its KRA: 60/3 = 20 and 40/2 = 20. One is left unrated so
+         the review step has something to complain about. */
       lines={[
         { goalId: 'g1', seqNo: 1, title: 'Close the month-end books within three working days',
-          kpi: 'Days to signed-off trial balance', target: '<=3 working days',
           category: 'BUSINESS', weightage: 60, status: 'LOCKED', source: 'CARRIED_FORWARD',
-          achievement: 'Closed in 2.6 days on average across the quarter.',
-          selfRating: 4, selfComment: 'Held the commitment through the ERP migration.' },
+          kpis: [
+            { kpiId: 'k1', seqNo: 1, metric: 'Days to signed-off trial balance',
+              target: '<=3 working days', share: 20,
+              achievement: 'Closed in 2.6 days on average across the quarter.',
+              selfRating: 4, selfComment: 'Held the commitment through the ERP migration.' },
+            { kpiId: 'k2', seqNo: 2, metric: 'Inter-company eliminations cleared',
+              target: '100% before day 3', share: 20,
+              achievement: 'All twelve entities cleared on day two.',
+              selfRating: 5, selfComment: 'No carry-over into the next period.' },
+            { kpiId: 'k3', seqNo: 3, metric: 'Late journal entries after close',
+              target: 'zero', share: 20,
+              achievement: 'Two late entries in October.',
+              selfRating: 3, selfComment: 'Both were the migration cutover.' },
+          ] },
         { goalId: 'g2', seqNo: 2, title: 'Reconciliation automation, phase two',
-          kpi: 'Breaks closed within SLA', target: '>=98%',
           category: 'PROCESS', weightage: 40, status: 'LOCKED', source: 'MANUAL',
-          achievement: '97.2% across all ledgers.', selfRating: 3, selfComment: 'Short of target.' },
+          kpis: [
+            { kpiId: 'k4', seqNo: 1, metric: 'Breaks closed within SLA',
+              target: '>=98%', share: 20,
+              achievement: '97.2% across all ledgers.',
+              selfRating: 3, selfComment: 'Short of target.' },
+            { kpiId: 'k5', seqNo: 2, metric: 'Ledgers migrated to the new engine',
+              target: '8 of 8', share: 20,
+              achievement: null, selfRating: null, selfComment: null },
+          ] },
       ]}
       rate={rate}
       onRate={(gid, patch) => setRate(p => {

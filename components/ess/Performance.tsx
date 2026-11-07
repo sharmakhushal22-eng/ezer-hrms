@@ -50,7 +50,7 @@ import {
   MGR_TABS, HOD_TABS, TeamTab, ApproveTab, RateTab, PipRequestTab, CHAIN_RATERS,
   EMPTY_TRAINING, type TrainingDraft,
   TeamAnalyticsTab, FinaliseTab, FeedbackTab, PublishedResultsTab, KraDetail,
-  BENEFIT_LABEL,
+  BENEFIT_LABEL, measuresOf,
   type MgrTab, type HodTab, type RateRow, type BenefitType,
   type PublishedResult, type KraLine,
 } from '@/components/pms/ManagerTabs'
@@ -60,7 +60,7 @@ import { rungFor, heldBy, approvalFinalises, effectiveChain } from '@/lib/pms/ch
 import { showFinaliserFeedbackTab, type PostFinalOwner } from '@/lib/pms/postFinal'
 import { autoLogFor, CONFIRM_LABEL, CONFIRM_WHY, type ConfirmStage } from '@/lib/pms/oneToOne'
 import { diffKras, type Kra, type Category, type KraChange } from '@/lib/pms/kra'
-import { selfKey } from '@/lib/pms/kpi'
+import { selfKey, shareOf } from '@/lib/pms/kpi'
 import { canLockWeightage, canPublishResult, type Log } from '@/lib/pms/oneToOne'
 import { filled, defaultPipWindow, RECOGNITION_LABEL,
          type PipIntent, type RecognitionIntent } from '@/lib/pms/training'
@@ -1995,8 +1995,6 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
    */
   const [kraFor, setKraFor] = useState<string | null>(null)
   const [kraLines, setKraLines] = useState<KraLine[] | null>(null)
-  /** 220: the KPIs of whoever's panel is open. A rating names one. */
-  const [panelKpis, setPanelKpis] = useState<Record<string, unknown>[]>([])
   /**
    * THIS RATER'S SCORES, while the panel is open.
    *
@@ -2011,7 +2009,16 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   const openKras = useCallback(async (id: string) => {
     setKraFor(id); setKraLines(null)
     if (!period) return
-    const [g, rv, kp] = await Promise.all([
+    // NAMED FOR WHAT THEY HOLD. These were `g, rv, kp`, and `rv` was bound to
+    // the KPI query while `kp` was bound to the reviews query — the opposite
+    // of what the names say. setPanelKpis(kp.data) therefore filled the KPI
+    // list with REVIEW rows, which carry no `id`, so the manager's save
+    // resolved every kpi_id to the string "undefined" and Postgres refused
+    // the upsert. Manager ratings had not saved since 220.
+    //
+    // A comment would not have caught that. Names that cannot be read the
+    // wrong way round do.
+    const [goalsQ, kpisQ, selfQ] = await Promise.all([
       supabase.from('pms_employee_goals')
         .select('id,seq_no,kra_title,kpi_metric,target_value,category,weightage,status,source')
         .eq('employee_id', id).eq('period_id', period.id).order('seq_no'),
@@ -2021,29 +2028,50 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
         .eq('employee_id', id).eq('period_id', period.id).order('seq_no'),
       // The employee's OWN rating, which is the half a manager most needs to
       // read before approving: rater_role SELF, not their own rating of them.
+      // 222: kpi_id, because a rating belongs to a MEASURE. Selecting only
+      // goal_id and keying a Map on it kept whichever row came back last,
+      // so a KRA with three measures showed the manager one self score
+      // standing in for three — and which three was undefined row order.
       supabase.from('pms_reviews')
-        .select('goal_id,achievement_value,rating,comments')
+        .select('goal_id,kpi_id,achievement_value,rating,comments')
         .eq('employee_id', id).eq('period_id', period.id).eq('rater_role', 'SELF'),
     ])
-    // What this rater has already said about each KRA. Loaded alongside the
-    // employee's own ratings, in the same round trip.
-    setPanelKpis(kp.data ?? [])
     const mine = chainRoleFor(id)
     const mineRows = mine ? await supabase.from('pms_reviews')
-      .select('goal_id,rating,comments')
+      .select('goal_id,kpi_id,rating,comments')
       .eq('employee_id', id).eq('period_id', period.id).eq('rater_role', mine) : null
-    setKraRate(Object.fromEntries((mineRows?.data ?? []).map(r => {
-      const x = r as { goal_id: string; rating?: number; comments?: string }
-      return [String(x.goal_id),
-              { rating: x.rating == null ? null : Number(x.rating), comment: x.comments ?? '' }]
-    })))
+    // KEYED ON kpi_id, like the ratings themselves. Keyed on goal_id this
+    // collapsed a manager's three answers into one on reopening, and the
+    // one it kept depended on row order.
+    setKraRate(Object.fromEntries((mineRows?.data ?? [])
+      .filter(r => (r as { kpi_id?: string }).kpi_id)
+      .map(r => {
+        const x = r as { kpi_id: string; rating?: number; comments?: string }
+        return [String(x.kpi_id),
+                { rating: x.rating == null ? null : Number(x.rating), comment: x.comments ?? '' }]
+      })))
     setKraFinal('')
 
-    const selfBy = new Map((rv.data ?? []).map(r => {
+    // Keyed on kpi_id now. The goal_id map it replaces is kept for the
+    // KRA-level fallback below, where a set written before 220 has a self
+    // rating against the goal and no KPI rows to hang it on.
+    const selfByKpi = new Map((selfQ.data ?? [])
+      .filter(r => (r as { kpi_id?: string }).kpi_id)
+      .map(r => {
+        const x = r as { kpi_id: string; achievement_value?: string; rating?: number; comments?: string }
+        return [String(x.kpi_id), x]
+      }))
+    const selfBy = new Map((selfQ.data ?? []).map(r => {
       const x = r as { goal_id: string; achievement_value?: string; rating?: number; comments?: string }
       return [String(x.goal_id), x]
     }))
-    setKraLines((g.data ?? []).map(row => {
+    // The KPIs of each KRA, in order, so the share can be divided out.
+    const kpisByGoal = new Map<string, Record<string, unknown>[]>()
+    for (const row of (kpisQ.data ?? []) as Record<string, unknown>[]) {
+      const g = String(row.goal_id)
+      kpisByGoal.set(g, [...(kpisByGoal.get(g) ?? []), row])
+    }
+    setKraLines((goalsQ.data ?? []).map(row => {
       const x = row as Record<string, unknown>
       const s = selfBy.get(String(x.id))
       return {
@@ -2056,6 +2084,23 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
         achievement: s?.achievement_value ?? null,
         selfRating: s?.rating == null ? null : Number(s.rating),
         selfComment: s?.comments ?? null,
+        // 222: the measures, each carrying an equal share of the KRA.
+        kpis: (kpisByGoal.get(String(x.id)) ?? [])
+          .sort((a, b) => Number(a.seq_no) - Number(b.seq_no))
+          .map((row, _i, all) => {
+            const kid = String(row.id)
+            const sk = selfByKpi.get(kid)
+            return {
+              kpiId: kid,
+              seqNo: Number(row.seq_no),
+              metric: String(row.kpi_metric ?? ''),
+              target: (row.target_value as string) ?? null,
+              share: shareOf(Number(x.weightage) || 0, all.length),
+              achievement: sk?.achievement_value ?? null,
+              selfRating: sk?.rating == null ? null : Number(sk.rating),
+              selfComment: sk?.comments ?? null,
+            }
+          }),
       }
     }))
   }, [period])
@@ -2244,9 +2289,17 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     }
     if (!companyId) { setMsg(NO_COMPANY); return }
     const lines = kraLines ?? []
-    const missing = lines.filter(l => l.goalId && kraRate[l.goalId]?.rating == null)
-    if (!lines.length || missing.length) {
-      setMsg(`Rate every KRA before sending it on — ${missing.length} of ${lines.length} still have no rating from you.`)
+    // EVERY MEASURE, not every KRA. 222 made each rung rate every KPI, and
+    // pms_chain_approve refuses otherwise — so counting KRAs here would let
+    // the screen wave through a set the database then rejects, which is the
+    // worst of both: the manager is told it went and it did not.
+    const measures = measuresOf(lines)
+    const missing = measures.filter(m => kraRate[m.kpi.kpiId]?.rating == null)
+    if (!measures.length || missing.length) {
+      setMsg(measures.length
+        ? `Rate every measure before sending it on — ${missing.length} of `
+          + `${measures.length} still have no rating from you.`
+        : 'There is nothing to rate: none of their KRAs has a measure under it.')
       return
     }
     // A DIFFERENCE FROM THEIR OWN RATING NEEDS A REASON. The panel disables
@@ -2258,12 +2311,17 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     // weighted score a PIP request records as what prompted it. Computing
     // the score a second way here is how the panel and the saved row would
     // come to disagree about the number that triggered a performance plan.
-    const cmpNow = compareRatings(lines.filter(l => l.goalId).map(l => ({
-      goalId: l.goalId!, title: `${l.seqNo}. ${l.title || 'untitled'}`,
-      weightage: Number(l.weightage) || 0,
-      self: l.selfRating ?? null,
-      mine: kraRate[l.goalId!]?.rating ?? null,
-      comment: kraRate[l.goalId!]?.comment ?? null,
+    // ONE ROW PER MEASURE, each carrying its share. compareRatings is a
+    // weighted mean and does not care whether its weights came from KRAs or
+    // from the measures under them — the same property 220 and 222 rest on —
+    // so the score it returns is the score pms_score computes.
+    const cmpNow = compareRatings(measures.map(({ kra, kpi }) => ({
+      goalId: kpi.kpiId,
+      title: `${kra.seqNo}. ${kra.title || 'untitled'} · ${kpi.metric}`,
+      weightage: kpi.share,
+      self: kpi.selfRating ?? null,
+      mine: kraRate[kpi.kpiId]?.rating ?? null,
+      comment: kraRate[kpi.kpiId]?.comment ?? null,
     })))
     const myScore = cmpNow.myScore
     const unexplained = cmpNow.missingReasons
@@ -2275,25 +2333,28 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
     }
 
     setSaving(true); setMsg(null)
-    // 220: a rating names its KPI. A KRA whose KPI cannot be resolved is left
-    // out rather than rated against a guess — writing a number against the
-    // wrong measure is worse than not writing it, because the refusal is
-    // visible and a wrong rating is not.
-    const kpiOf = (goalId: string): string | null => {
-      const mine = panelKpis.filter(k => String(k.goal_id) === String(goalId))
-      return mine.length === 1 ? String(mine[0].id) : null
-    }
+    /**
+     * ONE ROW PER MEASURE, and no resolving.
+     *
+     * This used to take a goal_id and go looking for the KRA's only KPI,
+     * returning null — and silently writing nothing — the moment a KRA had
+     * more than one. The whole feature was unreachable through it: a KRA
+     * with three measures could not be rated by the chain at all.
+     *
+     * There is nothing to resolve now. kraRate is keyed on kpi_id, the
+     * measure carries its own id, and the gate above has already refused if
+     * any of them is unrated. A row is written for every measure or the save
+     * does not happen.
+     */
     const rv = await supabase.from('pms_reviews').upsert(
-      lines
-        .map(l => ({ l, kpiId: l.goalId ? kpiOf(l.goalId) : null }))
-        .filter(x => x.kpiId)
-        .map(({ l, kpiId }) => ({
-          company_id: companyId, period_id: period!.id, employee_id: id,
-          goal_id: l.goalId, kpi_id: kpiId, rater_id: employeeId, rater_role: myRung,
-          rating: kraRate[l.goalId!]!.rating,
-          comments: kraRate[l.goalId!]!.comment || null,
-          submitted: true, submitted_at: new Date().toISOString(),
-        })),
+      measures.map(({ kra, kpi }) => ({
+        company_id: companyId, period_id: period!.id, employee_id: id,
+        goal_id: kra.goalId, kpi_id: kpi.kpiId,
+        rater_id: employeeId, rater_role: myRung,
+        rating: kraRate[kpi.kpiId]!.rating,
+        comments: kraRate[kpi.kpiId]!.comment || null,
+        submitted: true, submitted_at: new Date().toISOString(),
+      })),
       { onConflict: 'period_id,employee_id,kpi_id,rater_role' })
     if (rv.error) {
       setSaving(false)

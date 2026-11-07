@@ -260,3 +260,112 @@ test('the form no longer offers a per-KPI weightage input', () => {
   assert.match(form, /shareOf\(k\.weightage, kpisOf\(k\)\.length\)/,
     'the share is not computed from the KRA weightage')
 })
+
+// ── the manager's stepper ────────────────────────────────────────────────
+//
+// 222 made every rung rate every KPI. The manager panel was still built one
+// row per KRA, and it was wrong in four separate places at once — each one
+// invisible on a set where every KRA had a single measure, which is every set
+// on record until somebody adds a second.
+
+const MGR = read('components/pms/ManagerTabs.tsx')
+const PERF = read('components/ess/Performance.tsx')
+
+test('the panel builds its comparison from measures, not KRAs', () => {
+  // cmp drives the progress bar, the chips, the "needs a reason" pill, the
+  // unsaved-work guard AND the approval gate. Built per KRA, every one of
+  // them said 2 while the rater was being asked for five answers.
+  assert.match(MGR, /compareRatings\(measuresOf\(lines\)/,
+    'the comparison is still built per KRA')
+  assert.match(MGR, /weightage: kpi\.share/,
+    'the comparison weights by the KRA, so a 3-measure KRA counts triple')
+})
+
+test('every count on the panel comes from the one comparison', () => {
+  // THE BUG CLASS: three counters on one screen, each deriving its own
+  // answer. The footer said "2 still unrated" while the bar said "5 to go".
+  const footer = MGR.slice(MGR.indexOf('const allRated = total > 0'))
+  assert.ok(!/\(lines \?\? \[\]\)\.filter\(l => l\.goalId && rate\?\.\[l\.goalId\]/.test(MGR),
+    'the footer still counts KRAs with a goal-keyed rate lookup')
+  assert.match(MGR, /const rated = cmp\.lines\.filter\(l => l\.mine != null\)/)
+  assert.match(MGR, /const total = cmp\.total/)
+  assert.ok(footer.length > 0)
+})
+
+test('the stepper is for rating, and the flat list stays for reading', () => {
+  // Paginating a record away from somebody who opened the panel to look is
+  // worse than a long page.
+  assert.match(MGR, /\) : rating && onRate \? \(/,
+    'the stepper is not gated on the viewer being a rater')
+  assert.match(MGR, /<KraStepper lines=\{lines\}/)
+})
+
+test('the stepper does not own the step — the chips do', () => {
+  // A control and the thing it controls cannot both hold the position, or
+  // each can be right while the other is wrong. The first draft had a second
+  // row of dots inside the stepper, beside the panel's existing chips.
+  const fn = MGR.slice(MGR.indexOf('export function KraStepper'),
+                       MGR.indexOf('export function KraStepper') + 2000)
+  assert.ok(!/useState\(0\)/.test(fn), 'the stepper holds its own position')
+  assert.match(fn, /at: number/)
+  assert.match(fn, /onAt: \(n: number\) => void/)
+  assert.ok(!/pms-step-dots/.test(MGR),
+    'the duplicate dot row survived beside the panel chips')
+})
+
+test('the KRA rollup uses kraRating rather than a second mean', () => {
+  // Two implementations of one formula is how the stepper and the saved
+  // score start disagreeing about the same appraisal.
+  assert.match(MGR, /kraRating\(/)
+  const fn = MGR.slice(MGR.indexOf('const rollup = (l: KraLine)'),
+                       MGR.indexOf('const rollup = (l: KraLine)') + 500)
+  assert.ok(!/reduce\(/.test(fn), 'the rollup computes its own mean')
+})
+
+// ── the load and the save ────────────────────────────────────────────────
+
+test('the self rating is read per measure, not collapsed onto the goal', () => {
+  // A Map keyed on goal_id kept whichever row came back LAST, so a KRA with
+  // three measures showed the manager one self score standing in for three —
+  // and which one depended on row order, which Postgres does not promise.
+  assert.match(PERF, /selfByKpi/)
+  assert.match(PERF, /\.select\('goal_id,kpi_id,achievement_value,rating,comments'\)/,
+    'the self ratings are selected without kpi_id')
+})
+
+test('the manager\'s own saved ratings are keyed on the measure', () => {
+  assert.match(PERF, /\.select\('goal_id,kpi_id,rating,comments'\)/)
+  assert.match(PERF, /String\(x\.kpi_id\),\n\s*\{ rating:/,
+    'kraRate is still keyed on goal_id, so reopening collapses three answers')
+})
+
+test('the save writes one row per measure and resolves nothing', () => {
+  // kpiOf() took a goal_id and went looking for the KRA's ONLY KPI, returning
+  // null — and silently writing NOTHING — the moment a KRA had two. The whole
+  // feature was unreachable through it.
+  assert.ok(!/const kpiOf = \(goalId: string\)/.test(PERF),
+    'the single-KPI resolver survived, so multi-measure KRAs write nothing')
+  assert.match(PERF, /measures\.map\(\(\{ kra, kpi \}\) => \(\{/)
+  assert.match(PERF, /kpi_id: kpi\.kpiId/)
+  assert.match(PERF, /onConflict: 'period_id,employee_id,kpi_id,rater_role'/)
+})
+
+test('the approve gate counts measures, matching pms_chain_approve', () => {
+  // Counting KRAs here would let the screen wave through a set the database
+  // then refuses — the manager is told it went, and it did not.
+  assert.match(PERF, /const measures = measuresOf\(lines\)/)
+  assert.match(PERF, /missing = measures\.filter\(m => kraRate\[m\.kpi\.kpiId\]\?\.rating == null\)/)
+})
+
+test('the queries are named for what they hold', () => {
+  // `const [g, rv, kp]` had rv bound to the KPI query and kp to the reviews
+  // query — the opposite of what the names read as. setPanelKpis(kp.data)
+  // therefore filled the KPI list with review rows, which carry no `id`, so
+  // every kpi_id resolved to the string "undefined" and Postgres refused the
+  // upsert. Manager ratings had not saved since 220.
+  assert.match(PERF, /const \[goalsQ, kpisQ, selfQ\] = await Promise\.all/)
+  assert.ok(!/const \[g, rv, kp\]/.test(PERF), 'the misleading names came back')
+  assert.ok(!/panelKpis/.test(PERF),
+    'panelKpis is still here — it is dead state now that the tree carries '
+    + 'the measures, and a stale buffer is what caused the bug above')
+})

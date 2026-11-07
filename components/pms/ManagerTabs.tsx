@@ -21,6 +21,7 @@
 // know how to read.
 
 import { Fragment, useEffect, useState } from 'react'
+import { kraRating } from '@/lib/pms/kpi'
 import './pms.css'
 import { teamQueue, finaliseQueue, teamStats, distribution, initials,
          type TeamMember, type QueueRow, type FinaliseRow } from '@/lib/pms/team'
@@ -1328,11 +1329,44 @@ function ScoreInvitesBlock({ invites, pip, onPip, rec, onRec, today }: {
   )
 }
 
+/**
+ * ONE MEASURE UNDER A KRA — 222.
+ *
+ * A rating belongs to a KPI, not to a KRA: pms_reviews.kpi_id has been NOT
+ * NULL since 220, and 222 made every rung rate every one of them. The manager
+ * panel was still built one row per KRA, which broke in three places at once.
+ *
+ *   The employee's self rating was read into a Map keyed on goal_id, so a KRA
+ *   with three measures kept whichever came back LAST and the manager was
+ *   shown one self score standing in for three.
+ *
+ *   The manager's own saved ratings were keyed the same way and collapsed the
+ *   same way, so reopening a panel showed one of their three answers.
+ *
+ *   And the save resolved a KPI by looking for the KRA's ONLY one, so a
+ *   multi-KPI KRA silently wrote nothing at all.
+ */
+export interface KpiLine {
+  kpiId: string
+  seqNo: number
+  metric: string
+  target?: string | null
+  /**
+   * What this measure carries of the whole appraisal: its KRA's weightage
+   * divided by how many measures the KRA has. Computed, never stored — see
+   * lib/pms/kpi.ts shareOf().
+   */
+  share: number
+  /** What the employee said they delivered, and how they rated it. */
+  achievement?: string | null
+  selfRating?: number | null
+  selfComment?: string | null
+}
+
 export interface KraLine {
   /**
-   * The goal's own id. pms_reviews is UNIQUE on
-   * (period, employee, goal, rater_role), so a rating cannot be written
-   * without it — seq_no identifies the row to a human, not to the table.
+   * The goal's own id. Still carried because the KRA is what gets approved
+   * and sent back; the RATING hangs off kpis[].kpiId.
    */
   goalId?: string
   seqNo: number
@@ -1343,10 +1377,242 @@ export interface KraLine {
   weightage: number
   status?: string | null
   source?: string | null
-  /** What the employee said they delivered, and how they rated it. */
+  /**
+   * What the employee said about the KRA as a whole. Kept for a set written
+   * before 220, where the self rating hung off the goal and there were no
+   * KPI rows to carry it.
+   */
   achievement?: string | null
   selfRating?: number | null
   selfComment?: string | null
+  /** Its measures. Each is rated on its own, by every rung. */
+  kpis?: KpiLine[]
+}
+
+/** Every measure in a set, each with the KRA it belongs to, in reading order.
+ *  The one place the tree is flattened, so the rating gate, the comparison
+ *  and the save cannot disagree about what "every measure" means. */
+export function measuresOf(lines: KraLine[] | null): { kra: KraLine; kpi: KpiLine }[] {
+  return (lines ?? []).flatMap(kra => (kra.kpis ?? []).map(kpi => ({ kra, kpi })))
+}
+
+
+// ── the rating stepper ───────────────────────────────────────────────────
+/**
+ * ONE KRA AT A TIME, because rating is not reading.
+ *
+ * Requested, and chosen over a long scroll: a manager rating a set of six
+ * KRAs with three measures each was being shown eighteen rating rows at once.
+ * The complaint that form makes is not that it is long — it is that nothing
+ * tells you where you are in it, so the only way to know whether you have
+ * finished is to scroll back up and count.
+ *
+ * So: one KRA per step, a dot per KRA showing which are fully rated, and a
+ * FINAL REVIEW STEP listing every KRA with its rolled-up rating before
+ * anything is sent. That last part is the answer to the real weakness of a
+ * stepper — that you cannot compare KRA 1 against KRA 6 while deciding — and
+ * the dots are clickable, so going back to change one is a click rather than
+ * five Backs.
+ *
+ * READ-ONLY VIEWERS DO NOT GET THIS. Somebody who opened the panel to look is
+ * not working through a task, and paginating a record away from them is worse
+ * than a long page. KraDetail keeps its flat list for them.
+ */
+export function KraStepper({ lines, rate, onRate, bands = DEFAULT_BANDS, whyId,
+                             at, onAt }: {
+  lines: KraLine[]
+  rate?: Record<string, { rating: number | null; comment: string }>
+  onRate: (kpiId: string, patch: { rating?: number | null; comment?: string }) => void
+  bands?: Band[]
+  /** The id to hang a comment box off, so a label can point at it. */
+  whyId: (kpiId: string) => string
+  /**
+   * WHICH KRA, held by the caller. The progress chips above the panel are
+   * the control for this, and they were there first — a stepper that owned
+   * its own position would have meant two controls for one thing, each able
+   * to be right while the other was wrong.
+   *
+   * lines.length is the review step.
+   */
+  at: number
+  onAt: (n: number) => void
+}) {
+  const setAt = (f: number | ((n: number) => number)) =>
+    onAt(typeof f === 'function' ? f(at) : f)
+  const n = lines.length
+  const onReview = at >= n
+
+  /** How many of a KRA's measures this rater has scored. */
+  const done = (l: KraLine) => (l.kpis ?? [])
+    .filter(k => rate?.[k.kpiId]?.rating != null).length
+  const full = (l: KraLine) => (l.kpis ?? []).length > 0 && done(l) === (l.kpis ?? []).length
+
+  /** The KRA's own rating so far: the plain mean of the measures THIS rater
+   *  has scored. 222 — the measures carry equal share, so weighting by an
+   *  equal weight is the same as not weighting. An unrated measure leaves the
+   *  divisor rather than counting as zero. */
+  const rollup = (l: KraLine): number | null =>
+    // kraRating, not a mean computed here. Two implementations of one
+    // formula is how the stepper and the saved score start disagreeing.
+    kraRating(
+      (l.kpis ?? []).map(k => ({ id: k.kpiId, seq_no: k.seqNo,
+                                 kpi_metric: k.metric, target_value: '' })),
+      k => rate?.[k.id!]?.rating ?? null)
+
+  const firstUnrated = lines.findIndex(l => !full(l))
+
+  return (
+    <div className="pms-step">
+      {/* WHERE YOU ARE, in words and in dots. The words are not decoration:
+          a dot row alone is unreadable to anybody who cannot see it, and the
+          count is the thing being communicated. */}
+      {/* The heading only. The dots that used to live here are the panel's
+          own progress chips — see KraDetail. */}
+      <div className="pms-step-h">
+        <span className="pms-step-n">
+          {onReview ? 'Review before sending' : `KRA ${at + 1} of ${n}`}
+        </span>
+        <span className="pms-step-sub">
+          {onReview
+            ? `${lines.filter(full).length} of ${n} KRAs fully rated`
+            : `${lines.filter(full).length} of ${n} KRAs done`}
+        </span>
+      </div>
+
+      {onReview ? (
+        /* THE STEP THAT MAKES A STEPPER SAFE. Rating one KRA at a time means
+           you cannot see KRA 1 while deciding KRA 6 — so before anything is
+           sent, every KRA and its rolled-up rating is on one screen, and any
+           row can be clicked to go back and change it. */
+        <div className="pms-step-rev">
+          <p className="k">
+            Every KRA, as you have rated it. Click one to go back and change it.
+          </p>
+          <table className="pms-step-tbl">
+            <thead>
+              <tr>
+                <th>KRA</th><th className="num">Weightage</th>
+                <th className="num">Rated</th><th className="num">Your rating</th>
+              </tr>
+            </thead>
+            <tbody>
+              {lines.map((l, i) => {
+                const r = rollup(l)
+                const count = (l.kpis ?? []).length
+                return (
+                  <tr key={l.goalId ?? i} className={full(l) ? '' : 'is-short'}>
+                    <td>
+                      <button type="button" className="linklike"
+                              onClick={() => setAt(i)}>{i + 1}. {l.title}</button>
+                    </td>
+                    <td className="num">{l.weightage}%</td>
+                    <td className="num">{done(l)} of {count}</td>
+                    <td className="num">
+                      {r === null ? <span className="k">—</span> : (
+                        <>
+                          <b>{r.toFixed(2)}</b>{' '}
+                          <span className="bl">{bandFor(Math.round(r), bands)?.label ?? ''}</span>
+                        </>
+                      )}
+                    </td>
+                  </tr>
+                )
+              })}
+            </tbody>
+          </table>
+          {firstUnrated >= 0 && (
+            <p className="pms-step-warn">
+              KRA {firstUnrated + 1} is not fully rated.{' '}
+              <button type="button" className="linklike"
+                      onClick={() => setAt(firstUnrated)}>Go to it</button>
+            </p>
+          )}
+        </div>
+      ) : (
+        <div className="pms-step-body">
+          <div className="pms-step-kra">
+            <div>
+              <span className="pms-step-seq">{at + 1}</span>
+              <b>{lines[at]?.title}</b>
+            </div>
+            <span className="pms-step-wt">{lines[at]?.weightage}%</span>
+          </div>
+
+          {(lines[at]?.kpis ?? []).length === 0 ? (
+            <p className="pms-step-warn">
+              This KRA has no measure under it, so there is nothing to rate.
+              Send it back and ask for one.
+            </p>
+          ) : (lines[at]?.kpis ?? []).map(k => {
+            const mine = rate?.[k.kpiId]?.rating ?? null
+            const differs = mine != null && k.selfRating != null && mine !== k.selfRating
+            return (
+              <div key={k.kpiId} className={`pms-step-kpi${mine != null ? ' is-rated' : ''}`}>
+                <div className="pms-step-m">
+                  <b>{k.metric}</b>
+                  {k.target && <span className="k"> · target {k.target}</span>}
+                  <span className="pms-step-share">{k.share % 1 === 0 ? k.share : k.share.toFixed(2)}%</span>
+                </div>
+
+                {/* THEIR ANSWER FIRST. A manager rates against what the
+                    employee claimed, so it has to be readable without
+                    leaving the row. */}
+                <div className="pms-step-self">
+                  <span className="l">They said</span>
+                  {k.selfRating == null
+                    ? <span className="k">Not rated</span>
+                    : <>
+                        <span className="n">{k.selfRating}</span>
+                        <span className="bl">{bandFor(k.selfRating, bands)?.label ?? ''}</span>
+                      </>}
+                  {k.achievement && <span className="k"> · {k.achievement}</span>}
+                  {k.selfComment && <div className="k q">&ldquo;{k.selfComment}&rdquo;</div>}
+                </div>
+
+                <div className="pms-step-mine">
+                  <span className="l">Your rating</span>
+                  <RatingChips bands={bands} value={mine}
+                               label={`Your rating for ${lines[at]?.title}, ${k.metric}`}
+                               onPick={v => onRate(k.kpiId, { rating: v })} />
+                  {mine != null && (
+                    <span className="bandname">{bandFor(mine, bands)?.label ?? ''}</span>
+                  )}
+                </div>
+
+                <textarea className="why" rows={1} id={whyId(k.kpiId)}
+                          aria-label={`Why you rated ${k.metric} this way`}
+                          placeholder={differs
+                            ? `Why ${mine} and not their ${k.selfRating}? They will read this.`
+                            : 'A line on why — they will read this.'}
+                          value={rate?.[k.kpiId]?.comment ?? ''}
+                          onChange={e => onRate(k.kpiId, { comment: e.target.value })} />
+              </div>
+            )
+          })}
+
+          {/* The KRA's own number, as it stands. Shown here rather than only
+              on the review step so the effect of each measure is visible
+              while it is being decided. */}
+          <div className="pms-step-roll">
+            <span className="k">This KRA so far</span>
+            <b>{rollup(lines[at]) === null ? '—' : rollup(lines[at])!.toFixed(2)}</b>
+            <span className="k">{done(lines[at])} of {(lines[at]?.kpis ?? []).length} measures rated</span>
+          </div>
+        </div>
+      )}
+
+      <div className="pms-step-nav">
+        <button type="button" className="btn ghost" disabled={at === 0}
+                onClick={() => setAt(a => Math.max(0, a - 1))}>← Back</button>
+        {!onReview && (
+          <button type="button" className="btn ghost"
+                  onClick={() => setAt(a => a + 1)}>
+            {at === n - 1 ? 'Review all →' : 'Next KRA →'}
+          </button>
+        )}
+      </div>
+    </div>
+  )
 }
 
 /**
@@ -1450,16 +1716,32 @@ export function KraDetail({ member, lines, loading, onClose,
   // goalId cannot be written to pms_reviews at all (the table is UNIQUE on
   // the goal), so including it would demand a reason for a rating that has
   // nowhere to go.
-  const cmp = compareRatings((lines ?? []).filter(l => l.goalId).map(l => ({
-    goalId: l.goalId!,
+  /**
+   * ONE ROW PER MEASURE — 222.
+   *
+   * This drove every count on the panel: the progress bar, the per-KRA
+   * chips, the "needs a reason" pill, the unsaved-work guard and the
+   * approval gate. Built per KRA, all of them said "2" while the rater was
+   * actually being asked for five answers — and the stepper, which knows,
+   * would have sat beside them disagreeing.
+   *
+   * Two numbers for one thing on one screen is the bug. The fix is not to
+   * reconcile them; it is to have one.
+   *
+   * A set written before 220 has no KPI rows. Those fall back to a single
+   * synthetic measure carrying the KRA, so an old appraisal still counts as
+   * one thing to rate rather than vanishing from the gate entirely.
+   */
+  const cmp = compareRatings(measuresOf(lines).map(({ kra, kpi }) => ({
+    goalId: kpi.kpiId,
     // NUMBERED, matching the heading on the card above ("3. Tech").
     // Titles repeat in real sets — four KRAs called "Tech" is normal —
     // so a blocker naming them by title alone says nothing about WHICH.
-    title: `${l.seqNo}. ${l.title || 'untitled'}`,
-    weightage: Number(l.weightage) || 0,
-    self: l.selfRating ?? null,
-    mine: rate?.[l.goalId!]?.rating ?? null,
-    comment: rate?.[l.goalId!]?.comment ?? null,
+    title: `${kra.seqNo}. ${kra.title || 'untitled'} · ${kpi.metric}`,
+    weightage: kpi.share,
+    self: kpi.selfRating ?? null,
+    mine: rate?.[kpi.kpiId]?.rating ?? null,
+    comment: rate?.[kpi.kpiId]?.comment ?? null,
   })))
 
   /**
@@ -1471,6 +1753,11 @@ export function KraDetail({ member, lines, loading, onClose,
    * mid-sentence. Everything here is folded by the reader or by the one
    * button that says what it will fold.
    */
+  /** WHICH KRA THE STEPPER IS ON. Held here rather than inside the stepper
+   *  because the progress chips above drive it, and a control and the thing
+   *  it controls cannot own the same state twice. lines.length is the
+   *  review step. */
+  const [stepAt, setStepAt] = useState(0)
   const [folded, setFolded] = useState<Record<string, boolean>>({})
   const fold = (id: string, v: boolean) => setFolded(p => ({ ...p, [id]: v }))
 
@@ -1620,23 +1907,40 @@ export function KraDetail({ member, lines, loading, onClose,
           <div className={`bar${cmp.rated === cmp.total ? ' green' : ''}`}>
             <span style={{ width: `${(cmp.rated / cmp.total) * 100}%` }} />
           </div>
-          {/* ONE CHIP PER KRA, coloured by state and clickable. "Which one
-              still needs me" was a question you answered by scrolling past
-              the ones that did not. */}
-          <div className="ksteps" role="group" aria-label="Jump to a KRA">
-            {cmp.lines.map((l, i) => {
-              const needs = l.needsReason && !l.hasReason
-              const done = l.mine != null && !needs
+          {/* ONE CHIP PER KRA, coloured by the state of its MEASURES and
+              clickable. "Which one still needs me" was a question you
+              answered by scrolling past the ones that did not.
+              Since 222 the chip is also the stepper's control: clicking it
+              goes to that KRA. A second row of dots beside this one would
+              have been two things saying the same thing slightly
+              differently. The last chip is the review step. */}
+          <div className="ksteps" role="group" aria-label="Go to a KRA">
+            {(lines ?? []).map((l, i) => {
+              const own = cmp.lines.filter(c =>
+                (l.kpis ?? []).some(k => k.kpiId === c.goalId))
+              const needs = own.some(c => c.needsReason && !c.hasReason)
+              const rated = own.filter(c => c.mine != null).length
+              const done = own.length > 0 && rated === own.length && !needs
               return (
-                <button key={l.goalId} type="button"
-                        className={`kstep${done ? ' done' : needs ? ' needs' : ''}`}
-                        title={`${l.title}${done ? ' — done' : needs ? ' — needs a reason' : ' — not rated'}`}
-                        aria-label={`Go to ${l.title}`}
-                        onClick={() => jump(l.goalId)}>
+                <button key={l.goalId ?? i} type="button"
+                        className={`kstep${done ? ' done' : needs ? ' needs' : ''}${i === stepAt ? ' at' : ''}`}
+                        aria-current={i === stepAt ? 'step' : undefined}
+                        title={`${i + 1}. ${l.title} — ${rated} of ${own.length} measures rated`
+                               + (needs ? ', one needs a reason' : '')}
+                        aria-label={`Go to KRA ${i + 1}, ${l.title}`}
+                        onClick={() => setStepAt(i)}>
                   {i + 1}
                 </button>
               )
             })}
+            {!!rating && (lines ?? []).length > 0 && (
+              <button type="button"
+                      className={`kstep rev${stepAt >= (lines ?? []).length ? ' at' : ''}`}
+                      aria-current={stepAt >= (lines ?? []).length ? 'step' : undefined}
+                      title="Review every KRA before sending"
+                      aria-label="Go to the review step"
+                      onClick={() => setStepAt((lines ?? []).length)}>✓</button>
+            )}
           </div>
           {cmp.missingReasons.length > 0 && (
             <span className="pill p-amber">
@@ -1644,8 +1948,12 @@ export function KraDetail({ member, lines, loading, onClose,
             </span>
           )}
           {/* FOLDING IS OFFERED, NOT DONE. One button, saying exactly how
-              many cards it will put away. */}
-          {foldableLeft > 0 && (
+              many cards it will put away.
+              NOT WHILE THE STEPPER IS UP: it folds the flat card list, and a
+              rater sees one KRA at a time instead. The button went on
+              offering to "hide the 1 done" and then did nothing visible,
+              which is worse than not offering. */}
+          {!rating && foldableLeft > 0 && (
             <button className="btn ghost sm" type="button"
                     onClick={() => setFolded(p => {
                       const n = { ...p }
@@ -1663,6 +1971,15 @@ export function KraDetail({ member, lines, loading, onClose,
             <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing written yet</div>
             <div className="k">They have not saved any KRAs for this period.</div>
           </div>
+        ) : rating && onRate ? (
+          /* RATING IS NOT READING, so the two get different layouts.
+             A rater works through the set one KRA at a time with a review
+             step at the end; a reader gets the whole record at once, below.
+             Paginating a record away from somebody who opened the panel to
+             have a look would be worse than a long page. */
+          <KraStepper lines={lines} rate={rate} onRate={onRate}
+                      bands={bands} whyId={whyId}
+                      at={stepAt} onAt={setStepAt} />
         ) : (
           <div style={{ display: 'grid', gap: 10 }}>
             {lines.map(l => {
@@ -1948,8 +2265,15 @@ export function KraDetail({ member, lines, loading, onClose,
           )}
 
           {(() => {
-            const rated = (lines ?? []).filter(l => l.goalId && rate?.[l.goalId]?.rating != null)
-            const total = (lines ?? []).length
+            // 222: MEASURES, like every other count on this panel. Keyed on
+            // goal_id this counted KRAs and read `rate` with the wrong key
+            // besides, so on a set with any multi-measure KRA it said
+            // "2 still unrated" while the approve gate wanted five — and
+            // pms_chain_approve would have refused a set the footer called
+            // ready. cmp is already per measure; using it means there is one
+            // count on the screen rather than three that can disagree.
+            const rated = cmp.lines.filter(l => l.mine != null)
+            const total = cmp.total
             const allRated = total > 0 && rated.length === total
             const ticked = alreadyConfirmed || !!confirmed
             // THE FINAL RATING, only at the rung that settles it. pms_finalise
