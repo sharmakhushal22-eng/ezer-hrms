@@ -19,7 +19,7 @@
 // editing-software / bill-generator hints, and the OCR reading when a provider
 // is configured (none is today: lib/te/providers/ocr.ts).
 import { NextRequest, NextResponse } from 'next/server'
-import { teOpen, teRoute } from '@/lib/te/server'
+import { teOpen, teRoute, type TeCall } from '@/lib/te/server'
 import { TeHttpError, isUuid, needOneOf, needText, rpcError } from '@/lib/te/errors'
 import { fileMetadata, ocrProvider, sha256 } from '@/lib/te/providers/ocr'
 import { claimDetail } from '@/lib/te/engine/te-service.js'
@@ -114,6 +114,41 @@ export async function POST(req: NextRequest) {
   })
 }
 
+/**
+ * Is this path the ticket of a booking on a trip this person is travelling on?
+ *
+ * Their own trip, or one they are a co-traveller on — te_trip_people carries
+ * the second case, and a co-traveller is shown the same bookings. Deliberately not
+ * "any trip of the company": a ticket is a named document and this is the one
+ * question that should open it.
+ */
+async function ticketOnMyTrip(
+  t: TeCall,
+  sb: ReturnType<TeCall['sb']>,
+  path: string,
+  employeeId: string,
+): Promise<boolean> {
+  const bk = await sb.from('te_bookings').select('trip_id').eq('ticket_url', path).limit(50)
+  if (bk.error) {
+    // The column has existed since the table was built; a failure here is real.
+    throw rpcError(bk.error, 'te_bookings')
+  }
+  const tripIds = [...new Set((bk.data ?? []).map(r => r.trip_id as string))]
+  if (!tripIds.length) return false
+  const mine = await sb.from('te_trips').select('id').in('id', tripIds).eq('employee_id', employeeId).limit(1)
+  if (mine.error) throw rpcError(mine.error, 'te_trips')
+  if (mine.data?.length) return true
+  // A co-traveller is shown the same bookings, so they may open the same
+  // ticket. The table is te_trip_people — te_trip_co is a FUNCTION returning
+  // their ids, which a PostgREST .from() cannot read, and reaching for it here
+  // would have failed quietly and locked every co-traveller out of their own
+  // ticket. Only rows whose code was matched to an employee count.
+  const co = await sb.from('te_trip_people').select('trip_id')
+    .in('trip_id', tripIds).eq('employee_id', employeeId).limit(1)
+  if (co.error) throw rpcError(co.error, 'te_trip_people')
+  return (co.data?.length ?? 0) > 0
+}
+
 export async function GET(req: NextRequest) {
   return teRoute(req, async t => {
     const employeeId = await t.employee()
@@ -122,18 +157,49 @@ export async function GET(req: NextRequest) {
     const sb = t.sb()
 
     if (!path.startsWith(`te/bills/${employeeId}/`)) {
-      // Somebody else's file. It is shown only as part of a claim the caller may open
-      // (its approvers, Finance, or a role that grants it), and only if it is a bill of that claim.
-      const claimId = req.nextUrl.searchParams.get('claim_id')
-      if (!isUuid(claimId)) throw new TeHttpError(403, 'TE_FORBIDDEN', 'You can only open your own files.')
-      const ctx = await t.ctx()
-      const detail = await teOpen(t, 'claim', claimId, admin => claimDetail(ctx, claimId, admin))
-      const lineIds = detail.lines.map(l => l.id)
-      const f = lineIds.length
-        ? await sb.from('te_expense_files').select('id').eq('storage_path', path).in('expense_id', lineIds).limit(1)
-        : { data: [], error: null }
-      if (f.error) throw rpcError(f.error, 'te_expense_files')
-      if (!f.data?.length) throw new TeHttpError(403, 'TE_FORBIDDEN', 'That file is not part of this claim.')
+      // AN RC PHOTO IS NOT A BILL, so it can never name a claim. The Travel
+      // Desk is handed rc_file_url for every vehicle waiting on it and the
+      // engine refuses the vehicle until somebody has looked — "Attach a photo
+      // of the RC. HR checks it before the vehicle is paid." The claim test
+      // below made that check impossible: the desk could open only the RCs of
+      // its own vehicles, and "Open the RC photo" on the desk screen answered
+      // "You can only open your own files" for everybody else's.
+      //
+      // So the RC is let through on its own terms, and narrowly: the path must
+      // BE the rc_file_url of a vehicle of this company — the same company
+      // whose queue GET /api/te/desk hands out — and the caller must be on the
+      // travel desk or hold the module. Exactly the files the desk was asked
+      // to verify, and nothing else that happens to sit in the same folder.
+      const rc = await sb.from('te_employee_vehicles')
+        .select('id').eq('company_id', await t.company()).eq('rc_file_url', path).limit(1)
+      if (rc.error) throw rpcError(rc.error, 'te_employee_vehicles')
+
+      if (rc.data?.length) {
+        await t.permitDesk('travel', 'Travel Claims', 'EDIT')
+      } else if (await ticketOnMyTrip(t, sb, path, employeeId)) {
+        // A TICKET THE DESK BOUGHT FOR THIS PERSON. It is uploaded by whoever
+        // is on the desk, so it lands under THEIR folder — and the traveller,
+        // whose journey it is, failed the prefix test on their own ticket. The
+        // trip screen shows them a link to it, so "You can only open your own
+        // files" was the answer to opening their own boarding pass.
+        //
+        // Exactly the same shape as the RC above, and exactly as narrow: the
+        // path must BE the ticket_url of a booking on a trip this person is
+        // travelling on. Nothing else in that folder opens.
+      } else {
+        // Somebody else's file. It is shown only as part of a claim the caller may open
+        // (its approvers, Finance, or a role that grants it), and only if it is a bill of that claim.
+        const claimId = req.nextUrl.searchParams.get('claim_id')
+        if (!isUuid(claimId)) throw new TeHttpError(403, 'TE_FORBIDDEN', 'You can only open your own files.')
+        const ctx = await t.ctx()
+        const detail = await teOpen(t, 'claim', claimId, admin => claimDetail(ctx, claimId, admin))
+        const lineIds = detail.lines.map(l => l.id)
+        const f = lineIds.length
+          ? await sb.from('te_expense_files').select('id').eq('storage_path', path).in('expense_id', lineIds).limit(1)
+          : { data: [], error: null }
+        if (f.error) throw rpcError(f.error, 'te_expense_files')
+        if (!f.data?.length) throw new TeHttpError(403, 'TE_FORBIDDEN', 'That file is not part of this claim.')
+      }
     }
 
     const signed = await sb.storage.from(BUCKET).createSignedUrl(path, SIGNED_URL_TTL)

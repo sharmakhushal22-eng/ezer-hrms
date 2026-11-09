@@ -1,9 +1,10 @@
 'use client'
 // components/employees/HRActionPanel.tsx — HR Action Panel tabs for the employee drawer.
-// Tabs: Onboarding Info (read-only) · HR Actions (PIP/Sabbatical/Resignation/Abscond +
+// Tabs: Onboarding Info (read-only) · HR Actions (PIP/Sabbatical/Exit/Abscond +
 // approvals) · History. Slate palette to match employees/page.tsx. Sub-components OUTSIDE.
 import { useState, useEffect, useCallback } from 'react'
 import * as HR from '@/lib/employees/hr-actions'
+import HrExitSection from './HrExitSection'
 import { supabase } from '@/lib/supabase'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -161,28 +162,6 @@ function SabbaticalForm({ onSave }: { onSave: (p: any) => void }) {
       <label style={C.label}>Reason</label>
       <select style={{ ...C.input, marginBottom:S.md }} value={reason} onChange={e => setReason(e.target.value)}>{['Medical','Education','Personal','Maternity'].map(r => <option key={r}>{r}</option>)}</select>
       <button style={C.pri} onClick={() => { if (!from) return; onSave({ from_date: from, to_date: to || undefined, reason }) }}>Mark sabbatical</button>
-    </div>
-  )
-}
-function ResignationForm({ noticeDays, onSave }: { noticeDays: number; onSave: (p: any) => void }) {
-  const [dor, setDor] = useState(todayISO())
-  const [policyLwd, setPolicyLwd] = useState(addDays(todayISO(), noticeDays || 0))
-  const [empLwd, setEmpLwd] = useState('')
-  useEffect(() => { setPolicyLwd(addDays(dor, noticeDays || 0)) }, [dor, noticeDays])
-  const shortfall = (policyLwd && empLwd) ? Math.max(0, Math.round((new Date(policyLwd).getTime() - new Date(empLwd).getTime())/86400000)) : 0
-  return (
-    <div style={C.card}>
-      <div style={C.sec}>Initiate resignation</div>
-      <div style={{ ...C.g2, marginBottom:S.md }}>
-        <div><label style={C.label}>Date of resignation</label><input type="date" style={C.input} value={dor} onChange={e => setDor(e.target.value)} /></div>
-        <div><label style={C.label}>Notice period (policy)</label><input style={{ ...C.input, background:TK.sunken }} value={`${noticeDays || 0} days`} readOnly /></div>
-        <div><label style={C.label}>LWD as per policy</label><input type="date" style={C.input} value={policyLwd} onChange={e => setPolicyLwd(e.target.value)} /></div>
-        <div><label style={C.label}>LWD confirmed by employee</label><input type="date" style={C.input} value={empLwd} onChange={e => setEmpLwd(e.target.value)} /></div>
-      </div>
-      {empLwd && (shortfall > 0
-        ? <Banner t="critical"><b>Notice shortfall = {shortfall} day(s).</b> A recovery mail will be sent to Payroll.</Banner>
-        : <Banner t="positive">Full notice served. No recovery needed.</Banner>)}
-      <button style={C.pri} onClick={() => { if (!dor || !empLwd) return; onSave({ date_of_resignation: dor, notice_period_days: noticeDays || 0, lwd_as_per_policy: policyLwd, lwd_confirmed_by_emp: empLwd }) }}>Initiate resignation</button>
     </div>
   )
 }
@@ -624,11 +603,8 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
       {/* Action forms (hidden if a conflicting active state exists) */}
       {!states.pip && <PIPForm onSave={(p) => run(() => HR.markPIP(employee.id, p, by), 'PIP started')} />}
       {!states.sabbatical && <SabbaticalForm onSave={(p) => run(() => HR.markSabbatical(employee.id, p, by), 'Sabbatical marked')} />}
-      {!states.resignation && <ResignationForm noticeDays={employee?.notice_period_days || 0} onSave={(p) => run(async () => {
-        const res: any = await HR.initiateResignation(employee.id, p, by)
-        if (res?.ok && res.recovery) notify(res.mailed ? `Resignation saved · recovery mail sent to payroll (${res.shortfall}d)` : `Resignation saved · recovery mail NOT sent (${res.mailError || 'check config'})`, res.mailed ? 'success' : 'error')
-        return res
-      }, 'Resignation initiated')} />}
+      {/* Exit (took the place of "Initiate resignation"): reason, approval flow, cancel / reset. */}
+      <HrExitSection employeeId={employee.id} onChanged={() => { reload(); onRefresh?.() }} />
       {!states.abscond && <AbscondForm onSave={(d) => run(() => HR.markAbscond(employee.id, d, by), 'Marked abscond')} />}
       {!states.resignation && !states.abscond && <TransferForm employee={employee} companies={companies} branches={branches} managers={managers} shifts={shifts} departments={departments}
         onIntra={(p) => run(() => HR.initiateLocationTransfer({ ...p, employee_ids: [employee.id] }, by), 'Location transfer initiated')}

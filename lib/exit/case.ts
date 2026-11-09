@@ -9,7 +9,7 @@ import { roleHolders } from '@/lib/recruitment/offer-approval-notify'
 import { sendMail, mailConfigured } from '@/lib/mail/send'
 import { CLEARANCE_FORMS, DEPTS, isCleared, recoveryOf, payableOf, clearanceEscalation, type Dept } from './clearance'
 import { gratuityOf, pendingSalaryOf, noticeShortfallOf, fnfTotals, lettersFor, WITHHOLD_GRATUITY, NO_NOTICE_RECOVERY, NO_EL_ENCASHMENT, rupees, type FnfLine } from './fnf'
-import { STAGES, reasonOf, type ChainStep } from './hr-exit'
+import { advance, reasonOf, isSilent, type ChainStep } from './hr-exit'
 import { effectiveNoticeDays } from './notice'
 import { revokeAccess } from '@/lib/offboarding/run'
 
@@ -17,8 +17,9 @@ type Sb = SupabaseClient
 const today = () => new Date().toISOString().slice(0, 10)
 const day = (d: string) => new Date(`${d.slice(0, 10)}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })
 const who = (e: any) => `${e?.full_name || 'Employee'}${e?.emp_code ? ` (${e.emp_code})` : ''}`
-export const EXIT_LINK = '/ess/exit-fnf'
 export const APPROVALS_LINK = '/ess?tab=approvals'
+// The clearance forms sit in Tasks & Approvals (the Exit Clearance & F&F tab was removed).
+export const EXIT_LINK = APPROVALS_LINK
 
 async function bell(sb: Sb, employeeId: string | null | undefined, title: string, body: string, link: string, category = 'APPROVAL') {
   if (!employeeId) return
@@ -153,7 +154,7 @@ export async function startClearance(sb: Sb, resignationId: string): Promise<{ s
   const lwd = String(res.final_lwd || res.lwd_as_per_policy || today())
   const facts = await exitFacts(sb, emp.id)
   const reason = await exitReasonOf(sb, resignationId)
-  const g = gratuityOf(facts.basicMonthly, emp.company_doj || emp.date_of_joining, lwd)
+  const g = gratuityOf(facts.basicMonthly, emp.company_doj || emp.date_of_joining, lwd, { death: reason.code === 'DEATH' })
   const rehire = emp.rehire_flag || reasonOf(reason.code)?.rehire || (reason.code === 'SELF' ? 'GREEN' : null)
   let started = 0
   for (const dept of missing) {
@@ -168,7 +169,7 @@ export async function startClearance(sb: Sb, resignationId: string): Promise<{ s
     await Promise.all(approvers.map(id => bell(sb, id, `Exit clearance: ${who(emp)}`, `${def.label} clearance (${def.formId}-${emp.emp_code || ''}) is waiting on you. Last working day ${day(lwd)}. Fill it in Tasks & Approvals.`, APPROVALS_LINK)))
   }
   if (started) {
-    await bell(sb, emp.id, 'Your exit clearance has started', `IT, Admin, Finance, HR and your manager will clear your exit before ${day(lwd)}. Return company property and hand over your work.`, '/ess/exit', 'COMPLIANCE')
+    if (!isSilent(reason.code)) await bell(sb, emp.id, 'Your exit clearance has started', `IT, Admin, Finance, HR and your manager will clear your exit before ${day(lwd)}. Return company property and hand over your work.`, '/ess/exit', 'COMPLIANCE')
     const hrs = await roleHolders(sb as any, emp.company_id, ['HR_MANAGER'])
     await Promise.all(hrs.map(h => bell(sb, h.id, `Clearance started: ${who(emp)}`, `Five department forms are open. Last working day ${day(lwd)}.`, EXIT_LINK, 'APPROVAL')))
   }
@@ -198,7 +199,7 @@ export async function computeFnf(sb: Sb, resignationId: string, o: { force?: boo
     earnings.push({ key: 'salary', label: 'Pending salary', amount: ps.amount, note: `${ps.note}${f.salaryNote ? ` (${f.salaryNote})` : ''}`, editable: true })
     const elAmt = NO_EL_ENCASHMENT.includes(reason.code) ? 0 : Math.round(f.elBalance * f.basicMonthly / 30)
     earnings.push({ key: 'el', label: 'Earned leave encashment', amount: elAmt, note: NO_EL_ENCASHMENT.includes(reason.code) ? 'Not payable on abscond' : `${f.elBalance} EL day(s) × (Basic ${rupees(f.basicMonthly)} ÷ 30)`, editable: true })
-    const g = gratuityOf(f.basicMonthly, emp?.company_doj || emp?.date_of_joining || null, lwd, { withhold: WITHHOLD_GRATUITY.includes(reason.code) })
+    const g = gratuityOf(f.basicMonthly, emp?.company_doj || emp?.date_of_joining || null, lwd, { withhold: WITHHOLD_GRATUITY.includes(reason.code), death: reason.code === 'DEATH' })
     earnings.push({ key: 'gratuity', label: 'Gratuity', amount: g.amount, note: g.note, editable: true })
     const pay = Math.round(Number(byDept.FINANCE?.payable) || 0)
     if (pay) earnings.push({ key: 'reimbursements', label: 'Pending reimbursements (Finance clearance)', amount: pay, editable: true })
@@ -231,10 +232,10 @@ export async function computeFnf(sb: Sb, resignationId: string, o: { force?: boo
   if (!existing && data) {
     const payroll = await roleHolders(sb as any, emp?.company_id || null, ['PAYROLL', 'PAYROLL_ADMIN'])
     const { data: e } = await sb.from('employees').select('full_name, emp_code').eq('id', res.employee_id).maybeSingle()
-    await Promise.all(payroll.map(p => bell(sb, p.id, `F&F ready to review: ${who(e)}`, `All five clearances are in. Net payable ${rupees(t.net)}. Review it in HR Services → Exit Clearance & F&F.`, EXIT_LINK)))
+    await Promise.all(payroll.map(p => bell(sb, p.id, `F&F ready to review: ${who(e)}`, `All five clearances are in. Net payable ${rupees(t.net)}.`, EXIT_LINK)))
     const hrs = await roleHolders(sb as any, emp?.company_id || null, ['HR_MANAGER'])
     await Promise.all(hrs.map(p => bell(sb, p.id, `All clearances done: ${who(e)}`, `F&F calculated: net payable ${rupees(t.net)}.`, EXIT_LINK)))
-    await bell(sb, res.employee_id, 'Your exit clearance is complete', 'All departments have cleared your exit. Your Full & Final settlement is being prepared.', '/ess/exit', 'COMPLIANCE')
+    if (!isSilent(reason.code)) await bell(sb, res.employee_id, 'Your exit clearance is complete', 'All departments have cleared your exit. Your Full & Final settlement is being prepared.', '/ess/exit', 'COMPLIANCE')
   }
   return data
 }
@@ -261,7 +262,7 @@ export async function runExitDaily(sb: Sb, now = new Date()): Promise<ExitDaily>
       const level = clearanceEscalation(c.started_at, t)
       if (level === 'NONE' || c.escalated_to === level || (c.escalated_to === 'HR_HEAD')) continue
       const to = await roleHolders(sb as any, c.company_id, [level])
-      await Promise.all(to.map(p => bell(sb, p.id, `Clearance overdue: ${who(c.employees)}`, `${CLEARANCE_FORMS[c.dept as Dept].label} has not cleared in ${level === 'HR_HEAD' ? 7 : 5} business days.${level === 'HR_HEAD' ? ' You can override it with a reason in Exit Clearance & F&F.' : ''}`, EXIT_LINK)))
+      await Promise.all(to.map(p => bell(sb, p.id, `Clearance overdue: ${who(c.employees)}`, `${CLEARANCE_FORMS[c.dept as Dept].label} has not cleared in ${level === 'HR_HEAD' ? 7 : 5} business days.${level === 'HR_HEAD' ? ' You can override it with a reason in Tasks & Approvals.' : ''}`, EXIT_LINK)))
       await sb.from('exit_clearance').update({ escalated_to: level, updated_at: now.toISOString() }).eq('id', c.id)
       out.clearanceEscalated++
     }
@@ -274,9 +275,10 @@ export async function runExitDaily(sb: Sb, now = new Date()): Promise<ExitDaily>
       .eq('status', 'PENDING').not('current_step', 'is', null).lte('step_started_at', cutoff).is('step_escalated_at', null)
     for (const r of (data || []) as any[]) {
       const chain = (r.chain || []) as ChainStep[]
-      const cur = chain[r.current_step]; if (!cur) continue
-      const later = chain.slice(r.current_step + 1).find(s => s.approvers.length)
-      const to = later ? later.approvers.map(p => p.id) : (await roleHolders(sb as any, r.company_id, STAGES.HR_HEAD.roles)).map(p => p.id)
+      // A stage on retention hold is waiting by choice, not overdue.
+      const cur = chain[r.current_step]; if (!cur || cur.status !== 'PENDING') continue
+      const later = chain.slice(r.current_step + 1).find(s => s.approvers.length && s.status === 'WAITING')
+      const to = later ? later.approvers.map(p => p.id) : (await roleHolders(sb as any, r.company_id, ['HR_HEAD'])).map(p => p.id)
       await Promise.all(to.map(id => bell(sb, id, `Exit approval overdue: ${who(r.employees)}`, `The ${r.reason_label} exit has waited 48 hours on the ${cur.label} (${cur.approvers.map(p => p.emp_code).join(', ')}).`, APPROVALS_LINK)))
       await Promise.all(cur.approvers.map(p => bell(sb, p.id, `Reminder: exit approval waiting on you`, `${who(r.employees)} · ${r.reason_label}. It has been escalated after 48 hours.`, APPROVALS_LINK)))
       await sb.from('hr_exit_requests').update({ step_escalated_at: now.toISOString() }).eq('id', r.id)
@@ -310,10 +312,9 @@ export async function sendAbscondReminder(sb: Sb, r: any, now = new Date()) {
 
 /** After the third reminder and 21 days with no response: the approval chain begins. */
 async function startAbscondChain(sb: Sb, r: any, now: Date) {
-  const chain = ((r.chain || []) as ChainStep[]).map(s => ({ ...s }))
-  const i = chain.findIndex(s => s.status === 'WAITING')
-  if (i >= 0) chain[i].status = 'PENDING'
-  const done = i < 0 && !chain.some(s => s.status === 'REJECTED')
+  // The same stamping as every other exit: skips an approver who already acted.
+  const { chain, current, done } = advance((r.chain || []) as ChainStep[], now.toISOString())
+  const i = current ?? -1
   await sb.from('hr_exit_requests').update({ abscond_stage: 'READY', chain, current_step: i >= 0 ? i : null, step_started_at: now.toISOString(), updated_at: now.toISOString(), ...(done ? { status: 'APPROVED', decided_at: now.toISOString() } : {}) }).eq('id', r.id)
   const { data: e } = await sb.from('employees').select('full_name, emp_code').eq('id', r.employee_id).maybeSingle()
   if (done) {
@@ -321,7 +322,7 @@ async function startAbscondChain(sb: Sb, r: any, now: Date) {
     const last = [...chain].reverse().find(s => s.acted_by)?.acted_by as Person | undefined
     if (row) await applyCompanyExit(sb, row, last || { id: row.initiated_by, emp_code: null, full_name: row.initiated_by_name || 'HR' })
   }
-  if (i >= 0) await Promise.all(chain[i].approvers.map(p => bell(sb, p.id, `Exit approval: ${who(e)}`, `Abscond: three reminders sent over 21 days with no response. Approve the discontinuation as ${chain[i].label} in Tasks & Approvals.`, APPROVALS_LINK)))
+  if (i >= 0) await Promise.all(chain[i].approvers.map(p => bell(sb, p.id, `Exit approval: ${who(e)}`, `Abscond: three reminders sent over 21 days with no response. ${chain[i].stage === 'HR_MANAGER' ? 'Set the final last working day' : 'Acknowledge it, accept it with your date, or request retention'} as ${chain[i].label} in Tasks & Approvals.`, APPROVALS_LINK)))
   return done
 }
 
@@ -397,8 +398,14 @@ export async function applyCompanyExit(sb: Sb, row: any, by: Person): Promise<{ 
   const body = transfer
     ? `Your last working day in the current company is ${day(lwd)}. Your onboarding in the new company is ready; your group date of joining stays the same.`
     : `HR has processed your exit (${row.reason_label}). Your last working day is ${day(lwd)}. Download your payslips and documents before then; ESS access ends on that day.`
-  await bell(sb, emp.id, title, body, '/ess/exit', 'COMPLIANCE')
   let mailed = false
+  if (isSilent(row.reason_code)) {
+    // Death in service: nothing to the employee's own bell or mail; HR handles the family.
+    const hrs = await roleHolders(sb as any, emp.company_id, ['HR_MANAGER', 'HR_HEAD'])
+    await Promise.all(hrs.map(h => bell(sb, h.id, `Death in service recorded: ${who(emp)}`, `Last working day ${day(lwd)}. Clearance is open; the F&F, gratuity and the PF / EDLI claim are paid to the nominee.`, EXIT_LINK, 'APPROVAL')))
+    return { resignationId: res?.id || null, revokedNow, mailed, onboardingId }
+  }
+  await bell(sb, emp.id, title, body, '/ess/exit', 'COMPLIANCE')
   const to = emp.personal_email || emp.office_email
   if (to && mailConfigured()) {
     const text = row.reason_code === 'ABSCOND'

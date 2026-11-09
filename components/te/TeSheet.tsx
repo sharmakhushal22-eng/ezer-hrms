@@ -6,7 +6,7 @@
 import { useEffect, useRef, type ReactNode } from 'react'
 import TeIcon from './TeIcon'
 
-export default function TeSheet({ title, titleIcon, lead, crumb, back, bar, wide, onClose, footer, children }: {
+export default function TeSheet({ title, titleIcon, lead, crumb, back, bar, wide, roomy, onClose, footer, children }: {
   title: string
   /** The small coloured square before the title, e.g. the trip kind. */
   titleIcon?: ReactNode
@@ -19,6 +19,10 @@ export default function TeSheet({ title, titleIcon, lead, crumb, back, bar, wide
   /** The strip under the header, for the three-step progress nav. */
   bar?: ReactNode
   wide?: boolean
+  /** Wider still, for the planner's horizontal route strip. Separate from
+   *  `wide` because the entry-flow sheets share that and are small choice
+   *  screens: giving them 1060px would leave two tiles in a field of nothing. */
+  roomy?: boolean
   onClose: () => void
   footer?: ReactNode
   children: ReactNode
@@ -35,7 +39,7 @@ export default function TeSheet({ title, titleIcon, lead, crumb, back, bar, wide
   return (
     <dialog
       ref={ref}
-      className={wide ? 'drawer wide' : 'drawer'}
+      className={`drawer${wide || roomy ? ' wide' : ''}${roomy ? ' roomy' : ''}`}
       aria-label={title}
       onCancel={e => { e.preventDefault(); onClose() }}
     >

@@ -10,11 +10,13 @@
 // components/te/approve/TeClaimApproval.tsx, which the Approvals desk opens.
 import { useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeClaim, TeClaimDetail, TeExpense, TePlaceBrief } from '@/lib/te/types'
+import type { Snapshot, TeClaim, TeClaimDetail, TeDraft, TeExpense, TePlaceBrief } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeFileLink from './TeFileLink'
 import TeLegEvidence from './approve/TeLegEvidence'
 import { claimChip, claimHolder, day, errorText, flagClass, plural, rs, when } from '@/lib/te/format'
+import { draftTitle, savedAgo } from '@/lib/te/autosave'
+import { useDraftAutosave } from './useDraftAutosave'
 
 export function TeClaimList({ snap, onOpen }: { snap: Snapshot; onOpen: (claimId: string) => void }) {
   const tripName = useMemo(() => new Map(snap.trips.map(t => [t.id, t.name])), [snap])
@@ -68,8 +70,13 @@ function Tracker({ c }: { c: TeClaim }) {
   )
 }
 
-export function TeClaimDetail({ claimId, catName, onBack, onChanged, onFixLine }: {
+export function TeClaimDetail({ claimId, catName, resuming, onBack, onChanged, onFixLine }: {
   claimId: string
+  /** A half-typed answer being picked up again. Only the employee's own reply
+   *  to a sent-back claim is kept: an approver's comment is written and sent in
+   *  one sitting, and keeping half an unsent decision would be worse than
+   *  losing it. */
+  resuming?: TeDraft
   catName: Map<string, string>
   onBack: () => void
   /** Called after an action changed the claim, so the caller reloads its own data. */
@@ -81,7 +88,11 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged, onFixLine }
 }) {
   const [d, setD] = useState<TeClaimDetail | null>(null)
   const [error, setError] = useState('')
-  const [text, setText] = useState('')
+  const [text, setText] = useState(() => {
+    const body = resuming?.body as { text?: string } | undefined
+    return typeof body?.text === 'string' ? body.text : ''
+  })
+  const [pristineText] = useState(text)
   const [busy, setBusy] = useState(false)
   const [tick, setTick] = useState(0)
   // Taking a claim back is undone only by submitting it again, which puts it
@@ -110,10 +121,28 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged, onFixLine }
     return () => { current = false }
   }, [claimId, tick])
 
+  // AN ANSWER TO A SENT-BACK CLAIM IS REAL WORK: somebody is explaining a bill
+  // somebody else questioned, and it is often long. Losing it to a closed tab
+  // means writing it twice. Only kept for the claim's owner — see `resuming`.
+  const ownReply = !!d?.can.own && d?.claim.status === 'SENT_BACK'
+  const replyBody = useMemo<Record<string, unknown>>(() => ({ text }), [text])
+  const [pristineReply] = useState<Record<string, unknown>>({ text: pristineText })
+  const autosave = useDraftAutosave({
+    kind: 'claim',
+    body: replyBody,
+    pristine: pristineReply,
+    title: draftTitle('claim', replyBody),
+    claimId,
+    resumingId: resuming?.id ?? null,
+    enabled: ownReply && !busy,
+  })
+
   async function run(label: string, act: () => Promise<unknown>) {
     setBusy(true); setError('')
     try {
       await act()
+      // The answer has been sent, so the draft of it is finished with.
+      await autosave.discard()
       setText(''); setTick(n => n + 1); onChanged(label)
     } catch (e) {
       setError(errorText(e))
@@ -229,6 +258,12 @@ export function TeClaimDetail({ claimId, catName, onBack, onChanged, onFixLine }
               {d.can.own && c.status === 'SENT_BACK' ? (
                 <div className="stack sm">
                   <label className="fld"><span>Your answer</span><textarea value={text} onChange={e => setText(e.target.value)} /></label>
+                  <div className="savedline">
+                    {autosave.state === 'saving' ? <span className="small muted">Saving…</span> : null}
+                    {autosave.state === 'saved' && autosave.savedAt
+                      ? <span className="small muted"><TeIcon name="check" size="sm" />{savedAgo(autosave.savedAt, Date.now())} — you can come back to this</span>
+                      : null}
+                  </div>
                   <button type="button" className="btn pri wide" disabled={busy || !text.trim()} onClick={() => run('Answer sent.', () => te.claimRespond(c.id, text))}>Send answer</button>
                 </div>
               ) : null}

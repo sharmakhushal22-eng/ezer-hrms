@@ -29,9 +29,15 @@ import { resolveGrant, canSeeScreen, SUPER_ADMIN_CODES, type RoleRef } from '../
 import { SCREEN_MODULES } from '../screens.ts'
 
 // ── The three sources, read rather than restated ─────────────────────────────
+// The page derives its TABS from lib/rms/nav.ts MODULE_TABS.recruitment
+// (`const TABS = MODULE_TABS.recruitment.map(...)`), so that list IS the page's tabs. It is
+// read as text: nav.ts imports through the @/ alias, which the test runner does not resolve.
 const PAGE = readFileSync('app/dashboard/recruitment/page.tsx', 'utf8')
-const afterTabs = PAGE.slice(PAGE.indexOf('const TABS = ['))
-const TAB_KEYS = [...afterTabs.slice(0, afterTabs.indexOf(']')).matchAll(/k:'([a-z]+)'/g)].map(m => m[1])
+const NAV = readFileSync('lib/rms/nav.ts', 'utf8')
+const navRec = NAV.slice(NAV.indexOf('recruitment: ['), NAV.indexOf('],', NAV.indexOf('recruitment: [')))
+const TAB_KEYS = /const TABS = MODULE_TABS\.recruitment\.map/.test(PAGE)
+  ? [...navRec.matchAll(/key: '([a-z]+)'/g)].map(m => m[1])
+  : []
 
 const CATALOGUE = SCREEN_MODULES.find(m => m.moduleKey === 'recruitment')!
 const CATALOGUE_KEYS = CATALOGUE.screens.map(s => s.key)
@@ -45,6 +51,7 @@ const CATALOGUE_KEYS = CATALOGUE.screens.map(s => s.key)
 const SQL = [
   'supabase/migrations/123_role_screen_access.sql',
   'supabase/migrations/142_recruitment_interviews_screen.sql',
+  'supabase/migrations/201_recruitment_reports_screen.sql',
 ].map(f => readFileSync(f, 'utf8')).join('\n')
 const SEEDED = [...SQL.matchAll(/\('([A-Z0-9_]+)','recruitment\.([a-z]+)'\)/g)]
   .map(m => ({ role: m[1], key: m[2] }))
@@ -90,13 +97,14 @@ test('all three sources were actually parsed', () => {
   // migration agree" checks below and hold at any size.
   // TWELVE since "Interviews Scheduled" (recruitment.interviews, migration 142)
   // — the scheduler's read-only list of the interviews they booked.
-  assert.equal(TAB_KEYS.length, 12,
-    `parsed ${TAB_KEYS.length} tab keys from page.tsx, expected 12 — the parse broke, not the tabs`)
+  // THIRTEEN since Reports (recruitment.reports, migration 201): every report as Excel.
+  assert.equal(TAB_KEYS.length, 13,
+    `parsed ${TAB_KEYS.length} tab keys from page.tsx, expected 13 — the parse broke, not the tabs`)
   assert.ok(TAB_KEYS.includes('hrhead') && TAB_KEYS.includes('negotiation'),
     `parsed keys look wrong: ${TAB_KEYS.join(',')}`)
   assert.ok(!TAB_KEYS.includes('offerletter'),
     'offerletter was merged into sendoffer — a tab rendering it again needs a catalogue entry and a grant')
-  assert.equal(CATALOGUE_KEYS.length, 12, 'the recruitment catalogue should list twelve screens')
+  assert.equal(CATALOGUE_KEYS.length, 13, 'the recruitment catalogue should list thirteen screens')
   assert.ok(SEEDED.length >= 15, `parsed ${SEEDED.length} seeded rows from migration 123 — the parse broke`)
 })
 
@@ -135,7 +143,7 @@ describe('the seeded visibility matrix', () => {
     assert.ok(!v.includes('hrhead'),
       'a recruiter reached the HR Head console — that is the approval authority, not theirs')
     for (const k of ['dashboard', 'mrf', 'screening', 'pipeline', 'negotiation',
-                     'offerapproval', 'sendoffer', 'offers', 'preonboarding', 'jobstatus']) {
+                     'offerapproval', 'sendoffer', 'offers', 'preonboarding', 'jobstatus', 'interviews', 'reports']) {
       assert.ok(v.includes(k), `a recruiter should see recruitment.${k}`)
     }
   })

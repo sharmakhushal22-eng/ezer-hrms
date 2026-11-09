@@ -17,7 +17,7 @@
 // The flags, the risk band and the eligible amounts are the server's.
 import { useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { TeClaimDetail as ClaimDetail, TePlaceBrief, Uuid } from '@/lib/te/types'
+import type { TeClaimDetail as ClaimDetail, TePlaceBrief, TeTrip, Uuid } from '@/lib/te/types'
 import {
   actionsForStage, decidedTotal, describe as describeDecision, emptyDecision,
   isTouched, toDecideInput, whyNotReady, type DecideAction, type DecisionDraft,
@@ -26,6 +26,7 @@ import {
   flagOffers, flagResolvedText, flagTone, openFlags, whyFlagNotReady, type FlagVerdict,
 } from '@/lib/te/flag-review'
 import { claimChip, day, errorText, rs, when } from '@/lib/te/format'
+import TeTripPlan from '../trip/TeTripPlan'
 import TeIcon from '../TeIcon'
 import TeFileLink from '../TeFileLink'
 import TeLegEvidence from './TeLegEvidence'
@@ -59,6 +60,12 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
   // A claim carries its legs but not a place book, so leg evidence would show
   // raw ids. The trip has the names; it is fetched alongside when there is one.
   const [places, setPlaces] = useState<Record<Uuid, TePlaceBrief>>({})
+  // THE TRIP ITSELF, not just its place names. This request was already being
+  // made and everything but `places` was thrown away, so Finance could see a
+  // hotel bill and not the nights that were planned, or a flight bill and not
+  // the time of day the traveller asked to fly. Checking a bill against the
+  // plan is the job; the plan has to be on the screen.
+  const [trip, setTrip] = useState<TeTrip | null>(null)
 
   useEffect(() => {
     let current = true
@@ -68,9 +75,9 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
         setDetail(d); setError('')
         if (d.trip) {
           te.trip(d.trip.id)
-            .then(t => { if (current) setPlaces(t.places) })
-            // Names are a nicety; the numbers still stand without them.
-            .catch(() => { if (current) setPlaces({}) })
+            .then(t => { if (current) { setPlaces(t.places); setTrip(t.trip) } })
+            // The plan is a nicety; the numbers still stand without it.
+            .catch(() => { if (current) { setPlaces({}); setTrip(null) } })
         }
       })
       .catch(e => { if (current) setError(errorText(e)) })
@@ -354,6 +361,12 @@ export default function TeClaimApproval({ claimId, onBack, onDecided }: {
           and see what they are agreeing to. A REQUESTED row is not a cost yet
           — nothing has been bought — so it is marked as asked for, not booked.
           Before migration 153 te_claim_detail returned no bookings at all. */}
+      {/* WHAT WAS PLANNED, beside what is being claimed. A bill is judged
+          against the plan — the nights asked for, the flight time wanted, the
+          stop that explains an extra cab — and that plan was already being
+          fetched here and discarded. */}
+      {trip ? <TeTripPlan trip={trip} places={places} claimId={claimId} /> : null}
+
       {detail.bookings?.length ? (
         <div className="card pad0">
           <div className="day"><span>Stays and tickets</span><span>{detail.bookings.length}</span></div>

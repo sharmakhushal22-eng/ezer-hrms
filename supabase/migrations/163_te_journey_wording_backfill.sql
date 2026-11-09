@@ -1,5 +1,20 @@
 -- 157_te_journey_wording_backfill.sql — the history already written.
 --
+-- DECIDED ON 18 OCTOBER 2026: NOT APPLIED, DELIBERATELY. Khushal chose to skip
+-- it. Three rows in te_audit_log still say "leg" where everything written
+-- since migration 162 says "journey", and that is accepted — the entries are
+-- cosmetic, nothing reads the word, and this is the only migration in the
+-- module that rewrites rows somebody has already seen.
+--
+-- Left in the repo rather than deleted so the decision is visible and
+-- reversible: anybody wondering why the old audit lines read differently finds
+-- the answer and the fix in one place. If it is ever run, back up te_audit_log
+-- first.
+--
+-- NUMBERED 163 HERE, 157 ON THE BRANCH THIS CAME FROM. The companion migration
+-- it refers to is 162 in this tree and was 156 there; the merge kept this
+-- branch's numbering so the pair is not carried twice under two numbers.
+--
 -- OPTIONAL. 162 changed what the database writes from now on. It did not touch
 -- the rows already in te_audit_log, so a trip planned before 162 still shows
 -- "Planned 1 leg, 42.8 km" under a screen that now says "Add a journey". This

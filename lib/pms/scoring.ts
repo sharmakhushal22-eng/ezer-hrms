@@ -103,10 +103,29 @@ export interface Band {
   improvementMandatory: boolean
   /** Rule 11 — a comment this short is not a review. */
   minCommentChars: number
+  /** The score window this band owns, from pms_rating_scale. Optional because
+   *  the built-in fallback below has no ranges — see bandForScore. */
+  scoreFrom?: number
+  scoreTo?: number
+  /** pms_rating_scale.rating_code — 'O' / 'EE' / 'ME' / 'NI' / 'U' / 'NR'. */
+  code?: string
 }
 
-/** The 5-point default of §15's open question 1. Configurable per policy;
- *  this is what ships until somebody decides otherwise. */
+/**
+ * THE FALLBACK, not the configuration.
+ *
+ * These were the only bands the product ever enforced, and they did not match
+ * the ones in the database. pms_rating_scale ships seeded with 200/100/50/200/200
+ * minimum comment characters and the labels "Exceeds Expectations" / "Meets
+ * Expectations" / "Needs Improvement" / "Unsatisfactory"; this list says
+ * 40/30/30/80/120 and "Exceeds" / "Meets" / "Partially meets" / "Below
+ * expectations". So an admin raising a minimum saw it saved and saw nothing
+ * change, and two screens could name the same rating differently.
+ *
+ * Kept as the shape to fall back on when the table cannot be read, so the
+ * screens still work rather than going blank. Everything that enforces a rule
+ * should be given the real bands from `bandsFromScale`.
+ */
 export const DEFAULT_BANDS: Band[] = [
   { value: 5, label: 'Outstanding',        improvementMandatory: false, minCommentChars: 40 },
   { value: 4, label: 'Exceeds',            improvementMandatory: false, minCommentChars: 30 },
@@ -115,14 +134,77 @@ export const DEFAULT_BANDS: Band[] = [
   { value: 1, label: 'Below expectations', improvementMandatory: true,  minCommentChars: 120 },
 ]
 
+/** One pms_rating_scale row, as PostgREST returns it. */
+export interface ScaleRow {
+  rating_value: number | string
+  rating_label: string
+  rating_code?: string | null
+  min_comment_chars?: number | string | null
+  improvement_feedback_mandatory?: boolean | null
+  score_from?: number | string | null
+  score_to?: number | string | null
+  sort_order?: number | string | null
+  is_active?: boolean | null
+}
+
+/**
+ * The configured bands, highest first.
+ *
+ * Inactive rows are dropped rather than hidden in the UI: a band switched off
+ * is not a rating anybody may give. An empty or unreadable table yields an
+ * empty array, and callers fall back to DEFAULT_BANDS — saying so explicitly
+ * beats silently enforcing numbers nobody chose.
+ */
+export function bandsFromScale(rows: ScaleRow[] | null | undefined): Band[] {
+  const n = (v: unknown): number | undefined =>
+    v === null || v === undefined || v === '' ? undefined : Number(v)
+  return (rows ?? [])
+    .filter(r => r.is_active !== false)
+    .map(r => ({
+      value: Number(r.rating_value),
+      label: String(r.rating_label ?? ''),
+      code: r.rating_code ?? undefined,
+      improvementMandatory: r.improvement_feedback_mandatory === true,
+      minCommentChars: Number(r.min_comment_chars ?? 0) || 0,
+      scoreFrom: n(r.score_from),
+      scoreTo: n(r.score_to),
+    }))
+    .filter(b => Number.isFinite(b.value))
+    .sort((a, b) => b.value - a.value)
+}
+
 export function bandFor(rating: number | null | undefined, bands = DEFAULT_BANDS): Band | null {
   if (rating === null || rating === undefined) return null
   return bands.find(b => b.value === Math.round(rating)) ?? null
 }
 
-/** Score to band. Rounds to nearest, so 3.5 is a 4 rather than silently a 3. */
+/**
+ * Score to band.
+ *
+ * THE RANGES WIN WHERE THERE ARE RANGES. pms_rating_scale gives each band an
+ * explicit window — 4.51-5.00, 3.51-4.50, 2.51-3.50 and so on — and rounding
+ * disagrees with it at every boundary: a weighted score of exactly 3.50 sits
+ * in "Meets Expectations" by the table and rounds up to "Exceeds" by
+ * arithmetic. One of those is the band the admin configured.
+ *
+ * Falls back to rounding only for bands that carry no window, which is the
+ * built-in list above.
+ */
 export function bandForScore(s: number | null, bands = DEFAULT_BANDS): Band | null {
-  return s === null ? null : bandFor(Math.round(s), bands)
+  if (s === null) return null
+  const windowed = bands.find(b =>
+    b.scoreFrom !== undefined && b.scoreTo !== undefined && s >= b.scoreFrom && s <= b.scoreTo)
+  if (windowed) return windowed
+  // A score above the top window or below the bottom one still has a band:
+  // clamp rather than return nothing, or a perfect 5.00 with a 4.51-5.00 top
+  // band would be fine while 5.01 from a rounding artefact would be nameless.
+  const ranged = bands.filter(b => b.scoreFrom !== undefined && b.scoreTo !== undefined)
+  if (ranged.length) {
+    if (s > Math.max(...ranged.map(b => b.scoreTo!))) return ranged[0]
+    if (s < Math.min(...ranged.map(b => b.scoreFrom!))) return ranged[ranged.length - 1]
+    return null
+  }
+  return bandFor(Math.round(s), bands)
 }
 
 export interface FeedbackCheck { ok: boolean; faults: string[] }

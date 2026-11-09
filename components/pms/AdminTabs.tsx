@@ -59,10 +59,44 @@ import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
 import { DEFAULT_RULES } from '@/lib/pms/cycle'
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from '@/lib/pms/status'
 import { rollUp, type FillRow } from '@/lib/pms/rollup'
+import { csvText, parseCsv } from '@/lib/pms/csv'
+import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
 
+/** §6.1's configuration, as the policy row holds it. Named in the screen's
+ *  own terms rather than the column names, so the page does the mapping once
+ *  and this file never has to know about snake_case. */
+export interface PolicyConfig {
+  /** Which policy these values came from, so the screen can say so. With one
+   *  policy per company the config screen shows one of several and must not
+   *  imply it is describing all of them. */
+  policyName?: string | null
+  companyName?: string | null
+  /** Identity, so the tab can offer a choice between policies rather than
+   *  silently describing whichever one came back first — the bug that made
+   *  edits in Setup & Controls look as though they had not applied. */
+  policyId?: string | null
+  companyId?: string | null
+  policyCount?: number
+  minKra: number
+  maxKra: number
+  totalWeightage: number
+  minWeightagePerKra: number
+  kraCreatedBy?: string | null
+  oneToOneMandatory?: boolean | null
+  midPeriodCheckin?: boolean | null
+  finalReviewOneToOne?: boolean | null
+  approvalChain?: string | null
+  whoCanFinalise?: string | null
+  ratingScaleType?: string | null
+  selfRatingMandatory?: boolean | null
+  newJoinerCutoffDays?: number | null
+  includeNoticePeriod?: boolean | null
+  includeExited?: boolean | null
+}
+
 export type AdminTab =
-  | 'config' | 'setup' | 'policies' | 'fill' | 'upload' | 'pip' | 'reports'
+  | 'config' | 'setup' | 'policies' | 'fill' | 'publish' | 'upload' | 'pip' | 'reports'
 
 export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'config',   label: 'PMS Configuration',  blurb: 'Frequency, windows and the KRA rules everyone is held to' },
@@ -70,6 +104,7 @@ export const ADMIN_TABS: { k: AdminTab; label: string; blurb: string }[] = [
   { k: 'setup',    label: 'Setup & Controls',   blurb: 'Edit the policy, KRA library and rating scale; generate and open periods' },
   { k: 'policies', label: 'Policy Builder',     blurb: 'Different cycles for different groups, and who falls under which' },
   { k: 'fill',     label: 'Fill Status Tracker',blurb: 'Live status for everyone, and who to chase' },
+  { k: 'publish',  label: 'Publish Results',    blurb: 'Settled ratings waiting to be released to employees' },
   { k: 'upload',   label: 'Final Rating Upload',blurb: 'Bulk override from an offline calibration' },
   { k: 'pip',      label: 'PIP Management',     blurb: 'Requests from managers, and the plans you have started' },
   { k: 'reports',  label: 'Reports & Export',   blurb: 'The fourteen reports, and Excel export' },
@@ -182,17 +217,68 @@ const FREQ_LABEL: Record<Frequency, string> = {
   HALF_YEARLY: 'Half-Yearly', ANNUAL: 'Annual',
 }
 
-export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
+/**
+ * §6.1's configuration, READ FROM THE POLICY.
+ *
+ * Every value on this screen used to be a literal. DEFAULT_RULES for the KRA
+ * counts, the string "Employee (RM approves)" for who writes them,
+ * CHAIN_LABEL[CHAINS[0]] and FINALISER_LABEL[FINALISERS[0]] for the workflow
+ * — the FIRST entry of each array rather than the policy's own value. So it
+ * showed "RM L1, RM L2 or HOD" while every company in the database is
+ * actually HOD_ONLY, and an admin who changed anything in Setup & Controls
+ * saw this screen report the old values back. Reported as "changing
+ * configuration is not getting in effect, and not reflected on PMS
+ * Configuration".
+ *
+ * `policy` is optional so the screen still renders before the first load, and
+ * says so rather than printing confident defaults.
+ */
+export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy,
+                            choices = [], onChoosePolicy }: {
   freq: Frequency; onFreq: (f: Frequency) => void
   fyStart: string; fyLabel: string; today: string
+  policy?: PolicyConfig | null
+  /** Every policy in scope. More than one means this tab MUST let the admin
+   *  say which it is describing — see the note on the selector below. */
+  choices?: PolicyConfig[]
+  onChoosePolicy?: (policyId: string) => void
 }) {
+  const yn = (v: boolean | null | undefined, yes: string, no: string) =>
+    v === null || v === undefined ? '—' : v ? yes : no
   const periods = previewPeriods(freq, fyStart)
   return (
     <>
       <Card title="Cycle & frequency preview"
             sub="Try a frequency and every period below regenerates, windows and all. This is a preview. Nothing here is saved.">
         <div className="grid g4">
-          <Fixed label="Company" value="All companies" />
+          {/* NOT "All companies". Three policies exist, one per company, and
+              this screen reads one of them — saying "all" was a claim it could
+              not support and hid the fact that the others may differ. */}
+          {/* A SELECTOR, NOT A LABEL, once there is more than one policy.
+              This tab used to describe whichever policy came back first from
+              an unordered query, with no company shown — so editing one
+              company's policy in Setup & Controls and returning here showed a
+              different company's settings, unchanged, and the edit looked lost.
+              The name alone cannot distinguish them: all three are called
+              "Standard Quarterly". */}
+          {choices.length > 1 && onChoosePolicy ? (
+            <Field label="Policy shown here"
+                   hint={`${choices.length} policies exist and they differ. Pick the one you edited.`}>
+              <select value={policy?.policyId ?? ''}
+                      onChange={e => onChoosePolicy(e.target.value)}>
+                {choices.map(c => (
+                  <option key={c.policyId ?? ''} value={c.policyId ?? ''}>
+                    {c.companyName ? `${c.companyName} · ` : ''}{c.policyName ?? 'Policy'}
+                  </option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            <Fixed label="Policy shown here"
+                   value={policy?.policyName
+                     ? `${policy.companyName ? policy.companyName + ' · ' : ''}${policy.policyName}`
+                     : '—'} />
+          )}
           <Fixed label="Financial year" value={fyLabel} hint={`Starts ${shortDate(fyStart)}`} />
           {/* A preview control, and now labelled as one. It sat beside real
               settings reading just "Frequency", so changing it looked like a
@@ -256,27 +342,48 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
         <div className="divider" />
         <Section>KRA rules</Section>
         <div className="grid g4">
-          <Fixed label="Minimum KRA count" value={String(DEFAULT_RULES.minKra)}
+          <Fixed label="Minimum KRA count" value={String(policy?.minKra ?? DEFAULT_RULES.minKra)}
                  hint="Fewer than four and a rating rests on too little" />
-          <Fixed label="Maximum KRA count" value={String(DEFAULT_RULES.maxKra)}
+          <Fixed label="Maximum KRA count" value={String(policy?.maxKra ?? DEFAULT_RULES.maxKra)}
                  hint="Past ten, weightages get too thin to mean anything" />
-          <Fixed label="Total weightage must be" value={String(DEFAULT_RULES.totalWeightage)}
+          <Fixed label="Total weightage must be" value={String(policy?.totalWeightage ?? DEFAULT_RULES.totalWeightage)}
                  hint="Exactly, not at least" />
-          <Fixed label="Minimum weightage per KRA" value={String(DEFAULT_RULES.minWeightagePerKra)}
+          <Fixed label="Minimum weightage per KRA" value={String(policy?.minWeightagePerKra ?? DEFAULT_RULES.minWeightagePerKra)}
                  hint="Stops a token KRA carrying 1%" />
-          <Fixed label="Who creates KRAs" value="Employee (RM approves)" />
-          <Fixed label="One-to-one mandatory" value="Yes, before weightage lock" />
-          <Fixed label="Mid-period check-in" value="Optional" />
-          <Fixed label="Final review one-to-one" value="Mandatory before publish" />
+          <Fixed label="Who creates KRAs" value={
+            policy?.kraCreatedBy === 'MANAGER' ? 'Their manager'
+            : policy?.kraCreatedBy === 'BOTH' ? 'Either may write them'
+            : policy?.kraCreatedBy === 'EMPLOYEE' ? 'The employee (RM approves)' : '—'} />
+          <Fixed label="One-to-one mandatory"
+                 value={yn(policy?.oneToOneMandatory, 'Yes, before weightage lock', 'No')} />
+          <Fixed label="Mid-period check-in"
+                 value={yn(policy?.midPeriodCheckin, 'Yes', 'Optional')} />
+          <Fixed label="Final review one-to-one"
+                 value={yn(policy?.finalReviewOneToOne, 'Mandatory before publish', 'Not required')} />
         </div>
 
         <div className="divider" />
         <Section>Workflow &amp; rating</Section>
         <div className="grid g4">
-          <Fixed label="Approval chain" value={CHAIN_LABEL[CHAINS[0]]} />
-          <Fixed label="Who can finalise" value={FINALISER_LABEL[FINALISERS[0]]} />
-          <Fixed label="Rating scale" value="5 point (1–5)" />
-          <Fixed label="Self rating mandatory" value="Yes, a manager cannot rate first" />
+          <Fixed label="Approval chain" value={
+            policy?.approvalChain
+              ? ((CHAIN_LABEL as Record<string, string>)[policy.approvalChain]
+                 // A chain the schema allows but lib/pms/hierarchy does not
+                 // model — SELF_RM1_RM2_HOD_MD — has no label. Show the raw
+                 // value and say so, rather than rendering "undefined".
+                 ?? `${policy.approvalChain} (not supported yet)`)
+              : '—'} />
+          <Fixed label="Who can finalise" value={
+            policy?.whoCanFinalise
+              ? ((FINALISER_LABEL as Record<string, string>)[policy.whoCanFinalise]
+                 ?? policy.whoCanFinalise)
+              : '—'} />
+          <Fixed label="Rating scale" value={
+            policy?.ratingScaleType === 'FOUR_POINT_NR' ? '4 point + NR'
+            : policy?.ratingScaleType === 'TEN_POINT' ? '10 point (1–10)'
+            : policy?.ratingScaleType === 'FIVE_POINT' ? '5 point (1–5)' : '—'} />
+          <Fixed label="Self rating mandatory"
+                 value={yn(policy?.selfRatingMandatory, 'Yes, a manager cannot rate first', 'No')} />
         </div>
 
         <div className="divider" />
@@ -284,9 +391,13 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today }: {
         <div className="grid g4">
           <Fixed label="Payout / CTC linkage" value="OFF (developmental only)" locked
                  hint="Locked off. No increment, variable or CTC impact." />
-          <Fixed label="New joiner cut-off" value="30 days before the period ends" />
-          <Fixed label="Notice period employees" value="Include, and highlight" />
-          <Fixed label="Exited employees" value="Include, read-only after last working day" />
+          <Fixed label="New joiner cut-off" value={
+            policy?.newJoinerCutoffDays == null ? '—'
+            : `${policy.newJoinerCutoffDays} days before the period ends`} />
+          <Fixed label="Notice period employees"
+                 value={yn(policy?.includeNoticePeriod, 'Include, and highlight', 'Exclude')} />
+          <Fixed label="Exited employees"
+                 value={yn(policy?.includeExited, 'Include, read-only after last working day', 'Exclude')} />
         </div>
         <div className="banner b-red" style={{ marginTop: 14, marginBottom: 0 }}>
           <span aria-hidden="true">🔒</span>
@@ -395,7 +506,10 @@ const FILL_TONE: Record<FillStatus, 'red' | 'amber' | 'brand' | 'blue' | 'green'
   IN_REVIEW: 'blue', FINALISED: 'green',
 }
 
-export function FillTab({ rows, deptNames, loading }: {
+export function FillTab({ rows, deptNames, loading, totalWeightage = DEFAULT_RULES.totalWeightage}: {
+  /** The policy's total, so a correct set is not coloured red on a policy
+   *  whose total is not 100. */
+  totalWeightage?: number
   rows: FillRow[] | null; deptNames: Record<string, string>; loading: boolean
 }) {
   const [status, setStatus] = useState<'ALL' | FillStatus>('ALL')
@@ -405,6 +519,11 @@ export function FillTab({ rows, deptNames, loading }: {
   const shown = all.filter(r =>
     (status === 'ALL' || r.fill_status === status) &&
     (dept === 'ALL' || (r.department_id ?? '') === dept))
+  // The not-started export is deliberately NOT the filtered set: §6.3 lists it
+  // as its own action, for chasing everybody who has not begun, and a
+  // department filter left on from a previous look would quietly shrink the
+  // chase list without saying so.
+  const notStarted = all.filter(r => r.fill_status === 'NOT_STARTED')
 
   return (
     <>
@@ -491,7 +610,7 @@ export function FillTab({ rows, deptNames, loading }: {
                     <td>{deptNames[r.department_id ?? ''] ?? 'Unknown'}</td>
                     <td className="num">{r.kra_count ?? 0}</td>
                     <td className="num">
-                      <span className={wt === DEFAULT_RULES.totalWeightage ? 'ok' : 'bad'}>{wt}</span>
+                      <span className={wt === totalWeightage ? 'ok' : 'bad'}>{wt}</span>
                     </td>
                     <td>{known
                       ? <Pill tone={FILL_TONE[s]}>{FILL_LABEL[s]}</Pill>
@@ -504,33 +623,290 @@ export function FillTab({ rows, deptNames, loading }: {
           </table>
         </div>
         <div className="btnrow">
-          <button className="btn ghost sm" type="button" disabled>⬇ Export to Excel</button>
-          <button className="btn ghost sm" type="button" disabled>⬇ Export not-started only</button>
-          <button className="btn ghost sm" type="button" disabled>Send bulk reminder</button>
+          {/* Exports the FILTERED set, not everything. What is on screen is
+              what the admin has narrowed to, and a file that silently
+              disagrees with the table above it is worse than no file. */}
+          <button className="btn ghost sm" type="button" disabled={!shown.length}
+                  onClick={() => exportFill(shown, deptNames, 'pms-fill-status')}>
+            ⬇ Export {status === 'ALL' && dept === 'ALL' ? 'all' : 'this view'} ({shown.length})
+          </button>
+          <button className="btn ghost sm" type="button" disabled={!notStarted.length}
+                  onClick={() => exportFill(notStarted, deptNames, 'pms-not-started')}>
+            ⬇ Export not-started only ({notStarted.length})
+          </button>
+          {/* NOT WIRED, and labelled so. §12's notification layer does not
+              exist yet, so there is nothing to send with. A disabled button
+              under the words "switches on once there are rows" was a promise
+              the code could not keep: `disabled` was a literal, so it could
+              never switch on at any number of rows. */}
+          <button className="btn ghost sm" type="button" disabled
+                  title="Needs the notification layer (§12), which is not built yet">
+            Send bulk reminder — not available yet
+          </button>
         </div>
         <div className="k" style={{ marginTop: 8 }}>
-          Export and reminders switch on once there are rows to send about.
+          Exports are CSV with a UTF-8 byte-order mark, which is what stops Excel
+          mangling names. Per-rung manager ratings are not in the file: the
+          fill-status view carries the self score only.
         </div>
       </Card>
     </>
   )
 }
 
-/** The chase-list phrasing, trimmed to fit a table cell. */
+/** §6.3's export. Columns in the order the spec lists them, as far as the
+ *  view actually carries them. The CSV text is built by csvText in
+ *  lib/pms/csv.ts, where the quoting rules can be tested against the reader
+ *  that has to parse them back; this half is only the browser download. */
+function exportFill(rows: FillRow[], deptNames: Record<string, string>, name: string): void {
+  const head = ['Code', 'Name', 'Department', 'Employment flag', 'KRA count',
+                'Total weightage', 'One-to-one', 'Self score', 'Fill status',
+                'Workflow status', 'Final rating', 'Rating code', 'Finalised by',
+                'Last action']
+  const body = rows.map(r => [
+    r.employee_code, r.employee_name,
+    deptNames[r.department_id ?? ''] ?? r.department_id,
+    r.employment_flag, r.kra_count, r.total_weightage,
+    r.one_to_one_status, r.self_score,
+    FILL_LABEL[r.fill_status as FillStatus] ?? r.fill_status,
+    r.workflow_status, r.final_rating, r.final_rating_code,
+    r.finalised_by_role, r.last_action_at,
+  ])
+  // UTF-8 BOM — the EZER export standard, same as downloadTemplate below.
+  const blob = new Blob(['﻿' + csvText(head, body)],
+                        { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `${name}-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
+}
+
+/** The chase-list phrasing, trimmed to fit a table cell.
+ *
+ *  Kept in step with FILL_MEANING in lib/pms/status.ts — same five states,
+ *  shorter sentences, and a test reads BOTH so they cannot drift apart.
+ *  They did drift: 191 folded KRA_LOCKED into DRAFT_SAVED and only the long
+ *  copy was reworded, so this cell still told an admin "nothing sent" about
+ *  Nikhil Reddy's four LOCKED KRAs. Observed on the live tracker. */
 const FILL_MEANING_SHORT: Record<FillStatus, string> = {
   NOT_STARTED: 'Cannot be rated at all. Chase first',
-  DRAFT_SAVED: 'Started, nothing sent. A nudge, not an escalation',
+  // Covers KRA_DRAFT and KRA_LOCKED. Phrased by WHOSE MOVE IT IS, which is
+  // the one thing both states agree on and the only thing this column is
+  // asked — and it reads in parallel with the two rows below it.
+  DRAFT_SAVED: 'Waiting on the employee. A nudge, not an escalation',
   SUBMITTED:   'Waiting on their manager',
   IN_REVIEW:   'Waiting on the next approver or the HOD',
   FINALISED:   'Settled, nothing further owed',
 }
 
+// ── the last rung: HR publishes ───────────────────────────────────────────
+
+export interface PublishRow {
+  employeeId: string
+  name: string
+  code: string
+  finalRating: number | null
+  finalRatingCode: string | null
+  finalisedByRole: string | null
+  finalisedAt: string | null
+  published: boolean
+}
+
+/**
+ * §(none) — asked for directly: "hr manager have authorities to publish the
+ * result… they just see it and publish it".
+ *
+ * WHAT IS DELIBERATELY ABSENT FROM THIS SCREEN. There is no rating field, no
+ * KRA list, no comment box and no reject button. That is the requirement, not
+ * an unfinished tab: HR cannot change what the chain decided, only release it.
+ * 197 enforces the same thing from the other side — HR's rung has no reject
+ * path, and pms_chain_reject refuses outright at stage HR with a sentence
+ * saying a rating that needs changing goes back through the HOD.
+ *
+ * The rating IS shown, because publishing a number without seeing it is not a
+ * decision anybody can take responsibly. Shown, not editable.
+ *
+ * ROWS COME FROM chain_stage, NOT workflow_status. FINALISED says a rating
+ * exists; stage HR says it has reached HR and nobody below has it any more.
+ * Reading the status instead would list appraisals that are settled but still
+ * sitting with a HOD who has not passed them on.
+ */
+export function PublishTab({ rows, loading, onPublish, publishing, periodLabel }: {
+  rows: PublishRow[] | null
+  loading?: boolean
+  onPublish?: (employeeId: string) => void
+  /** The id currently being published, so one button can show progress
+   *  without freezing the whole table. */
+  publishing?: string | null
+  periodLabel?: string | null
+}) {
+  if (loading || rows === null) return <div className="k">Loading…</div>
+
+  const waiting = rows.filter(r => !r.published)
+  const done = rows.filter(r => r.published)
+
+  return (
+    <>
+      <div className="banner b-blue">
+        <span aria-hidden="true">ℹ️</span>
+        <div>
+          These ratings are settled. Publishing releases the rating and the
+          feedback to the employee{periodLabel ? ` for ${periodLabel}` : ''} —
+          it does not change either. A rating that needs changing goes back
+          through the HOD, not from here.
+        </div>
+      </div>
+
+      <Card title={`Waiting to publish (${waiting.length})`}
+            sub="Finalised by the chain and now with you.">
+        {!waiting.length
+          ? <Empty what="Nothing is waiting"
+                   why="A rating reaches this list once the last approver in the chain has settled it." />
+          : (
+            <div className="tblwrap">
+              <table>
+                <thead>
+                  <tr>
+                    <th>Employee</th><th>Code</th><th>Final rating</th>
+                    <th>Settled by</th><th>Settled on</th><th>Action</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {waiting.map(r => (
+                    <tr key={r.employeeId}>
+                      <td>{r.name}</td>
+                      <td className="k">{r.code}</td>
+                      <td>
+                        {r.finalRating == null
+                          ? <span className="k">—</span>
+                          : <b>{r.finalRating}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</b>}
+                      </td>
+                      <td className="k">{r.finalisedByRole ?? '—'}</td>
+                      <td className="k">{r.finalisedAt ? r.finalisedAt.slice(0, 10) : '—'}</td>
+                      <td>
+                        <button className="btn sm" type="button"
+                                disabled={!onPublish || publishing === r.employeeId
+                                          || r.finalRating == null}
+                                onClick={() => onPublish?.(r.employeeId)}>
+                          {publishing === r.employeeId ? 'Publishing…' : 'Publish'}
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        <div className="k" style={{ marginTop: 10, lineHeight: 1.6 }}>
+          A row with no final rating cannot be published: there would be nothing
+          to show. That means the chain has not finished with it, however far
+          along it looks.
+        </div>
+      </Card>
+
+      {done.length > 0 && (
+        <Card title={`Already published (${done.length})`}
+              sub="The employee can see these.">
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Employee</th><th>Code</th><th>Final rating</th><th /></tr>
+              </thead>
+              <tbody>
+                {done.map(r => (
+                  <tr key={r.employeeId}>
+                    <td>{r.name}</td>
+                    <td className="k">{r.code}</td>
+                    <td>{r.finalRating ?? '—'}{r.finalRatingCode ? ` · ${r.finalRatingCode}` : ''}</td>
+                    <td><Pill tone="green">published</Pill></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </>
+  )
+}
+
 // ── §6.4 Final Rating Upload ─────────────────────────────────────────────
 
-export function UploadTab() {
+export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
+                            periodId, periodLabel, onCommitted }: {
+  /** vw_pms_fill_status for the open period. Null while loading. */
+  rows?: FillRow[] | null
+  scale?: number[]
+  improvementAtOrBelow?: number | null
+  /** The open period. Without it the commit has nowhere to write. */
+  periodId?: string | null
+  periodLabel?: string
+  /**
+   * Called with the success sentence, NOT just as a refresh signal.
+   *
+   * The parent reloads on commit, and the reload unmounts this tab — the
+   * whole tab block sits behind `!loading`. So a success banner held in local
+   * state disappears the instant it is set: the upload worked, the file
+   * cleared, and the screen said nothing at all about what had happened.
+   * Observed after a commit that landed correctly. The message has to be held
+   * by whoever survives the reload.
+   */
+  onCommitted?: (message: string) => void
+} = {}) {
   const [rows, setRows] = useState<UploadRow[] | null>(null)
   const [name, setName] = useState('')
-  const preview = rows ? checkUpload(rows, KNOWN_NOTHING) : null
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  /**
+   * THE REAL LOOKUP. This was KNOWN_NOTHING, which answered "no such
+   * employee" to everything — the honest answer while nothing was loaded, but
+   * it meant the validation preview could only ever show 24 red rows, so the
+   * one screen whose whole purpose is checking a file before it is applied
+   * could not check anything.
+   *
+   * `computed` is the rating the system currently holds, which is
+   * final_rating. The fill-status view does not carry rm_l1_score,
+   * rm_l2_score or hod_score, so for a row that has not been finalised there
+   * is no system rating to compare against and the Change column honestly
+   * reads "-" rather than inventing a delta against nothing.
+   *
+   * `readOnly` is DERIVED, because the view does not expose is_readonly:
+   * exited AND already rated is what rule 12 locks. Erring here is one-way —
+   * a false positive refuses a row an admin could then query, a false
+   * negative would let an upload overwrite a locked record.
+   */
+  const known = useMemo(() => {
+    const by = new Map<string, FillRow>()
+    for (const r of enrolled ?? []) {
+      const code = String(r.employee_code ?? '').trim().toUpperCase()
+      if (code) by.set(code, r)
+    }
+    return {
+      lookup: (empCode: string, periodCode: string) => {
+        const r = by.get(String(empCode ?? '').trim().toUpperCase())
+        if (!r) return null
+        // The period must be the one actually loaded. A file naming last
+        // quarter would otherwise be validated against this quarter's data
+        // and look fine.
+        const pc = String(r.period_code ?? '').trim().toUpperCase()
+        const want = String(periodCode ?? '').trim().toUpperCase()
+        if (pc && want && pc !== want) return null
+        const flag = String(r.employment_flag ?? '').toUpperCase()
+        const rated = r.final_rating !== null && r.final_rating !== undefined
+        return {
+          computed: rated ? Number(r.final_rating) : null,
+          eligible: flag !== 'NEW_JOINER',
+          readOnly: flag === 'EXITED' && rated,
+        }
+      },
+      scale: scale?.length ? scale : [1, 2, 3, 4, 5],
+      improvementMandatoryAtOrBelow: improvementAtOrBelow ?? 2,
+    }
+  }, [enrolled, scale, improvementAtOrBelow])
+
+  const preview = rows ? checkUpload(rows, enrolled ? known : KNOWN_NOTHING) : null
 
   return (
     <>
@@ -546,8 +922,16 @@ export function UploadTab() {
 
       <Card title="Final rating upload"
             sub="For when a calibration happened offline, or legacy data has to be brought in.">
+        {result && (
+          <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
+            <span aria-hidden="true">{result.ok ? '✓' : '⚠️'}</span>
+            <div>{result.text}</div>
+          </div>
+        )}
         <div className="grid g3">
-          <Field label="Period"><select disabled><option>The open period</option></select></Field>
+          <Field label="Period" hint="Uploads apply to the period that is open">
+            <select disabled><option>{periodLabel || 'The open period'}</option></select>
+          </Field>
           <Field label="Upload file" hint={name || 'CSV, using the template below'}>
             <input type="file" accept=".csv,text/csv"
                    onChange={e => {
@@ -615,15 +999,45 @@ export function UploadTab() {
         {preview && (
           <>
             <div className="btnrow">
-              <button className="btn ghost sm" type="button" disabled={!preview.errorCount}>
-                ⬇ Download error rows
+              {/* The rejected rows, in the SAME shape as the template plus a
+                  reason column — so the admin fixes this file and uploads it
+                  again, rather than hunting the originals by eye. Keeping the
+                  original line number is the point: "row 14" is how they find
+                  it in their spreadsheet. */}
+              <button className="btn ghost sm" type="button" disabled={!preview.errorCount}
+                      onClick={() => exportErrorRows(preview)}>
+                ⬇ Download error rows ({preview.errorCount})
               </button>
-              <button className="btn dark sm" type="button" disabled={!preview.canCommit}>
-                {preview.canCommit
-                  ? `Commit upload (${preview.rows.length} rows)`
+              <button className="btn dark sm" type="button"
+                      disabled={!preview.canCommit || !periodId || busy}
+                      onClick={async () => {
+                        setBusy(true); setResult(null)
+                        const r = await pmsAdmin<{ message?: string; applied?: number }>(
+                          'upload_commit',
+                          { period_id: periodId, actor_role: 'HR_MANAGER',
+                            rows: preview.rows.map(x => x.row) })
+                        setBusy(false)
+                        if (r.error) { setResult({ ok: false, text: r.error.message }); return }
+                        const msg = r.data?.message ?? 'Committed.'
+                        setResult({ ok: true, text: msg })
+                        // The file is spent: its preview was computed against
+                        // ratings this commit has just changed, so leaving it
+                        // on screen would invite a second application of the
+                        // same batch against different numbers.
+                        setRows(null); setName('')
+                        onCommitted?.(msg)
+                      }}>
+                {busy ? 'Committing…'
+                  : preview.canCommit
+                  ? `Commit upload (${preview.rows.length} ${preview.rows.length === 1 ? 'row' : 'rows'})`
                   : `Commit blocked: ${preview.errorCount} ${preview.errorCount === 1 ? 'row needs' : 'rows need'} fixing`}
               </button>
             </div>
+            {!periodId && (
+              <div className="k bad" style={{ marginTop: 8 }}>
+                No open period is loaded, so there is nowhere to commit this to.
+              </div>
+            )}
             <div className="k" style={{ marginTop: 8, lineHeight: 1.6 }}>{summarise(preview)}</div>
           </>
         )}
@@ -654,17 +1068,24 @@ const KNOWN_NOTHING = {
   improvementMandatoryAtOrBelow: 2,
 }
 
-/** Minimal CSV read — the template has no quoted commas in it. */
-function parseCsv(text: string): UploadRow[] {
-  const lines = text.split(/\r?\n/).filter(l => l.trim())
-  if (lines.length < 2) return []
-  const head = lines[0].split(',').map(h => h.trim())
-  return lines.slice(1).map(line => {
-    const cells = line.split(',')
-    const row: Record<string, string> = {}
-    head.forEach((h, i) => { row[h] = (cells[i] ?? '').trim() })
-    return row as unknown as UploadRow
-  })
+/** §6.4's rejected rows, re-exported for correction and re-upload. */
+function exportErrorRows(preview: { rows: { row: UploadRow; line: number; errors: string[] }[] }): void {
+  const bad = preview.rows.filter(r => r.errors.length)
+  const head = ['source_row', ...TEMPLATE_COLUMNS, 'what_is_wrong']
+  const body = bad.map(r => [
+    r.line,
+    ...TEMPLATE_COLUMNS.map(c => (r.row as Record<string, unknown>)[c]),
+    // Every error, not just the first: the table shows one to stay readable,
+    // but a file for fixing should not hide a second problem that will bounce
+    // the row again on the next attempt.
+    r.errors.map(e => ERROR_TEXT[e as keyof typeof ERROR_TEXT] ?? e).join(' '),
+  ])
+  const blob = new Blob(['﻿' + csvText(head, body)], { type: 'text/csv;charset=utf-8' })
+  const a = document.createElement('a')
+  a.href = URL.createObjectURL(blob)
+  a.download = `pms-upload-errors-${new Date().toISOString().slice(0, 10)}.csv`
+  a.click()
+  URL.revokeObjectURL(a.href)
 }
 
 function downloadTemplate() {

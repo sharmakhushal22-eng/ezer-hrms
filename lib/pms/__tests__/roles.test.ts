@@ -269,13 +269,33 @@ test('each row names the ONE next thing, in the order the flow requires', () => 
     [{ oneToOneDone: false }, /one-to-one/i],
     [{ selfSubmitted: false, selfScore: null }, /self rating/i],
     [{ rmL1Score: null }, /your rating is owed/i],
-    [{ rmL1Score: 4, rmL2Score: null }, /rm l2/i],
-    [{ rmL1Score: 4, rmL2Score: 4 }, /finalis/i],
+    [{ rmL1Score: 4, rmL2Score: null, rmL2Id: 'm2' }, /rm l2/i],
+    [{ rmL1Score: 4, rmL2Score: 4, rmL2Id: 'm2' }, /finalis/i],
   ]
   for (const [patch, want] of cases) {
     const r = teamQueue([member({ employeeId: 'e', name: 'E', ...patch })], TODAY)[0]
     assert.match(r.next, want, `wrong next step for ${JSON.stringify(patch)}`)
   }
+})
+
+test('a chain with no second rung does not wait for a rating nobody can give', () => {
+  // pms_resolve_chain (067) drops L2 when it resolves to the same person as
+  // L1 — the common shape in a small company, where one manager is both.
+  // rm_l2_score then stays null for ever. The queue used to read that null as
+  // "With RM L2 now" and park the row there permanently, pointing the manager
+  // at a stage that did not exist. Observed live: Sanjay Kapoor is both rungs
+  // for Shreya Singh, submitted, was told it was sent, and the row did not move.
+  const collapsed = teamQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: null, rmL1Score: 4,
+  })], TODAY)[0]
+  assert.match(collapsed.next, /finalis/i)
+
+  // And the real two-rung chain is untouched — this is the half that proves
+  // the fix reads rmL2Id rather than just dropping the stage altogether.
+  const twoRung = teamQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: 'm2', rmL1Score: 4,
+  })], TODAY)[0]
+  assert.match(twoRung.next, /rm l2/i)
 })
 
 test('a finalised row asks nothing further of anybody', () => {
@@ -289,6 +309,27 @@ test('RULE 7: finalise is shut while RM L2 is pending, and says to nudge them', 
     { role: 'HOD', chain: 'SELF_RM1_RM2_HOD', whoCanFinalise: 'RM1_RM2_HOD' })
   assert.equal(rows[0].canFinalise, false)
   assert.match(rows[0].insteadDo ?? '', /nudge/i)
+})
+
+test('RULE 7 does not shut finalise on a rung this employee does not have', () => {
+  // The policy chain includes RM L2; this employee's FROZEN chain does not,
+  // because 067 collapsed it when L1 and L2 resolved to the same person. The
+  // gate used to read the policy only, so the HOD was told to nudge an RM L2
+  // the resolver had removed, and the last step of the cycle could never run.
+  // Observed live: Arjun Malhotra could not sign off Shreya Singh.
+  const collapsed = finaliseQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: null, rmL1Score: 4,
+  })], TODAY, { role: 'HOD', chain: 'SELF_RM1_RM2_HOD', whoCanFinalise: 'HOD_ONLY' })
+  assert.equal(collapsed[0].canFinalise, true)
+  assert.equal(collapsed[0].insteadDo, null)
+
+  // The genuine two-rung case still waits — otherwise the fix would just be
+  // deleting rule 7 rather than asking it the right question.
+  const twoRung = finaliseQueue([member({
+    employeeId: 'e', name: 'E', rmL1Id: 'm1', rmL2Id: 'm2', rmL1Score: 4,
+  })], TODAY, { role: 'HOD', chain: 'SELF_RM1_RM2_HOD', whoCanFinalise: 'HOD_ONLY' })
+  assert.equal(twoRung[0].canFinalise, false)
+  assert.match(twoRung[0].insteadDo ?? '', /nudge/i)
 })
 
 test('...but a chain with no RM L2 finalises without waiting for one', () => {

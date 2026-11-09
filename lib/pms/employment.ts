@@ -20,6 +20,16 @@ export interface Employment {
 export interface FlagRules {
   /** Somebody who joined within this many days of the period end is NR. */
   newJoinerCutoffDays: number
+  /**
+   * The period's END date, which is what §8 measures the cut-off against:
+   * "Date of Joining > (Period End − Cutoff Days)".
+   *
+   * Not today. Measuring from today means the same employee is NEW_JOINER in
+   * week one of a quarter and ACTIVE in week twelve, so whether they are
+   * rated depends on when somebody happens to open the screen. The period end
+   * is fixed, which is the point of measuring from it.
+   */
+  periodEnd?: string | null
 }
 
 export const DEFAULT_FLAG_RULES: FlagRules = { newJoinerCutoffDays: 30 }
@@ -43,7 +53,11 @@ export function flagFor(
   if (e.dateOfLeaving && e.dateOfLeaving <= today) return 'EXITED'
   if ((e.dateOfLeaving && e.dateOfLeaving > today) || e.resignationDate) return 'NOTICE_PERIOD'
   if (e.dateOfJoining) {
-    const d = days(today, e.dateOfJoining)
+    // Measured from the period end where one is known — see FlagRules.periodEnd.
+    // Falls back to today so an existing caller that passes no period keeps
+    // its old behaviour rather than silently reporting everybody ACTIVE.
+    const against = rules.periodEnd || today
+    const d = days(against, e.dateOfJoining)
     if (!Number.isNaN(d) && d >= 0 && d < rules.newJoinerCutoffDays) return 'NEW_JOINER'
   }
   return 'ACTIVE'

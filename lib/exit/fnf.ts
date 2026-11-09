@@ -24,15 +24,17 @@ export function serviceOf(dojIso: string, lwdIso: string): { years: number; days
 
 /** Gratuity eligibility: 4 years + 240 days (§9.1-3). Years counted for the formula: completed
  *  years, plus one when the leftover is more than six months (Payment of Gratuity Act, s.4(2)). */
-export function gratuityOf(basicMonthly: number, dojIso: string | null, lwdIso: string, o: { withhold?: boolean } = {}): { eligible: boolean; years: number; amount: number; note: string } {
+export function gratuityOf(basicMonthly: number, dojIso: string | null, lwdIso: string, o: { withhold?: boolean; death?: boolean } = {}): { eligible: boolean; years: number; amount: number; note: string } {
   if (!dojIso) return { eligible: false, years: 0, amount: 0, note: 'No date of joining on record' }
   const s = serviceOf(dojIso, lwdIso)
-  const eligible = s.years > 4 || (s.years === 4 && s.days >= 240)
+  // On death the continuous-service condition does not apply (Payment of Gratuity Act, s.4(1) proviso).
+  const eligible = !!o.death || s.years > 4 || (s.years === 4 && s.days >= 240)
   const years = s.years + (s.days > 182 ? 1 : 0)
   if (!eligible) return { eligible: false, years, amount: 0, note: `${s.years} yr ${s.days} d of service: below 4 years + 240 days` }
   const amount = Math.min(GRATUITY_CAP, Math.round(basicMonthly * 15 / 26 * years))
+  if (o.death && years === 0) return { eligible: true, years: 0, amount: 0, note: 'Death in service: payable to the nominee, but under 6 months of service counts as 0 years' }
   if (o.withhold) return { eligible: true, years, amount: 0, note: `Eligible (${years} yrs, ₹${amount.toLocaleString('en-IN')}) but withheld for this exit reason pending inquiry` }
-  return { eligible: true, years, amount, note: `(Basic × 15 ÷ 26) × ${years} yrs${amount === GRATUITY_CAP ? ' (capped at ₹20 lakh)' : ''}` }
+  return { eligible: true, years, amount, note: `(Basic × 15 ÷ 26) × ${years} yrs${amount === GRATUITY_CAP ? ' (capped at ₹20 lakh)' : ''}${o.death ? ' · death in service: no minimum service, payable to the nominee' : ''}` }
 }
 
 /** Salary for days not yet paid: from the day after the last processed month to the LWD (§9.1-1).
@@ -90,6 +92,7 @@ export const LETTER_LABEL: Record<LetterKind, string> = {
 export function lettersFor(reason: string, o: { caseByCase?: boolean } = {}): LetterKind[] {
   const r = reason.toUpperCase()
   if (r === 'TRANSFER') return ['FNF_STATEMENT']
+  if (r === 'DEATH') return ['FNF_STATEMENT', 'PF_GUIDANCE']   // the nominee's PF / pension / EDLI claim
   if (r === 'ABSCOND' || r === 'FRAUD') return ['FNF_STATEMENT', 'TERMINATION', 'PF_GUIDANCE']
   if (r === 'TERMINATION') return o.caseByCase ? ['FNF_STATEMENT', 'TERMINATION', 'EXPERIENCE', 'RELIEVING', 'PF_GUIDANCE'] : ['FNF_STATEMENT', 'TERMINATION', 'PF_GUIDANCE']
   return ['FNF_STATEMENT', 'EXPERIENCE', 'RELIEVING', 'PF_GUIDANCE']   // self resignation, layoff, discontinue
@@ -99,7 +102,7 @@ export const WITHHOLD_GRATUITY = ['ABSCOND', 'FRAUD']
 /** Pending salary only for an abscond: no EL encashment (§2 table). */
 export const NO_EL_ENCASHMENT = ['ABSCOND']
 /** No notice shortfall is charged when the company ends the employment. */
-export const NO_NOTICE_RECOVERY = ['ABSCOND', 'FRAUD', 'LAYOFF', 'TERMINATION', 'DISCONTINUE', 'TRANSFER']
+export const NO_NOTICE_RECOVERY = ['ABSCOND', 'FRAUD', 'LAYOFF', 'TERMINATION', 'DISCONTINUE', 'TRANSFER', 'DEATH']
 
 export const rupees = (n: number) => `₹${Math.round(n || 0).toLocaleString('en-IN')}`
 export { r2 }

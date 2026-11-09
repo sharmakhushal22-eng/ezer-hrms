@@ -99,6 +99,9 @@ export const ROUTE_MODULE: Record<string, Module> = {
   '/dashboard/loans':              'Loans',
   '/dashboard/compliance':         'Compliance',
   '/dashboard/letters':            'HR Letters',
+  // EZER Sign: sending documents for signature is an HR documents job, so it rides on the
+  // HR Letters grant instead of a new row in every role's permissions.
+  '/dashboard/esign':              'HR Letters',
   '/dashboard/policies':           'Policies',
   '/dashboard/admin':              'Admin Setup',
   '/dashboard/configuration':      'Configuration',

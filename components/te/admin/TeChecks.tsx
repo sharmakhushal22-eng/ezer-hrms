@@ -11,6 +11,7 @@ import { te } from '@/lib/te/client'
 import type { TeCheck, TeConfig } from '@/lib/te/types'
 import { changedRows, isDirty, whatChangingAffects } from '@/lib/te/admin-edit'
 import { errorText } from '@/lib/te/format'
+import { checkState, checkStateWords, checkTally, ENFORCED_ELSEWHERE, WHY_NOT } from '@/lib/te/checks'
 import TeIcon from '../TeIcon'
 
 const ACTIONS: { id: string; label: string; note: string }[] = [
@@ -29,6 +30,15 @@ export default function TeChecks({ cfg, onSaved, onToast }: {
   const [checks, setChecks] = useState<TeCheck[]>(cfg.checks ?? [])
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
+
+  /** What this check really does, and the words for it. */
+  const state = (c: TeCheck) => checkState(c.c, !!c.live)
+  const words = (c: TeCheck) => checkStateWords(state(c))
+  /** The one line an administrator should read before trusting this list. */
+  const tally = useMemo(
+    () => checkTally(checks.map(c => ({ code: c.c, on: !!c.on, live: !!c.live }))),
+    [checks],
+  )
 
   const dirty = useMemo(() => isDirty(cfg.checks, checks), [cfg.checks, checks])
   const off = checks.filter(c => !c.on).length
@@ -66,6 +76,23 @@ export default function TeChecks({ cfg, onSaved, onToast }: {
 
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
 
+      {/* SAY WHAT THIS LIST IS WORTH, before anybody counts it as 55 controls.
+          A check that is declared and evaluated nowhere is worse than no
+          check, because it gets relied on — in an audit, in a policy
+          document, in somebody's decision not to look at a claim. */}
+      <div className={tally.unbuilt ? 'flag warn' : 'flag ok'}>
+        <TeIcon name={tally.unbuilt ? 'alert' : 'check'} />
+        <div className="tx">
+          <b>{tally.running} of {tally.total} checks are running</b>
+          <p>
+            {tally.offByChoice ? `${tally.offByChoice} switched off here. ` : ''}
+            {tally.unbuilt
+              ? `${tally.unbuilt} are declared in the catalogue and evaluated nowhere — the switch on those rows does nothing. Each one says why below.`
+              : 'Every check in the catalogue is evaluated somewhere.'}
+          </p>
+        </div>
+      </div>
+
       {off ? (
         <div className="flag warn">
           <TeIcon name="alert" />
@@ -98,9 +125,22 @@ export default function TeChecks({ cfg, onSaved, onToast }: {
                       {a.label}
                     </button>
                   ))}
-                  {c.live ? <span className="chip plain t-brand">Checked as they type</span> : null}
+                  {/* WHAT THIS CHECK ACTUALLY DOES. The chip used to appear
+                      only for c.live and said "Checked as they type", which
+                      left every other check — including eleven that are
+                      evaluated nowhere at all — looking identical to one that
+                      runs. An administrator reading this screen, or an auditor
+                      being shown it, was counting controls that do not
+                      execute. See lib/te/checks.ts. */}
+                  <span className={`chip plain ${words(c).tone}`} title={words(c).help}>{words(c).label}</span>
                 </div>
                 <div className="small muted">{ACTIONS.find(a => a.id === c.a)?.note}</div>
+                {state(c) === 'unbuilt' ? (
+                  <div className="small muted">{WHY_NOT[c.c] ?? 'Declared in the catalogue and evaluated nowhere.'}</div>
+                ) : null}
+                {state(c) === 'enforced' ? (
+                  <div className="small muted">{ENFORCED_ELSEWHERE[c.c]}</div>
+                ) : null}
               </div>
               <label className="check small">
                 <input type="checkbox" checked={c.on} onChange={e => set(c.c, { on: e.target.checked })} />

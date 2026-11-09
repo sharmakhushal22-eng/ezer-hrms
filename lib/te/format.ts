@@ -30,6 +30,15 @@ export function when(iso: string | null | undefined): string {
 
 /** '1 leg', '6 legs'. The prototype's `pl`: a plain -s, which is all the words
  *  this module counts ever need (leg, trip, bill, stop, day, claim). */
+/** A date and, when it was recorded, the time with it. Migration 165 keeps
+ *  "not recorded" and midnight apart, so '' must never print as 00:00. */
+export function dayAt(iso: string | null | undefined, hhmm?: string | null): string {
+  const d = day(iso)
+  if (!d) return ''
+  const t = (hhmm ?? '').trim()
+  return /^\d{2}:\d{2}$/.test(t) ? `${d}, ${t}` : d
+}
+
 export function plural(n: number, word: string): string {
   return `${n} ${word}${n === 1 ? '' : 's'}`
 }

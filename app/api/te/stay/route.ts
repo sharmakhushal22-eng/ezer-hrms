@@ -7,8 +7,17 @@
 // employee's own way into their stay is /api/te/bookings/request, which checks
 // ownership in SQL instead — the two are deliberately different because the
 // question is different: "is this my trip" there, "do you run the desk" here.
-// te_stay_decide checks Finance membership again regardless, so a permission
-// that drifted could still not turn into somebody picking their own hotel.
+// te_stay_decide checks TRAVEL DESK membership again regardless — migration 164
+// moved it off te_finance_members, which this comment still named — so a
+// permission that drifted cannot turn into an outsider picking the hotel.
+//
+// IT DOES NOT STOP A DESK MEMBER CHOOSING THEIR OWN. This comment used to claim
+// it did. te_stay_decide compares p_actor only against te_desk_members and has
+// no p_actor = t.employee_id guard, so a traveller who is on the travel desk
+// answers their own request — the thing the function's own preamble calls
+// meaningless. te_vehicle_verify has exactly that guard ("Nobody verifies their
+// own vehicle"); this does not. Migration 175 widened te_desk_members to every
+// active member, so the gap now reaches more people, not fewer.
 import { NextRequest } from 'next/server'
 import { teRoute } from '@/lib/te/server'
 import { needOneOf, needUuid, optText, TeHttpError } from '@/lib/te/errors'

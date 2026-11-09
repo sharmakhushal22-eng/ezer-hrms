@@ -66,7 +66,14 @@ export interface TripPlan {
 export function planTrip(EZ: Engine, empId: Uuid, draft: TripDraft): TripPlan
 export function planExtraLeg(EZ: Engine, tripId: Uuid, d: ExtraLegInput): { error: string } | { payload: Record<string, unknown> }
 
-export interface LegEndPayload { gps_km: number; route_km: number; gps_points: number; gps_gap_max_sec: number; gps_max_speed_kmh: number; moving_minutes: number; stats: TeLegStats }
+export interface LegEndPayload {
+  gps_km: number; route_km: number; gps_points: number; gps_gap_max_sec: number
+  gps_max_speed_kmh: number; moving_minutes: number; stats: TeLegStats
+  /** The trail as an encoded polyline, for te_legs.route_polyline. This is the
+   *  only record of the route that outlives the nightly purge of te_leg_pings,
+   *  so a journey that ends without it can never be drawn again. */
+  route_polyline: string
+}
 export function legEndStats(EZ: Engine, legId: Uuid, fix: GpsFix, nowMs: number): { error: string } | { stats: TeLegStats; payload: LegEndPayload }
 
 /** The JSON te_expense_save / te_leg_file take (146). */

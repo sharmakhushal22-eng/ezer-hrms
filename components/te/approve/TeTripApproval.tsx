@@ -14,7 +14,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { te } from '@/lib/te/client'
 import type { TeTripDetail as TripDetail, Uuid } from '@/lib/te/types'
 import { tripChip } from '@/lib/te/trips-list'
-import { day, errorText, plural, rs } from '@/lib/te/format'
+import { day, dayAt, errorText, plural, rs } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 
 type Action = 'approve' | 'sendback' | 'reject'
@@ -91,7 +91,13 @@ export default function TeTripApproval({ tripId, onBack, onDecided }: {
               {(t.points || []).map(p => pname(p.place) || '…').join(' → ')}
             </p>
             <p className="small muted">
-              {t.start ? (t.start === t.end ? day(t.start) : `${day(t.start)} to ${day(t.end)}`) : 'No dates'}
+              {/* The departure time when there is one: an approver deciding on a
+                  trip should see that "the 16th" means a 6am start. */}
+              {t.start
+                ? (t.start === t.end
+                  ? dayAt(t.start, t.points?.[0]?.leaveAt)
+                  : `${dayAt(t.start, t.points?.[0]?.leaveAt)} to ${day(t.end)}`)
+                : 'No dates'}
               {` · ${plural(legs.length, 'journey')}`}{t.purpose ? ` · ${t.purpose}` : ''}
             </p>
           </div>

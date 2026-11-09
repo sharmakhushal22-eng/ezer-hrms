@@ -1316,7 +1316,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
   req: any; mrfNumber: string | null; headNames: string
   /** an edit changed something the e-mail quotes (address, name, position, joining date) */
   onFactsChanged: (f: { email: string | null; name: string | null; designation: string | null; doj: string | null }) => void
-  mail: { to: string; cc: string; subject: string; body: string; setTo: (v: string) => void; setCc: (v: string) => void; setSubject: (v: string) => void; setBody: (v: string) => void }
+  mail: { to: string; cc: string; subject: string; body: string; setTo: (v: string) => void; setCc: (v: string) => void; setSubject: (v: string) => void; setBody: (v: string) => void; esign: boolean; setEsign: (v: boolean) => void }
   onClose: () => void; onSend: () => void; sending: boolean
 }) {
   const [file, setFile] = useState<OfferFileData | null>(null)
@@ -1589,6 +1589,11 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   ))}
                   <label className="rx-label" style={{ display:'block', marginBottom:5 }}>Email body</label>
                   <textarea className="rx-input" value={mail.body} onChange={e => mail.setBody(e.target.value)} style={{ height:'auto', minHeight:200, resize:'vertical', padding:'10px 13px', marginBottom:10 }} />
+                  {/* EZER Sign (lib/recruitment/offer-esign.ts): the mail gets a "Review & sign" link; signing records the acceptance by itself. */}
+                  <label style={{ display:'flex', gap:9, alignItems:'flex-start', fontSize:12.5, color:TK.ink, lineHeight:1.5, marginBottom:10, cursor:'pointer' }}>
+                    <input type="checkbox" checked={mail.esign} onChange={e => mail.setEsign(e.target.checked)} style={{ marginTop:3, flexShrink:0 }} />
+                    <span><b>Ask the candidate to accept by e-signature</b><br /><span style={{ color:TK.muted }}>The mail adds a “Review &amp; sign” link. When they sign, the signed letter is filed and the offer is marked Accepted automatically; you get the signed copy by e-mail.</span></span>
+                  </label>
                   <div style={{ fontSize:11.5, borderRadius:7, padding:'8px 12px', marginBottom:10, background: canSend ? TK.brandTint : TK.warningTint, color: canSend ? TK.brandDeep : TK.warning }}>
                     {!approved ? `Yet to be approved by the HR Head${headNames ? ` (${headNames})` : ''}. You can verify and generate meanwhile.`
                       : !verified ? 'Tick the confirmation above first.'
@@ -1634,6 +1639,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
   const [selected, setSelected] = useState<any>(null)
   const [toEmail, setToEmail] = useState('')
   const [ccEmails, setCcEmails] = useState('')
+  const [offerEsign, setOfferEsign] = useState(true)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -1750,6 +1756,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
     // 1. Actually email the offer letter to the candidate via Gmail.
     let sentPosition: { designation?: string | null; department?: string | null; location?: string | null } | null = null
+    let esignNote = ''
     try {
       const offer = {
         candidate_name: selected.candidates?.full_name,
@@ -1770,7 +1777,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         headers: await authHeaders(),
         // request_id: the server attaches the generated letter, and refuses unless the file is
         // fully verified and the letter was generated from it.
-        body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer, request_id: selected.id }),
+        body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer, request_id: selected.id, esign: offerEsign }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok || !d.ok) {
@@ -1779,6 +1786,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         return
       }
       sentPosition = d.position || null   // what the letter stated: kept on the offer_letters row
+      esignNote = d.esign ? `\nThe candidate can accept by e-signing it (envelope ${d.esign.envelope_no}).` : d.esign_error ? `\nThe e-signature link could not be added (${d.esign_error}). The candidate will reply by e-mail as before.` : ''
     } catch {
       setSending(false)
       alert('Email NOT sent: network error. Nothing was marked as sent.')
@@ -1834,7 +1842,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
     setSending(false)
     if (error) { alert('Email sent, but saving the record failed: ' + error.message); return }
-    alert(`Offer letter emailed to ${toEmail} and marked as Sent. Candidate moved to "Offer Sent".`)
+    alert(`Offer letter emailed to ${toEmail} and marked as Sent. Candidate moved to "Offer Sent".${esignNote}`)
     setSelected(null)
     setApproved(a => a.filter(r => r.id !== selected.id))
   }
@@ -1932,7 +1940,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         {selected && (
           <OfferFileScreen req={selected} mrfNumber={mrfNo(selected)}
             headNames={headNames(selected)} sending={sending} onSend={sendOffer} onClose={() => setSelected(null)} onFactsChanged={factsChanged}
-            mail={{ to: toEmail, cc: ccEmails, subject, body, setTo: setToEmail, setCc: setCcEmails, setSubject, setBody }} />
+            mail={{ to: toEmail, cc: ccEmails, subject, body, setTo: setToEmail, setCc: setCcEmails, setSubject, setBody, esign: offerEsign, setEsign: setOfferEsign }} />
         )}
       </div>
     </RxPage>

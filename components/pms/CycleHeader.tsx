@@ -70,7 +70,12 @@ export default function CycleHeader({
               + ' kra_window_from, kra_window_to,'
               + ' self_rating_from, self_rating_to, rm_review_from, rm_review_to,'
               + ' finalise_from, finalise_to, result_publish_date, status,'
-              + ' pms_policies(frequency)')
+              // The KRA rules come with the period's policy in the same
+              // query. They were hardcoded to DEFAULT_RULES below, so an
+              // admin changing min_kra_count left this header still saying
+              // "You need between 4 and 10".
+              + ' pms_policies(frequency, min_kra_count, max_kra_count,'
+              + ' total_weightage, min_weightage_per_kra)')
         // NOT .eq('status','ACTIVE') — pms_periods has no such value, and
         // that filter matches zero rows forever without ever erroring.
         .in('status', PERIOD_OPEN)
@@ -84,8 +89,19 @@ export default function CycleHeader({
         row[a] && row[b] ? { from: row[a] as string, to: row[b] as string } : undefined
 
       // How many periods a year, so "3rd of 4" can be said without arithmetic.
-      const freq = ((row as unknown as { pms_policies?: { frequency?: string } })
-        .pms_policies?.frequency) ?? null
+      const pol = (row as unknown as { pms_policies?: {
+        frequency?: string; min_kra_count?: number; max_kra_count?: number
+        total_weightage?: number; min_weightage_per_kra?: number
+      } }).pms_policies
+      const freq = pol?.frequency ?? null
+      // DEFAULT_RULES stays the fallback for a period with no policy, which
+      // pms_finalise refuses anyway — but it is no longer the answer.
+      const rules: Rules = {
+        minKra: Number(pol?.min_kra_count) || DEFAULT_RULES.minKra,
+        maxKra: Number(pol?.max_kra_count) || DEFAULT_RULES.maxKra,
+        totalWeightage: Number(pol?.total_weightage) || DEFAULT_RULES.totalWeightage,
+        minWeightagePerKra: Number(pol?.min_weightage_per_kra) || DEFAULT_RULES.minWeightagePerKra,
+      }
       const perYear = freq === 'MONTHLY' ? 12 : freq === 'QUARTERLY' ? 4
                     : freq === 'HALF_YEARLY' ? 2 : freq === 'ANNUAL' ? 1 : null
 
@@ -167,7 +183,7 @@ export default function CycleHeader({
       }
 
       if (alive) setD({
-        period, progress, queues, rules: DEFAULT_RULES, naming,
+        period, progress, queues, rules, naming,
         span: periodSpanShort(row.period_start, row.period_end),
         frequency: frequencyPhrase(freq),
         lastRating: ov?.final_score != null

@@ -32,6 +32,11 @@ export interface AckFacts {
   forms: string[]
   documents: number
   policies: { code: string; title: string; version?: string | null; at: string | null }[]
+  /** Built to be e-signed (lib/onboarding/esign.ts): the joiner's block is left empty for the
+   *  signature and its position is returned as `spot`. */
+  forSigning?: boolean
+  /** Signed with EZER Sign (e-mail OTP) rather than the earlier Aadhaar OTP demo. */
+  ezerSign?: boolean
 }
 
 const dateLong = (iso: string | null) => {
@@ -42,7 +47,8 @@ const dateLong = (iso: string | null) => {
 }
 const stamp = (d: Date) => d.toLocaleString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit', hour12: true, timeZone: 'Asia/Kolkata' })
 
-export async function ackPdf(company: any, f: AckFacts): Promise<{ name: string; content: Buffer }> {
+export async function ackPdf(company: any, f: AckFacts): Promise<{ name: string; content: Buffer; spot?: { page: number; x: number; y: number; w: number; h: number } }> {
+  let spot: { page: number; x: number; y: number; w: number; h: number } | undefined
   const [lh, sig] = await Promise.all([loadLetterhead(company), loadSignatory(company)])
   const M = lh.margins
   const title = `Joining Acknowledgement - ${f.employeeName}`
@@ -68,7 +74,7 @@ export async function ackPdf(company: any, f: AckFacts): Promise<{ name: string;
     d.font('Helvetica').fontSize(7.5).fillColor(MUTED).text(clean(`Generated ${stamp(f.generatedAt)}`), rx + 10, ty + 31, { width: rw - 20, lineBreak: false })
     d.y = ty + 52
     d.font('Helvetica').fontSize(10).fillColor(SOFT).text(clean(
-      `This confirms that ${f.employeeName} has completed the joining formalities with ${f.companyName}, read and acknowledged the company policies listed below, and e-signed the statutory forms with an Aadhaar OTP.`),
+      `This confirms that ${f.employeeName} has completed the joining formalities with ${f.companyName}, read and acknowledged the company policies listed below, and ${f.forSigning || f.ezerSign ? 'signed the statutory forms electronically' : 'e-signed the statutory forms with an Aadhaar OTP'}.`),
       x0, d.y, { width: W, lineGap: 1.5 })
     d.moveDown(0.7)
 
@@ -97,7 +103,7 @@ export async function ackPdf(company: any, f: AckFacts): Promise<{ name: string;
 
     // ── forms e-signed: chips ──────────────────────────────────────────
     ensure(40)
-    eyebrow('STATUTORY FORMS E-SIGNED')
+    eyebrow(f.forSigning ? 'STATUTORY FORMS SIGNED WITH THIS DOCUMENT' : 'STATUTORY FORMS E-SIGNED')
     let fx = x0
     const fy = d.y
     f.forms.forEach(fm => {
@@ -148,21 +154,29 @@ export async function ackPdf(company: any, f: AckFacts): Promise<{ name: string;
     d.font('Helvetica-Bold').fontSize(8.5).fillColor(BRAND).text('DECLARATION', x0 + 14, dy + 10, { width: W - 28, characterSpacing: 1.2 })
     d.font('Helvetica').fontSize(9.5).fillColor(SOFT).text(clean(decl), x0 + 14, dy + 22, { width: W - 28, lineGap: 1.5 })
     d.y = dy + dh + 12
-    ensure(68)
+    ensure(f.forSigning ? 76 : 68)
 
     // ── signatures: the joiner's e-sign stamp, and the company's signatory ──
     const sy = d.y, half = (W - 20) / 2
-    d.roundedRect(x0, sy, half, 58, 6).fillAndStroke(OK_TINT, OK_EDGE)
-    d.font('Helvetica-Bold').fontSize(8).fillColor(OK).text('E-SIGNED WITH AADHAAR OTP', x0 + 12, sy + 9, { width: half - 24, characterSpacing: .8, lineBreak: false })
-    d.font('Helvetica-Bold').fontSize(11).fillColor(INK).text(clean(f.employeeName), x0 + 12, sy + 22, { width: half - 24, lineBreak: false, ellipsis: true })
-    d.font('Helvetica').fontSize(8).fillColor(SOFT).text(clean(`Aadhaar XXXX XXXX ${f.aadhaarLast4 || '****'}${f.esignedAt ? `  ·  ${stamp(new Date(f.esignedAt))}` : ''}`), x0 + 12, sy + 38, { width: half - 24, lineBreak: false })
+    if (f.forSigning) {
+      // Left empty: EZER Sign stamps the joiner's signature here (label above, box below it).
+      d.font('Helvetica-Bold').fontSize(7.5).fillColor(MUTED).text('SIGNATURE OF THE EMPLOYEE', x0, sy + 2, { width: half, characterSpacing: .8, lineBreak: false })
+      d.roundedRect(x0, sy + 13, half, 52, 5).lineWidth(0.6).strokeColor(HAIR).stroke()
+      const range = d.bufferedPageRange()
+      spot = { page: range.start + range.count, x: x0 / d.page.width, y: (sy + 14) / d.page.height, w: half / d.page.width, h: 50 / d.page.height }
+    } else {
+      d.roundedRect(x0, sy, half, 58, 6).fillAndStroke(OK_TINT, OK_EDGE)
+      d.font('Helvetica-Bold').fontSize(8).fillColor(OK).text(f.ezerSign ? 'E-SIGNED WITH EZER SIGN' : 'E-SIGNED WITH AADHAAR OTP', x0 + 12, sy + 9, { width: half - 24, characterSpacing: .8, lineBreak: false })
+      d.font('Helvetica-Bold').fontSize(11).fillColor(INK).text(clean(f.employeeName), x0 + 12, sy + 22, { width: half - 24, lineBreak: false, ellipsis: true })
+      d.font('Helvetica').fontSize(8).fillColor(SOFT).text(clean(`${f.ezerSign ? 'E-mail OTP verified' : `Aadhaar XXXX XXXX ${f.aadhaarLast4 || '****'}`}${f.esignedAt ? `  ·  ${stamp(new Date(f.esignedAt))}` : ''}`), x0 + 12, sy + 38, { width: half - 24, lineBreak: false })
+    }
 
     const rx2 = x0 + half + 20
     d.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(clean(`For ${f.companyName}`), rx2, sy + 2, { width: half, align: 'right', lineBreak: false })
     if (sig.image) { try { d.image(sig.image, rx2 + half - 100, sy + 14, { fit: [100, 26] }) } catch { /* no signature image */ } }
     d.font('Helvetica-Bold').fontSize(10).fillColor(INK).text(clean(sig.name), rx2, sy + 42, { width: half, align: 'right', lineBreak: false })
     d.font('Helvetica').fontSize(8.5).fillColor(MUTED).text(clean(sig.designation), rx2, sy + 55, { width: half, align: 'right', lineBreak: false })
-    d.y = sy + 74
+    d.y = sy + (f.forSigning ? 78 : 74)
     d.end()
   })
 
@@ -170,5 +184,58 @@ export async function ackPdf(company: any, f: AckFacts): Promise<{ name: string;
   return {
     name: `Joining_Acknowledgement_${safe}.pdf`,
     content: await stampOnLetterhead(content, lh, { title, author: f.companyName, label: (i, n) => `${f.employeeName} - Joining acknowledgement ${f.ackNo} | Page ${i + 1} of ${n}` }),
+    spot,
+  }
+}
+
+/** The joiner's facts for the acknowledgement, by magic-link token or onboarding id. Shared by
+ *  the download route (app/api/onboarding/ack-pdf) and the signing bundle (lib/onboarding/esign.ts). */
+export async function loadAckFacts(supa: any, by: { token?: string; id?: string }): Promise<{ cand: any; company: any; facts: AckFacts } | null> {
+  let q = supa.from('onboarding_candidates')
+    .select('id, full_name, designation, department, date_of_joining, employee_code, company_id, location_id, form_data, esic_applicable, offered_ctc, esign_completed_at, magic_link_token')
+  q = by.token ? q.eq('magic_link_token', by.token) : q.eq('id', by.id || '')
+  const { data: cand } = await q.maybeSingle()
+  if (!cand) return null
+
+  const [{ data: company }, { data: policies }, { count: docCount }, { data: esign }, loc] = await Promise.all([
+    supa.from('companies').select('id, company_name, company_code, group_id, reg_office, corp_office, cin, gstin, pan').eq('id', cand.company_id).maybeSingle(),
+    supa.from('onboarding_policy_acks').select('policy_code, policy_title, policy_version, acknowledged_at')
+      .eq('onboarding_id', cand.id).not('acknowledged_at', 'is', null).order('ack_order'),
+    supa.from('onboarding_documents').select('id', { count: 'exact', head: true }).eq('onboarding_id', cand.id),
+    supa.from('onboarding_esign_records').select('aadhaar_last4, otp_verified_at').eq('onboarding_id', cand.id)
+      .order('otp_verified_at', { ascending: false }).limit(1).maybeSingle(),
+    cand.location_id
+      ? supa.from('locations').select('location_name, city').eq('id', cand.location_id).maybeSingle()
+      : Promise.resolve({ data: null as any }),
+  ])
+
+  const fd: any = cand.form_data || {}
+  const gross = cand.offered_ctc ? Number(cand.offered_ctc) / 12 : 0
+  const esic = cand.esic_applicable === true || fd.step_7?.esic_applicable === true || (gross > 0 && gross <= 21000)
+  const locData: any = (loc as any)?.data
+  const token = String(cand.magic_link_token || cand.id)
+
+  return {
+    cand,
+    company: company || { company_name: 'Your company' },
+    facts: {
+      ackNo: `EZR-ACK-${token.slice(0, 8).toUpperCase()}`,
+      generatedAt: new Date(),
+      employeeName: fd.step_3?.full_name || cand.full_name,
+      fatherName: fd.step_3?.father_name || null,
+      employeeCode: cand.employee_code || null,
+      designation: cand.designation,
+      department: cand.department,
+      doj: cand.date_of_joining,
+      companyName: company?.company_name || 'Your company',
+      workLocation: [locData?.location_name, locData?.city].filter(Boolean).join(', ') || null,
+      aadhaarLast4: esign?.aadhaar_last4 || fd.step_7?.aadhaar_last4 || null,
+      esignedAt: esign?.otp_verified_at || cand.esign_completed_at || null,
+      // EZER Sign records carry no Aadhaar digits; the older demo always did.
+      ezerSign: !!esign && !esign.aadhaar_last4,
+      forms: ['EPF Form 11', 'EPF Form 2', 'Gratuity Form F', ...(esic ? ['ESIC Form 1'] : []), 'Policy acknowledgements'],
+      documents: docCount || 0,
+      policies: (policies || []).map((p: any) => ({ code: p.policy_code, title: p.policy_title, version: p.policy_version, at: p.acknowledged_at })),
+    },
   }
 }

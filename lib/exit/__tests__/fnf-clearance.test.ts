@@ -68,3 +68,15 @@ test('totals and the letter matrix', () => {
   assert.ok(!lettersFor('TERMINATION').includes('EXPERIENCE') && lettersFor('TERMINATION', { caseByCase: true }).includes('EXPERIENCE'))
   assert.deepEqual(lettersFor('TRANSFER'), ['FNF_STATEMENT'])
 })
+
+test('death in service: gratuity with no minimum service, no notice recovery, the nominee’s letters', async () => {
+  const { NO_NOTICE_RECOVERY } = await import('../fnf.ts')
+  const { reasonOf, isSilent } = await import('../hr-exit.ts')
+  const g = gratuityOf(30000, '2024-01-01', '2026-10-31', { death: true })          // 2 y 10 m → 3 yrs
+  assert.equal(g.eligible, true); assert.equal(g.years, 3); assert.equal(g.amount, Math.round(30000 * 15 / 26 * 3))
+  assert.equal(gratuityOf(30000, '2024-01-01', '2026-10-31').eligible, false)
+  assert.ok(NO_NOTICE_RECOVERY.includes('DEATH'))
+  assert.deepEqual(lettersFor('DEATH'), ['FNF_STATEMENT', 'PF_GUIDANCE'])
+  assert.equal(reasonOf('DEATH')!.lwd, 'TODAY')
+  assert.ok(isSilent('DEATH') && !isSilent('LAYOFF'))
+})

@@ -148,10 +148,12 @@ function TreeRows({ members, names, joiner, exclude, onToggle }: { members: Memb
 
 // ── The modal ───────────────────────────────────────────────────────────────────────────────
 
-export default function GenerateCodeModal({ onboardingId, candidate, onClose, onDone }: {
+export default function GenerateCodeModal({ onboardingId, candidate, onClose, onDone, onGenerated }: {
   onboardingId: string
   candidate: { full_name: string; designation?: string | null; department?: string | null; employment_type?: string | null; email?: string | null; date_of_joining?: string | null; approvals?: Approval[] }
   onClose: () => void; onDone: (msg: string, type?: 'ok' | 'err') => void
+  /** The code exists: the page opens the Letter of Appointment next. */
+  onGenerated?: () => void
 }) {
   const [step, setStep] = useState<1 | 2 | 3>(1)
   const [opts, setOpts] = useState<Options | null>(null)
@@ -260,6 +262,7 @@ export default function GenerateCodeModal({ onboardingId, candidate, onClose, on
       const c = d.employee_code || code
       if (d.employee_synced === false) onDone(`Code ${c} generated, but Employee Master sync FAILED: ${d.sync_error || 'unknown error'}`, 'err')
       else onDone(`✓ ${c} generated for ${name} — in the Employee Master${d.team_changes ? `, ${d.team_changes} reporting line${d.team_changes === 1 ? '' : 's'} of their team re-pointed` : ''}${d.credentials_mailed ? `, login details mailed to ${candidate.email || 'the joiner'}` : `; login mail NOT sent (${d.credentials_error || 'see Roles & access'})`}.${(d.role_warnings || []).length ? ` Warnings: ${d.role_warnings.join('; ')}` : ''}`, d.credentials_mailed ? 'ok' : 'err')
+      if (d.employee_synced !== false) onGenerated?.()
       onClose()
     } catch (e: any) { onDone(e.message, 'err') } finally { setBusy(false) }
   }

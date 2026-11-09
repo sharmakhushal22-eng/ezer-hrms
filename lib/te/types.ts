@@ -157,14 +157,138 @@ export interface TeChainPreview { role: string; who: Uuid | null; team: string |
 export interface TeChainRow { step_no: number; stage: ClaimStage; level_id: Uuid | null; role_label: string; approver_id: Uuid | null; team_code: string | null; note: string | null }
 
 // ── trips and legs ──────────────────────────────────────────────────────────
-export interface TeTripPoint { place: Uuid; pt: string; what: string; arrive: IsoDate | ''; leave: IsoDate | ''; ret?: true }
-export interface TeTripSegment { mode: string; bookedBy: string; vehicleId: Uuid | null; xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }
+export interface TeTripPoint {
+  place: Uuid; pt: string; what: string
+  arrive: IsoDate | ''; leave: IsoDate | ''
+  /** 'HH:MM' or '' for not recorded, which is not midnight. Migration 165. */
+  leaveAt?: string; arriveAt?: string
+  ret?: true
+  /** A place passed through rather than the place you are going to. Lets a
+   *  stop sit on either leg; see DraftPoint.stop. Migration 170. */
+  stop?: true
+  /** For the Travel Desk, about this place: a remark and a link. Migration 172. */
+  prefNote?: string; prefUrl?: string
+}
+export interface TeTripSegment {
+  mode: string; bookedBy: string; vehicleId: Uuid | null
+  xfer: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }
+  /** What the traveller asked the Travel Desk for: the time of day they want
+   *  to leave, a link to the flight or train they found, and anything neither
+   *  can say. All optional. Migration 171. */
+  prefTime?: string; prefUrl?: string; prefNote?: string
+}
 export interface TeTripPerson { id: string; name: string; emp?: Uuid | null; found?: boolean }
 /** One hotel the employee would accept. Stored whole on the trip; the link is
  *  rendered as a link out and never fetched. */
 export interface TeStayOption { name: string; location: string; url: string; price?: number }
 /** What the Travel Desk decided about those hotels. 'NONE' means nobody has
  *  looked yet, which is what the desk's own work list is built from. */
+/** GET /api/te/admin/reports/approvers — F2 and F3, which are reports about
+ *  approvers rather than flags on claims. `on` reflects the switch in Admin →
+ *  Checks: a switched-off check still returns its rows, because the report is
+ *  how somebody decides whether to switch it on. */
+export interface TeFastApprover {
+  who: Uuid; name: string
+  /** Flagged claims this person decided in the window. */
+  flagged: number
+  /** How many of those were decided inside the threshold. */
+  fast: number
+  fastestSecs: number
+  medianSecs: number
+}
+export interface TeApproverPair {
+  who: Uuid; name: string
+  employee: Uuid; employeeName: string
+  /** This pairing's flagged claims, and that employee's total in the window. */
+  pairs: number; theirTotal: number
+  pct: number
+}
+export interface TeApproverWatch {
+  from: IsoDate
+  to: IsoDate
+  f2: { on: boolean; seconds: number; minClaims: number; rows: TeFastApprover[] }
+  f3: { on: boolean; pct: number; minClaims: number; rows: TeApproverPair[] }
+}
+
+/** GET /api/te/admin/desks — the desk configuration screen, in one read.
+ *  Rows are the raw database shape on purpose: this screen edits the table,
+ *  and renaming the columns on the way in and out would be two mappings to
+ *  keep in step with a migration. */
+export interface TeDeskPerson {
+  id: Uuid; emp_code: string; full_name: string
+  grade: string | null; department_id: Uuid | null; location_id: Uuid | null
+  company_id?: Uuid
+}
+export interface TeFinanceDeskRow {
+  id: Uuid; company_id: Uuid; location_id: Uuid | null; employee_id: Uuid
+  role: string; can_approve: boolean; can_disburse: boolean
+  approval_limit: number | null; is_group_scope: boolean; is_active: boolean
+}
+export interface TeTravelDeskRow {
+  id: Uuid; company_id: Uuid; location_id: Uuid | null; employee_id: Uuid
+  role: string; can_book: boolean; is_group_scope: boolean; is_active: boolean
+}
+export interface TeDesksPayload {
+  company_id: Uuid
+  company: { id: Uuid; company_code: string; company_name: string; group_id: Uuid | null } | null
+  group_companies: Uuid[]
+  locations: { id: Uuid; location_name: string; location_type: string | null; city: string | null; status: string | null }[]
+  departments: { id: Uuid; dept_name: string }[]
+  finance: TeFinanceDeskRow[]
+  travel: TeTravelDeskRow[]
+  /** true until migration 161 is applied; the Travel half is then unavailable. */
+  travel_table_missing: boolean
+  people: TeDeskPerson[]
+  pool: TeDeskPerson[]
+}
+
+/** GET /api/te/dashboard — the Reports and Dashboard tab, in one read. */
+export interface TeDashboardRow {
+  kind: 'trip' | 'claim'
+  id: Uuid
+  status: string
+  role: string
+  stage: string
+  actedAt: IsoTime | null
+  comment: string
+  who: string
+  whoId: Uuid
+  no: string
+  what: string
+  /** Destination label. '' when the trip never had one. */
+  where: string
+  amount: number
+}
+export interface TeDashboardMineTrip {
+  id: Uuid; no: string; name: string; scope: TripScope
+  status: TripStatus; display: TripDisplayStatus
+  start: IsoDate | null; end: IsoDate | null; to: string; estimate: number
+  /** Who it is sitting with right now, or null when nobody. */
+  withWhom: string | null
+}
+export interface TeDashboardMineClaim {
+  id: Uuid; no: string; status: ClaimStatus; stage: ClaimStage
+  claimed: number; approved: number | null; net: number | null
+  submitted: IsoTime | null; withWhom: string | null
+}
+/** A team member's request, as a manager sees it: what was asked and how far
+ *  it got, never what they were finally paid. */
+export interface TeTeamTrip extends Omit<TeDashboardMineTrip, 'name'> { name: string; who: string; whoId: Uuid }
+export interface TeTeamClaim {
+  id: Uuid; no: string; who: string; whoId: Uuid
+  status: ClaimStatus; stage: ClaimStage
+  claimed: number; approved: number | null
+  submitted: IsoTime | null; withWhom: string | null
+}
+export interface TeDashboard {
+  from: IsoDate
+  to: IsoDate
+  me: Uuid
+  mine: { trips: TeDashboardMineTrip[]; claims: TeDashboardMineClaim[] }
+  score: { cameToMe: number; approved: number; rejected: number; sentBack: number; waiting: number }
+  acted: TeDashboardRow[]
+  team: { people: number; trips: TeTeamTrip[]; claims: TeTeamClaim[] }
+}
 export interface TeStayDecision {
   status: 'NONE' | 'CHOSEN' | 'REJECTED'
   /** Index into stayOptions, for CHOSEN. Null otherwise. */
@@ -218,6 +342,13 @@ export interface TeTrip {
   /** The desk's answer to those hotels. */
   stay: TeStayDecision
   advance: number
+  /** How to reach the traveller about THIS trip, as they left it on the form.
+   *  Prefilled from their ESS record and editable there; never written back.
+   *  '' on every trip saved before the form asked, which is what makes the
+   *  planner prefill from ESS again when one is reopened. */
+  contactMobile: string
+  contactAltMobile: string
+  contactEmail: string
   pfReason: string
   pfNote: string
   legIds: Uuid[]
@@ -289,6 +420,36 @@ export interface TeLeg {
   stops: TeLegStop[]
   checkin: { start?: TeFixPoint; end?: TeFixPoint }
   history: TeTimelineEntry[]
+  /** The route actually travelled, as an encoded polyline — the one record of
+   *  it that outlives the nightly purge of the raw pings. '' on a journey
+   *  recorded before migration 180, and on one that was never tracked.
+   *  Decode with decodePolyline from engine/polyline.js. */
+  routeLine: string
+  /** Who has looked at this journey, and what they asked for. */
+  review: TeLegReview
+}
+
+/** Where the two desks have got to on one journey. Deliberately not part of
+ *  `status`: that drives the recorder, the claim gate and the one-running-
+ *  journey index, and none of those should move to answer "has anybody looked
+ *  at this yet". */
+export interface TeLegReview {
+  deskAt: IsoTime | null
+  deskBy: Uuid | null
+  deskName: string | null
+  finAt: IsoTime | null
+  finBy: Uuid | null
+  finName: string | null
+  /** Set while a desk has asked the traveller for something. While this is set
+   *  the claim for the trip is held. */
+  backAt: IsoTime | null
+  backBy: Uuid | null
+  backName: string | null
+  /** 'travel_desk' | 'finance_team' | '' */
+  backDesk: string
+  backWhy: string
+  /** The question and the traveller's answer, kept together. */
+  answer: string
 }
 
 // ── expenses, flags, claims ─────────────────────────────────────────────────
@@ -302,6 +463,10 @@ export interface TeExpense {
   tripId: Uuid | null
   legId: Uuid | null
   journeyId: Uuid | null
+  /** The booking this line is the bill for, when the Travel Desk bought it.
+   *  Set since 185, so a trip's bucket can add a desk booking without counting
+   *  a mirrored one twice. */
+  bookingId: Uuid | null
   /** te_categories.code */
   cat: string
   date: IsoDate
@@ -495,6 +660,14 @@ export interface TeConfig {
   track: Record<string, number | boolean | string>
   /** Vehicle rules: rcCheck, ownership, insurance (te_settings.vehicle_rules). */
   vehx: Record<string, number | boolean | string>
+  /** te_settings.extra — where a setting added after the table was built lives,
+   *  merged key by key by PATCH /api/te/admin/settings. Known keys:
+   *    bookingMail    { subject, body }  the traveller's ticket email
+   *    journeyConfirm 'both'|'finance'|'desk'|'none'  who confirms a journey
+   *  Typed as unknown values on purpose: each reader validates its own key
+   *  (confirmPolicy(), renderBookingMail()) rather than trusting the shape of
+   *  a jsonb column an administrator can edit. */
+  extra?: Record<string, unknown>
   fuelPrice: Record<string, number>
   basis: Record<string, string>
   breach: Record<string, string>
@@ -557,6 +730,19 @@ export interface Snapshot {
   batches: unknown[]
   settlements: unknown[]
   audit: unknown[]
+  /** How to reach me, read live off my ESS record. The trip and claim forms
+   *  PREFILL from this and the traveller may change what it put there; what they
+   *  leave is stored on the trip. Never written back here. Added by the route,
+   *  not by te_snapshot. */
+  contact: TeContactDetails
+}
+
+/** The three ways the travel desk reaches somebody about a trip or a claim.
+ *  Empty strings rather than nulls: these are form fields. */
+export interface TeContactDetails {
+  mobile: string
+  altMobile: string
+  email: string
 }
 
 // ── one-screen reads ────────────────────────────────────────────────────────
@@ -667,8 +853,8 @@ export interface TripDraft {
   origin?: TripOrigin
   purpose?: string
   project?: string
-  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; ret?: boolean }[]
-  segs: { mode: string; bookedBy?: string; vehicleId?: Uuid | null; xfer?: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid } }[]
+  points: { place: Uuid; pt?: string; what?: string; leave?: IsoDate | ''; arrive?: IsoDate | ''; leaveAt?: string; arriveAt?: string; ret?: boolean; stop?: boolean; prefNote?: string; prefUrl?: string }[]
+  segs: { mode: string; bookedBy?: string; vehicleId?: Uuid | null; xfer?: { first?: string; last?: string; hubA?: Uuid; hubB?: Uuid }; prefTime?: string; prefUrl?: string; prefNote?: string }[]
   pax?: number
   /** Co-travellers by employee code. */
   people?: { id: string; name?: string }[]
@@ -677,6 +863,10 @@ export interface TripDraft {
   foodWanted?: boolean | null
   stayOptions?: TeStayOption[]
   advance?: number
+  /** All three are required. The server refuses a trip without them. */
+  contactMobile?: string
+  contactAltMobile?: string
+  contactEmail?: string
   pfReason?: string
   pfNote?: string
   /** "What I changed", needed when the plan was sent back. */
@@ -701,6 +891,11 @@ export interface TripPreview {
   needsApproval: boolean
   chain: TeChainPreview[]
   entitlements: { tier: string; grade: string; hotel: number; meals: number; conv: number; air: string; train: string } | null
+  /** Who the co-traveller codes turned out to be. The server resolves these
+   *  to answer the preview anyway; the browser's own snapshot carries an
+   *  empty codes map, so this is the only place it can learn. `id` is null
+   *  when the code matches nobody in the company. */
+  people?: { code: string; id: Uuid | null; name: string; grade: string }[]
 }
 
 /** A GPS fix from the phone. */
@@ -752,7 +947,67 @@ export interface MileageView { rate: number; km: number; payKm: number; full: nu
 export interface ExpensePreview { flags: TeFlag[]; eligible: number; claimed: number; mileage: MileageView | null; blocked: boolean; needsReason: boolean }
 export type LegPreview = (ExpensePreview & { stats: TeLegStats | null }) | { none: true; stats: TeLegStats | null }
 
-export interface ClaimInput { tripId?: Uuid | null; lineIds?: Uuid[]; note?: string; declared?: boolean }
+/* ------------------------------------------------------------------ drafts --
+ * Unfinished work. A trip plan or an expense form that somebody stopped in the
+ * middle of, kept on the server so they can finish it another day or on another
+ * device. The server stores `body` verbatim and never reads inside it, so the
+ * shape of a draft is whatever the form that wrote it says it is:
+ *
+ *   trip      PlannerDraft (lib/te/trip-draft.ts), which already carries its
+ *             own `step` — all three scopes and both origins use the one shape
+ *   expense   ExpenseDraftBody below: the form state of TeExpenseForm
+ *   claim     a half-typed answer to a claim that was sent back
+ *
+ * Drafts are private: every function filters on the actor, and no route takes
+ * an employee id from the caller.
+ */
+export type TeDraftKind = 'trip' | 'expense' | 'claim'
+
+/** What TeExpenseForm needs back to look exactly as it was left. The amounts
+ *  are `number | string` because the form holds what was typed — '' for an
+ *  empty box — and turning that into 0 on the way back would invent a figure
+ *  the person never entered. */
+export interface ExpenseDraftBody { f: ExpenseInput; file: TeUploadedFile | null; fileName: string }
+
+export interface TeDraftInput {
+  /** Pass the id back to keep updating the same draft instead of making more. */
+  id?: Uuid | null
+  kind: TeDraftKind
+  /** What the Drafts list shows. Empty while the form has nothing to call itself. */
+  title?: string | null
+  /** 'local' | 'domestic' | 'international' for a trip; the category for an expense. */
+  scope?: string | null
+  /** Which step of the wizard to reopen at. */
+  step?: number
+  body: Record<string, unknown>
+  /** Set when the draft is an edit of something that already exists. */
+  trip_id?: Uuid | null
+  claim_id?: Uuid | null
+}
+
+export interface TeDraft {
+  id: Uuid
+  kind: TeDraftKind
+  title: string | null
+  scope: string | null
+  step: number
+  body: Record<string, unknown>
+  trip_id: Uuid | null
+  claim_id: Uuid | null
+  created_at: string
+  updated_at: string
+}
+
+export interface ClaimInput {
+  tripId?: Uuid | null; lineIds?: Uuid[]; note?: string; declared?: boolean
+  /** How to reach them about this claim. REQUIRED on a claim with no trip —
+   *  "Other expenses" never passes through the planner, so the claim screen is
+   *  the only place it can be asked. A claim that belongs to a trip inherits
+   *  what the trip carries and these are ignored. */
+  contactMobile?: string
+  contactAltMobile?: string
+  contactEmail?: string
+}
 export interface ClaimPreview {
   claimed: number
   eligible: number

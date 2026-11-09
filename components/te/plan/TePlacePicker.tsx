@@ -19,6 +19,7 @@ import { errorText } from '@/lib/te/format'
 import TeIcon from '../TeIcon'
 import TeSheet from '../TeSheet'
 import TePinMap from './TePinMap'
+import { reverseGeocodeHere, TePlaceSearch } from './TeGoogleMap'
 import type { PinView } from '@/lib/te/trip-map'
 
 /** Where a chosen place is going back to. */
@@ -28,12 +29,26 @@ export type PickTarget =
 
 const SRC_WORD: Record<string, string> = { gps: 'GPS', address: 'Typed address', pin: 'Pin on map', search: 'Map search' }
 
-export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
+export default function TePlacePicker({ snap, target, onCancel, onChosen, onPlaceAdded }: {
   snap: Snapshot
   target: PickTarget
   onCancel: () => void
   /** The place id, and the type it carries when it is a company place. */
   onChosen: (placeId: Uuid, pt?: string) => void
+  /**
+   * A place that did not exist until a moment ago was just created.
+   *
+   * WHY THE HOST HAS TO BE TOLD. Every screen names a point by looking its id
+   * up in snap.masters.places. That snapshot was fetched before this place
+   * existed, so the lookup misses and the route line renders "—": the place
+   * was saved, the point does carry its id, and it still looks as though
+   * nothing happened. This is what made "Use my location" appear not to be
+   * used as the start, the end or a stop.
+   *
+   * The host refetches the snapshot WITHOUT closing itself — the half-built
+   * trip lives in its state — exactly as it already does for a new vehicle.
+   */
+  onPlaceAdded?: () => void
 }) {
   const intl = target.kind === 'point' && !!target.intl
   const [q, setQ] = useState(target.kind === 'hub' ? (target.hub === 'airport' ? 'airport' : 'station') : '')
@@ -42,6 +57,11 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
   const [busy, setBusy] = useState(false)
   const [note, setNote] = useState('')
   const [pin, setPin] = useState<{ lat: number; lng: number } | null>(null)
+  /** A refusal, shown BESIDE THE BUTTON that caused it. `note` is drawn at the
+   *  top of the sheet, under "Use my current location" — and the save button
+   *  is in the sticky footer, so a person at the address form pressed it and
+   *  watched nothing happen while the reason sat off-screen above them. */
+  const [fault, setFault] = useState('')
   // The panel opens over the employee's own office, which is the nearest
   // thing to a useful starting view when there is no map behind it.
   const [view, setView] = useState<PinView>(() => {
@@ -52,19 +72,99 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
 
   const typedAddressAllowed = snap.cfg.track.typedAddress !== false
 
+  /** Fill the address from a position, without saving. Also used when the pin
+   *  is dragged, so the address follows the pin rather than going stale. */
+  const fillFrom = useCallback((lat: number, lng: number, acc?: number) => {
+    setFault('')
+    setPin({ lat, lng })
+    setView(v => ({ ...v, lat, lng }))
+    setTyping(true)
+    setBusy(true)
+    setNote('Looking up the address…')
+    // THE SERVER FIRST, THEN THE BROWSER. The server is the better place for
+    // this — its key is not in the page source and the Geocoding quota stays
+    // off a public key — but it answers found:false whenever its own Google
+    // project cannot geocode, and today that project has no billing enabled.
+    // The browser key's project is billed, which the map tiles prove, so the
+    // fallback works now and enabling billing later silently moves the work
+    // back to the server with no code change.
+    const fill = (r: { name?: string; address?: string; city?: string; pin?: string; country?: string }) => {
+      setAddr(a => ({
+        ...a,
+        src: 'gps',
+        // Only fill what is empty: somebody who has already typed their
+        // building name should not have it overwritten by a street number.
+        line: a.line?.trim() ? a.line : (r.name ?? ''),
+        area: a.area?.trim() ? a.area : '',
+        city: a.city?.trim() ? a.city : (r.city ?? ''),
+        pin: a.pin?.trim() ? a.pin : (r.pin ?? ''),
+        country: a.country?.trim() ? a.country : (r.country ?? 'India'),
+      }))
+      setNote(`${r.address || r.name || 'Found'}${acc ? ` · accurate to about ${Math.round(acc)} m` : ''}. Drag the pin if it is not the right spot.`)
+    }
+
+    te.placeLookup(lat, lng)
+      .then(async r => {
+        if (r.found) { setBusy(false); fill(r); return }
+        const here = await reverseGeocodeHere(lat, lng)
+        setBusy(false)
+        if (here) { fill(here); return }
+        // Neither path could answer. The pin is still the useful half — the
+        // distance is measured to it — so it is kept and the person types the
+        // address. Never a guessed one.
+        setNote(`Pinned at ${lat.toFixed(5)}, ${lng.toFixed(5)}. Type the address for this spot.`)
+      })
+      .catch(async e => {
+        const here = await reverseGeocodeHere(lat, lng).catch(() => null)
+        setBusy(false)
+        if (here) { fill(here); return }
+        setNote(errorText(e))
+      })
+  }, [])
+
   const locate = useCallback(() => {
     if (!('geolocation' in navigator)) { setNote('This device cannot read its location.'); return }
     setBusy(true); setNote('Reading your location…')
+
+    // OUR OWN CLOCK, because getCurrentPosition's `timeout` does not run while
+    // the browser's permission prompt is still on screen. Somebody who leaves
+    // that prompt sitting there — or never sees it, because it opens in the
+    // address bar rather than in the page — gets neither the success callback
+    // nor the error one, and the picker used to sit on "Reading your
+    // location…" for ever with no way forward but Back.
+    //
+    // Observed in testing: fifteen seconds on a pending prompt with the 12s
+    // option set, and no callback either way.
+    let answered = false
+    const giveUp = setTimeout(() => {
+      if (answered) return
+      answered = true
+      setBusy(false)
+      setNote('Still waiting for your location. Your browser may be asking permission — look for the prompt near the address bar. Or find the place by name, or type the address.')
+    }, 15000)
+    const settle = (fn: () => void) => {
+      if (answered) return
+      answered = true
+      clearTimeout(giveUp)
+      fn()
+    }
+
     navigator.geolocation.getCurrentPosition(
-      pos => {
-        te.placeAdd({ src: 'gps', lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy })
-          .then(r => onChosen(r.place_id))
-          .catch(e => { setNote(errorText(e)); setBusy(false) })
-      },
-      e => { setBusy(false); setNote(e.code === e.PERMISSION_DENIED ? 'Location is switched off for this site. Pick a place or type the address.' : 'Could not read your location. Pick a place or type the address.') },
+      // IT USED TO SAVE AND CLOSE HERE. The address was resolved on the server
+      // on the way in, so the person never saw what was found, could not fix a
+      // pin that landed on the next building, and the button's own subtitle
+      // promised something invisible. Now the position fills the form in front
+      // of them and they confirm it.
+      pos => settle(() => fillFrom(pos.coords.latitude, pos.coords.longitude, pos.coords.accuracy)),
+      e => settle(() => {
+        setBusy(false)
+        setNote(e.code === e.PERMISSION_DENIED
+          ? 'Location is switched off for this site. Find the place by name, or type the address.'
+          : 'Could not read your location. Find the place by name, or type the address.')
+      }),
       { enableHighAccuracy: true, timeout: 12000 },
     )
-  }, [onChosen])
+  }, [fillFrom])
 
   // "Use my current location" opened this picker, so ask straight away rather
   // than making the person press it a second time. Called from a timer, not
@@ -77,25 +177,58 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
     return () => clearTimeout(t)
   }, [wantGps, locate])
 
+  /** A place the map found, rather than one typed from memory. The pin IS the
+   *  position, so the parts of a postal address that exist to locate it —
+   *  the area, and a PIN that has to match the state — are not demanded. The
+   *  server applies the same distinction: te-service only insists on those for
+   *  src 'address'. */
+  const fromMap = addr.src === 'gps' || addr.src === 'search'
+
+  /** What is still missing, or '' when the place can be saved.
+   *
+   *  A PLACE THE MAP FOUND NEEDS ONLY THE PIN. This used to demand the
+   *  building, the city, the area and a six-digit PIN for every place —
+   *  including one just pinned by GPS, where the position IS the answer and
+   *  the postal parts only exist to locate it. The server has never asked for
+   *  them on a GPS place: te-service's src === 'gps' branch requires lat and
+   *  lng and nothing else, and fills the name from the reverse lookup.
+   *
+   *  So the form was stricter than the rules, and the result was the bug this
+   *  fixes: "Use my location" found the place, and pressing "Use this address"
+   *  silently refused because Google had not returned a locality. */
+  const missingFor = (): string => {
+    if (!pin) return 'Tap the exact spot on the map before you use this address.'
+    if (intl && !addr.country) return 'Choose the country.'
+    if (fromMap) return ''
+    if (!addr.line?.trim()) return 'Enter the building and street.'
+    if (!addr.area?.trim()) return 'Enter the area or locality.'
+    if (!addr.city?.trim()) return 'Enter the city.'
+    if (!intl && !/^\d{6}$/.test(addr.pin ?? '')) return 'Enter the 6-digit PIN code.'
+    return ''
+  }
+
   async function saveTyped() {
-    // Said in the order a person fills the form, so the first thing missing is
-    // the first thing mentioned.
-    const missing = intl && !addr.country ? 'Choose the country.'
-      : !addr.line?.trim() ? 'Enter the building and street.'
-        : !addr.area?.trim() ? 'Enter the area or locality.'
-          : !addr.city?.trim() ? 'Enter the city.'
-            : !intl && !/^\d{6}$/.test(addr.pin ?? '') ? 'Enter the 6-digit PIN code.'
-              // No geocoder is configured, so an address without a pin reaches
-              // the server with no position and nothing can be measured to it.
-              : !pin ? 'Tap the exact spot on the map before you use this address.'
-                : ''
-    if (missing) { setNote(missing); return }
+    const missing = missingFor()
+    if (missing) { setFault(missing); return }
+    setFault('')
     setBusy(true); setNote('')
     try {
-      const r = await te.placeAdd({ ...addr, src: 'address', lat: pin!.lat, lng: pin!.lng })
+      // The source is the truth about where this came from, and the server
+      // keeps it: a place pinned by GPS is audited as a GPS place, which is
+      // exactly what somebody checking a claim later needs to know.
+      const r = await te.placeAdd({
+        ...addr,
+        src: fromMap ? 'gps' : 'address',
+        label: fromMap ? (addr.line || '').trim() || undefined : undefined,
+        lat: pin!.lat,
+        lng: pin!.lng,
+      })
+      // The order matters: make the snapshot stale-check run first, so by the
+      // time the route line re-renders with this id it can find the place.
+      if (!r.matched) onPlaceAdded?.()
       onChosen(r.place_id)
     } catch (e) {
-      setNote(errorText(e)); setBusy(false)
+      setFault(errorText(e)); setBusy(false)
     }
   }
 
@@ -117,18 +250,49 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
         <>
           <button type="button" className="btn" onClick={onCancel}>Back</button>
           {typing ? (
-            <button type="button" className="btn pri" disabled={busy} onClick={saveTyped}>
-              <TeIcon name="pin" size="sm" />{busy ? 'Saving…' : 'Use this address'}
-            </button>
+            <>
+              {fault ? <span className="ferr"><TeIcon name="warn" size="sm" />{fault}</span> : null}
+              <button type="button" className="btn pri" disabled={busy} onClick={saveTyped}>
+                <TeIcon name="pin" size="sm" />
+                {busy ? 'Saving…' : fromMap ? 'Use this place' : 'Use this address'}
+              </button>
+            </>
           ) : null}
         </>
       }
     >
+      {/* FIND IT BY NAME, which is the cheapest way in for everybody: no
+          postal address typed from memory, no pin dropped and hoped over.
+          A suggestion carries Google's own coordinates for that building plus
+          the address, city and PIN, so the form fills itself and the pin is
+          exact. Renders nothing when the Places API is not enabled on the key,
+          leaving the two routes below untouched. */}
+      <TePlaceSearch
+        label={intl ? 'Find a place by name, in any country' : 'Find a place by name'}
+        // A domestic trip is inside India, so the suggestions should be too.
+        // An international one is biased to nothing, by design.
+        country={intl ? undefined : 'in'}
+        onFound={p => {
+          setPin({ lat: p.lat, lng: p.lng })
+          setView(v => ({ ...v, lat: p.lat, lng: p.lng }))
+          setTyping(true)
+          setAddr(a => ({
+            ...a,
+            src: 'search',
+            line: p.name || a.line,
+            city: p.city || a.city,
+            pin: p.pin || a.pin,
+            country: p.country || a.country,
+          }))
+          setNote(`${p.address || p.name}. Drag the pin if it is not the right spot.`)
+        }}
+      />
+
       <button type="button" className="act pri" disabled={busy} onClick={locate}>
         <span className="ico-b"><TeIcon name="target" /></span>
         <span>
           <b>Use my current location</b>
-          <small>Reads this phone’s GPS and fills the address from the map</small>
+          <small>Reads this phone’s GPS, shows it on the map and fills the address</small>
         </span>
       </button>
 
@@ -173,7 +337,20 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
 
       {typedAddressAllowed ? (
         <div className="sec">
-          <h4>Or enter the complete address</h4>
+          <h4>{fromMap ? 'The place the map found' : 'Or enter the complete address'}</h4>
+          {fromMap ? (
+            <div className="flag ok">
+              <TeIcon name="target" />
+              <div className="tx">
+                <b>Filled from your location</b>
+                <p>
+                  Check the name and the city, and drag the pin if it is not the right spot.
+                  The area and PIN are not needed — the pin is the position, and the distance
+                  on your claim is measured to it.
+                </p>
+              </div>
+            </div>
+          ) : null}
           {!typing ? (
             <button type="button" className="btn" onClick={() => setTyping(true)}><TeIcon name="pin" size="sm" />Enter the address</button>
           ) : (
@@ -188,7 +365,7 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
               </label>
               <label className="fld">
                 <span>Area or locality</span>
-                <input value={addr.area ?? ''} placeholder="Sector, colony or landmark" onChange={e => setAddr(a => ({ ...a, area: e.target.value }))} />
+                <input value={addr.area ?? ''} placeholder={fromMap ? 'Optional' : 'Sector, colony or landmark'} onChange={e => setAddr(a => ({ ...a, area: e.target.value }))} />
               </label>
               {intl ? (
                 <label className="fld">
@@ -211,7 +388,9 @@ export default function TePlacePicker({ snap, target, onCancel, onChosen }: {
                 />
               </label>
               <div className="full">
-                <TePinMap pin={pin} view={view} onPin={setPin} onView={setView} />
+                {/* Dragging the pin re-reads the address, so the two can never
+                    disagree about where this place is. */}
+                <TePinMap pin={pin} view={view} onPin={p => fillFrom(p.lat, p.lng)} onView={setView} />
               </div>
             </div>
           )}

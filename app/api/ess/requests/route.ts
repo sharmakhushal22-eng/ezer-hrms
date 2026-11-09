@@ -75,7 +75,7 @@ export async function GET(req: NextRequest) {
     // Only what HR has actually released to ESS. A generated letter that has
     // not been published is not the employee's to see yet.
     sb.from('generated_letters')
-      .select('id, template_id, letter_date, file_url')
+      .select('*')
       .eq('employee_id', me).not('published_to_ess_at', 'is', null)
       .order('letter_date', { ascending: false }).limit(50),
     sb.from('ess_letter_requests')
@@ -105,7 +105,8 @@ export async function GET(req: NextRequest) {
     letters: {
       issued: issued.map(l => ({
         id: l.id,
-        name: l.template_id ? names.get(l.template_id) ?? 'Letter' : 'Letter',
+        // A letter drawn without a template (the appointment letter) carries its own name.
+        name: (l as any).letter_name || (l.template_id ? names.get(l.template_id) ?? 'Letter' : 'Letter'),
         letter_date: l.letter_date,
         file_url: l.file_url,
       })),

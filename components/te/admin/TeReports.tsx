@@ -12,16 +12,22 @@
 // leads with a count per check and how often each was dismissed.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te, type ClaimSummaryRow, type FlagReportRow } from '@/lib/te/client'
+import { approverWatchEmpty, fastApproverText, pairedApproverText } from '@/lib/te/checks'
+import { rangeLabel } from '@/lib/te/dashboard'
 import { errorText, rs, when } from '@/lib/te/format'
+import type { TeApproverWatch } from '@/lib/te/types'
 import TeIcon from '../TeIcon'
 
 const PAGE = 50
-type Which = 'claims' | 'flags'
+type Which = 'claims' | 'flags' | 'approvers'
 
 export default function TeReports({ onToast }: { onToast: (message: string) => void }) {
   const [which, setWhich] = useState<Which>('claims')
   const [claims, setClaims] = useState<ClaimSummaryRow[] | null>(null)
   const [flags, setFlags] = useState<FlagReportRow[] | null>(null)
+  /** F2 and F3. A report about approvers rather than about claims, which is
+   *  why it lives here and raises nothing on any claim. */
+  const [watch, setWatch] = useState<TeApproverWatch | null>(null)
   const [total, setTotal] = useState(0)
   const [from, setFrom] = useState('')
   const [to, setTo] = useState('')
@@ -38,10 +44,14 @@ export default function TeReports({ onToast }: { onToast: (message: string) => v
       te.admin.claimsReport({ limit: PAGE, ...filters })
         .then(p => { if (current) { setClaims(p.rows ?? []); setTotal(p.total ?? 0); setError('') } })
         .catch(e => { if (current) { setClaims([]); setError(errorText(e)) } })
-    } else {
+    } else if (which === 'flags') {
       te.admin.flagsReport({ limit: 500, ...filters })
         .then(p => { if (current) { setFlags(p.rows ?? []); setTotal(p.total ?? 0); setError('') } })
         .catch(e => { if (current) { setFlags([]); setError(errorText(e)) } })
+    } else {
+      te.admin.approverWatch(filters)
+        .then(p => { if (current) { setWatch(p); setTotal(0); setError('') } })
+        .catch(e => { if (current) { setWatch(null); setError(errorText(e)) } })
     }
     return () => { current = false }
   }, [which, filters])
@@ -50,6 +60,8 @@ export default function TeReports({ onToast }: { onToast: (message: string) => v
 
   /** Straight to a file; a report can be thousands of rows. */
   async function download() {
+    // The approver report has no CSV: see the note beside the button.
+    if (which === 'approvers') return
     setBusy(true); setError('')
     try {
       const blob = await te.admin.reportCsv(which, filters as Record<string, string>)
@@ -82,13 +94,14 @@ export default function TeReports({ onToast }: { onToast: (message: string) => v
       <div className="ph">
         <div>
           <h1>Reports</h1>
-          <p>The claim register for reconciling, and every flag raised for seeing how the checks behave.</p>
+          <p>The claim register for reconciling, every flag raised for seeing how the checks behave, and how approvals are being done.</p>
         </div>
       </div>
 
       <div className="seg scopes" role="group" aria-label="Which report">
         <button type="button" aria-pressed={which === 'claims'} onClick={() => setWhich('claims')}>Claim register</button>
         <button type="button" aria-pressed={which === 'flags'} onClick={() => setWhich('flags')}>Flags</button>
+        <button type="button" aria-pressed={which === 'approvers'} onClick={() => setWhich('approvers')}>Approvers</button>
       </div>
 
       <div className="card">
@@ -96,10 +109,23 @@ export default function TeReports({ onToast }: { onToast: (message: string) => v
           <label className="fld sm"><span>From</span><input type="date" value={from} onChange={e => setFrom(e.target.value)} /></label>
           <label className="fld sm"><span>To</span><input type="date" value={to} onChange={e => setTo(e.target.value)} /></label>
         </div>
-        <button type="button" className="btn" disabled={busy} onClick={download}>
-          <TeIcon name="file" size="sm" />{busy ? 'Preparing…' : 'Download as CSV'}
-        </button>
-        <p className="small muted">A download holds up to 5,000 rows. Narrow the dates for a bigger period.</p>
+        {which === 'approvers' ? (
+          // No CSV for this one on purpose. It is a handful of rows about
+          // people, not a register to reconcile, and a spreadsheet of names
+          // with "fast" against them is the wrong thing to leave lying around.
+          <p className="small muted">
+            {/* rangeLabel, not `when`: these are dates, and `when` would add an
+                IST-shifted 05:30 to a date that never carried a time. */}
+            {watch ? `Decisions in ${rangeLabel(watch.from, watch.to).text}.` : 'The last 90 days unless you narrow the dates.'}
+          </p>
+        ) : (
+          <>
+            <button type="button" className="btn" disabled={busy} onClick={download}>
+              <TeIcon name="file" size="sm" />{busy ? 'Preparing…' : 'Download as CSV'}
+            </button>
+            <p className="small muted">A download holds up to 5,000 rows. Narrow the dates for a bigger period.</p>
+          </>
+        )}
       </div>
 
       {error ? <div className="ferr"><TeIcon name="alert" size="sm" />{error}</div> : null}
@@ -126,6 +152,77 @@ export default function TeReports({ onToast }: { onToast: (message: string) => v
           ))}
           {total > PAGE ? <div className="li"><span className="small muted">Showing the first {PAGE}. Download the CSV for the rest.</span></div> : null}
         </div>
+      ) : which === 'approvers' ? (
+        <>
+          {watch === null && !error ? <div className="card pad0"><div className="empty"><b>Loading…</b></div></div> : null}
+
+          {watch ? (
+            <div className="card pad0">
+              <div className="day">
+                <span>Cleared within seconds</span>
+                <span>{watch.f2.rows.length}</span>
+              </div>
+              {!watch.f2.on ? (
+                <div className="li"><span className="small muted">F2 is switched off. This list is still shown, but nothing acts on it.</span></div>
+              ) : null}
+              {!watch.f2.rows.length ? (
+                <div className="empty">
+                  <b>Nothing to look at</b>
+                  {approverWatchEmpty('f2', watch.f2.seconds, watch.f3.pct)}
+                </div>
+              ) : null}
+              {watch.f2.rows.map(r => (
+                <div key={r.who} className="li">
+                  <div className="grow">
+                    <div className="b">{r.name}</div>
+                    <div className="small muted">{fastApproverText(r, watch.f2.seconds)}</div>
+                  </div>
+                  <div className="amt"><b>{r.fast}</b><span className="small muted">fast</span></div>
+                </div>
+              ))}
+              <div className="li">
+                <span className="small muted">
+                  Counted only on claims that carried a flag, and only from {watch.f2.minClaims} such decisions.
+                  A flag exists to be read; deciding faster than it can be read is the thing worth a question.
+                  There are ordinary answers — somebody who read it on their phone before the claim reached their desk.
+                </span>
+              </div>
+            </div>
+          ) : null}
+
+          {watch ? (
+            <div className="card pad0">
+              <div className="day">
+                <span>Nearly always the same approver</span>
+                <span>{watch.f3.rows.length}</span>
+              </div>
+              {!watch.f3.on ? (
+                <div className="li"><span className="small muted">F3 is switched off. This list is still shown, but nothing acts on it.</span></div>
+              ) : null}
+              {!watch.f3.rows.length ? (
+                <div className="empty">
+                  <b>Nothing to look at</b>
+                  {approverWatchEmpty('f3', watch.f2.seconds, watch.f3.pct)}
+                </div>
+              ) : null}
+              {watch.f3.rows.map(r => (
+                <div key={`${r.who}-${r.employee}`} className="li">
+                  <div className="grow">
+                    <div className="b">{r.name} <span className="muted">and</span> {r.employeeName}</div>
+                    <div className="small muted">{pairedApproverText(r)}</div>
+                  </div>
+                  <div className="amt"><b>{r.pct}%</b><span className="small muted">of theirs</span></div>
+                </div>
+              ))}
+              <div className="li">
+                <span className="small muted">
+                  A share, not a count: shown from {watch.f3.minClaims} flagged claims and {watch.f3.pct}% upward.
+                  A small team with one approver looks exactly like this, which is why it is a report and not a flag.
+                </span>
+              </div>
+            </div>
+          ) : null}
+        </>
       ) : (
         <>
           <div className="card pad0">

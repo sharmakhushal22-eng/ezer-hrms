@@ -1,7 +1,7 @@
 // The wording helpers the screens share.
 import { test, describe } from 'node:test'
 import assert from 'node:assert/strict'
-import { rs, day, when, claimChip, claimHolder, currentStep, flagClass, errorText, todayIst } from '../format.ts'
+import { rs, day, dayAt, when, claimChip, claimHolder, currentStep, flagClass, errorText, todayIst } from '../format.ts'
 import type { TeStep } from '../types.ts'
 
 const step = (o: Partial<TeStep>): TeStep => ({ id: 's', n: 1, role: 'Reporting manager (R1)', who: 'e1', whoName: 'Rajesh Mehta', team: '', level: null, stage: 'manager', status: 'pending', by: null, byName: null, at: null, comment: '', due: null, ...o })
@@ -53,4 +53,20 @@ describe('claim wording', () => {
     assert.equal(errorText(new Error('Add a reason where one is asked.')), 'Add a reason where one is asked.')
     assert.equal(errorText('x'), 'Something went wrong. Try again.')
   })
+})
+
+test('dayAt prints the time only when there is one', () => {
+  // '' must never become midnight: migration 165 keeps "not recorded" and
+  // 00:00 as different facts, and so must the words for them.
+  const d = dayAt('2026-04-16')
+  assert.ok(d.length > 0)
+  assert.equal(dayAt('2026-04-16', ''), d)
+  assert.equal(dayAt('2026-04-16', null), d)
+  assert.equal(dayAt('2026-04-16', '  '), d)
+  assert.equal(dayAt('2026-04-16', '06:15'), `${d}, 06:15`)
+  // Anything that is not HH:MM is ignored rather than printed raw.
+  assert.equal(dayAt('2026-04-16', '6am'), d)
+  assert.equal(dayAt('2026-04-16', '06:15:00'), d)
+  assert.equal(dayAt(null, '06:15'), '')
+  assert.equal(dayAt('', '06:15'), '')
 })

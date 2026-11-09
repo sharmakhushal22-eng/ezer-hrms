@@ -56,7 +56,7 @@ export const ZINDEX_BASELINE: Record<string, number> = {
   'components/employees/HRActionPanel.tsx': 0,
   'components/ess/EmployeePortal.tsx': 3,
   'components/ess/FlexiClaims.tsx': 2,
-  'components/ess/hris/hris.css': 4,
+  'components/ess/hris/hris.css': 3,
   'components/ess/Inbox.tsx': 1,
   'components/ess/inbox/inbox.css': 7,
   'components/ess/LeaveSection.tsx': 1,

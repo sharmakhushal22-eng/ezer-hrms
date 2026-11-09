@@ -345,10 +345,17 @@ export function nextAction(
         if (period.self) {
           const closed = humanDate(period.self.to)
           const over = daysLeft(period.self, today)
+          // IT IS NOT THE MANAGER'S TO REOPEN. This used to say "Ask your
+          // manager to reopen it", which sent people to somebody who cannot:
+          // the window lives on the period, and §2's role matrix gives
+          // "Configure policy / periods" to HR Head and Admin alone. A manager
+          // asked to do this has nothing to click. The line below now names
+          // the team that can, and Admin → Performance → Setup & Controls is
+          // where they do it.
           return { title: 'You missed the self-rating window', tab: 'self', urgency: 'overdue',
-            daysLeft: over, cta: 'Ask your manager to reopen it',
+            daysLeft: over, cta: 'Ask HR to reopen it',
             blockedBy: `Self rating closed on ${closed}.`,
-            why: 'Your manager can still rate you without it, but your own view of your delivery will not be on record. Ask them to reopen the window if it matters to you.' }
+            why: 'Your manager can still rate you without it, but your own view of your delivery will not be on record. Ask your HR team to reopen the window if it matters to you — only they can change a period.' }
         }
         return { title: 'Self rating is not open yet', tab: 'self', urgency: 'info',
           cta: 'See your KRAs', blockedBy: 'No self-rating window is set.',

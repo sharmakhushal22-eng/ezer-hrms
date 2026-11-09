@@ -22,7 +22,7 @@
 //     is fetched again; no screen keeps its own copy of server state.
 import { useCallback, useEffect, useMemo, useState } from 'react'
 import { te } from '@/lib/te/client'
-import type { Snapshot, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail as TeTripDetailT, TripScope } from '@/lib/te/types'
+import type { Snapshot, TeConfig, TeDraft, TeExpense, TeLeg, TeQueueRow, TeTrip, TeTripDetail as TeTripDetailT, TripScope } from '@/lib/te/types'
 import TeIcon from './TeIcon'
 import TeSheet from './TeSheet'
 import TeSteps from './TeSteps'
@@ -30,6 +30,7 @@ import TeExpenseForm from './TeExpenseForm'
 import TeOtherExpenses from './TeOtherExpenses'
 import TePickTrip from './trip/TePickTrip'
 import TePlanner from './plan/TePlanner'
+import TeDrafts from './TeDrafts'
 import TeLimitsAndRates from './vehicle/TeLimitsAndRates'
 import TeTrips from './trip/TeTrips'
 import TeTripDetail from './trip/TeTripDetail'
@@ -41,14 +42,24 @@ import TeStartNow from './start/TeStartNow'
 import TeLegAdd from './leg/TeLegAdd'
 import TeAdvances from './claim/TeAdvances'
 import TeApprovals from './approve/TeApprovals'
+import TeDashboard from './report/TeDashboard'
+import TeFinanceDesk from './finance/TeFinanceDesk'
+import TeTravelDesk from './desk/TeTravelDesk'
 import { TeClaimDetail, TeClaimList } from './TeClaims'
 import { errorText, rs } from '@/lib/te/format'
 import { approvedTrips, continueItems, wayCount, wayOff, FLOW_WAYS, KIND_NAME, type WayId } from '@/lib/te/entry-flow'
+import { tripForHomeCard, tripHero } from '@/lib/te/trips-list'
 import './te.css'
 
 type View =
   | { name: 'home' } | { name: 'expenses' } | { name: 'claims' } | { name: 'limits' } | { name: 'trips' }
-  | { name: 'claim'; id: string } | { name: 'trip'; id: string } | { name: 'advances' } | { name: 'approvals' }
+  | { name: 'claim'; id: string; resuming?: TeDraft } | { name: 'trip'; id: string } | { name: 'advances' } | { name: 'approvals' }
+  /** Tab 1 of the three: everybody's reports and dashboard. */
+  | { name: 'dashboard' }
+  /** Tabs 2 and 3. Offered here, in ESS, only to the people on each desk —
+   *  see deskProbe below. The same screens are also in the admin console at
+   *  /dashboard/expenses for whoever administers the module. */
+  | { name: 'traveldesk' } | { name: 'financedesk' }
   /** The claim for one trip: its lines, what they are worth, and submit. */
   | { name: 'tripClaim'; trip: TeTrip }
   /** A leg, opened from its trip. Which screen it gets is the leg's own
@@ -60,16 +71,17 @@ type Sheet =
   | null
   | { name: 'new' }
   | { name: 'kind'; kind: TripScope; way: WayId | null }
-  | { name: 'expense'; line?: TeExpense; tripId?: string }
-  /** The three-step planner. `past` is "I already travelled". */
-  | { name: 'plan'; kind: TripScope; past: boolean; editing?: TeTrip }
+  | { name: 'expense'; line?: TeExpense; tripId?: string; resuming?: TeDraft }
+  /** The three-step planner. `past` is "I already travelled".
+   *  `resuming` is an unfinished plan being picked up again. */
+  | { name: 'plan'; kind: TripScope; past: boolean; editing?: TeTrip; resuming?: TeDraft }
   /** Leaving now: one form that creates the trip and starts leg 1. */
   | { name: 'startNow' }
   /** A leg the plan did not have, added to a trip under way. */
   | { name: 'addLeg'; detail: TeTripDetailT }
 
 /** The views the rail can land on. A claim is opened from a list, never from the rail. */
-type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals'
+type RailView = 'home' | 'trips' | 'expenses' | 'claims' | 'advances' | 'limits' | 'approvals' | 'dashboard' | 'traveldesk' | 'financedesk'
 const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'home', label: 'Home', icon: 'home' },
   { k: 'trips', label: 'Trips', icon: 'local' },
@@ -77,6 +89,9 @@ const RAIL: { k: RailView; label: string; icon: string }[] = [
   { k: 'claims', label: 'My claims', icon: 'claims' },
   { k: 'advances', label: 'Advances', icon: 'advances' },
   { k: 'limits', label: 'My limits and rates', icon: 'limits' },
+  // Last in the rail and offered to everyone: it is the place you go to look
+  // at what has already happened, not the place you go to do something.
+  { k: 'dashboard', label: 'Reports and dashboard', icon: 'history' },
 ]
 /** Nothing is left: every rail entry has a screen. Kept because the next
  *  thing added to the module will want it again. */
@@ -113,13 +128,56 @@ export default function TeHome({ initialClaimId, onExit }: {
   const [sheet, setSheet] = useState<Sheet>(null)
   const [toast, setToast] = useState('')
   const [tick, setTick] = useState(0)
-  const reload = useCallback(() => setTick(n => n + 1), [])
+  /** Whether this person is on the Travel desk and the Finance desk.
+   *
+   *  THE CALL SUCCEEDING *IS* THE PERMISSION, which is the same test the admin
+   *  console uses and the only honest one: both routes resolve membership in
+   *  SQL (te_on_desk, migration 161), so asking them is asking the database.
+   *  No role is named here and no department is named here — a Finance person
+   *  is somebody on the Finance desk, which is what the admin Desks screen
+   *  edits.
+   *
+   *  A desk whose call fails is simply not offered. Hidden rather than greyed
+   *  out: a disabled rail entry invites somebody to ask why, and the answer
+   *  would be "you are not on that desk", which is not a problem to solve. */
+  // Declared up here with the other hooks, NOT beside openAddLeg below: there
+  // is an early return between the two, so a useState down there is skipped on
+  // the loading render and React refuses the changed hook order.
+  const [openingTrip, setOpeningTrip] = useState(false)
+  const [onTravelDesk, setOnTravelDesk] = useState(false)
+  const [onFinanceDesk, setOnFinanceDesk] = useState(false)
+  /** Vehicle types for the Travel desk's rate note. Admin-only, so absent for
+   *  an ordinary desk user — the screen degrades and says so. */
+  const [cfg, setCfg] = useState<TeConfig | null>(null)
+  // A SHEET CLOSING DOES NOT UNMOUNT THIS SCREEN. The planner and the expense
+  // form open over Home, so when one closes, Home is still the component it
+  // always was — and the Drafts list under it would go on showing whatever it
+  // fetched when the screen first loaded. That is usually nothing, which is
+  // how a plan could be saved, confirmed as "Saved just now", and then not
+  // appear in the list behind it. Views do not need this: moving to Trips and
+  // back unmounts the list and it refetches on its own.
+  const [draftTick, setDraftTick] = useState(0)
+  const draftsChanged = useCallback(() => setDraftTick(n => n + 1), [])
+  const reload = useCallback(() => { setTick(n => n + 1); setDraftTick(n => n + 1) }, [])
 
   useEffect(() => {
     let current = true
     te.me().then(s => { if (current) { setSnap(s); setError('') } }).catch(e => { if (current) setError(errorText(e)) })
     // The queue is empty for most people; a failure here must not hide the rest of the screen.
     te.queue().then(q => { if (current) setQueue(q) }).catch(() => { if (current) setQueue([]) })
+    // Neither probe may surface an error: for almost everybody these 403, and
+    // that is the normal answer, not a fault.
+    te.desk.list()
+      .then(() => {
+        if (!current) return
+        setOnTravelDesk(true)
+        // Only now, and only for the handful of people who have the desk. Asked
+        // unconditionally this is a 403 round trip on every module load for all
+        // 397 employees who will never see the Travel desk.
+        te.admin.config().then(r => { if (current) setCfg(r.config) }).catch(() => { if (current) setCfg(null) })
+      })
+      .catch(() => { if (current) setOnTravelDesk(false) })
+    te.finance.summary().then(() => { if (current) setOnFinanceDesk(true) }).catch(() => { if (current) setOnFinanceDesk(false) })
     return () => { current = false }
   }, [tick])
 
@@ -155,6 +213,31 @@ export default function TeHome({ initialClaimId, onExit }: {
   const sentBack = snap.claims.filter(c => c.status === 'SENT_BACK')
   // A leg of mine that is running right now, if there is one.
   const liveLeg = snap.journeys.find(j => j.emp === snap.me && (j.status === 'ACTIVE' || j.status === 'PAUSED')) ?? null
+  // A TRIP OF MINE THAT IS UNDER WAY. te_leg_add accepts a journey only while
+  // te_trip_status is APPROVED/ONGOING/COMPLETED and today is inside the trip's
+  // dates, so offering it outside that window would be offering a refusal.
+  // ONGOING is the honest subset of that: travel has actually started.
+  //
+  // The newest first, for the vanishingly rare case of two at once — the
+  // database allows two approved trips to overlap, and somebody mid-trip is
+  // almost certainly thinking about the one they are on.
+  // A TRIP THAT STILL WANTS SOMETHING FROM YOU — not only one under way.
+  //
+  // This asked for display === 'ONGOING' alone, and a trip stops being ONGOING
+  // the moment its last journey is closed, which is before the hotel bill is
+  // typed up. So the card vanished at exactly the point somebody is sitting
+  // down to put the trip's costs in: on the real data the test traveller had
+  // three trips, none of them ONGOING, and Home offered her nothing.
+  //
+  // COMPLETED here means every journey closed and nothing claimed yet. The
+  // card says so rather than claiming she is travelling.
+  // Which trip the card is about — see tripForHomeCard, which is in lib/ and
+  // tested: both the window and the ordering got this wrong once each.
+  const onTrip = tripForHomeCard(snap.trips, snap.me)
+  /** Which actions that trip takes — the same rule the trip screen uses, so
+   *  the two surfaces cannot offer different things. */
+  const onTripCan = onTrip ? tripHero(onTrip, { canBill: true, mine: true }) : null
+  const onTripUnderWay = onTrip?.display === 'ONGOING'
 
   // Everything the entry flow shows comes from the one snapshot. placeName and
   // modeName turn the ids the server sends into the words the prototype used.
@@ -184,6 +267,34 @@ export default function TeHome({ initialClaimId, onExit }: {
   /** Opening a trip closes whatever sheet asked for it. */
   const openTrip = (id: string) => { setSheet(null); setView({ name: 'trip', id }) }
 
+  /**
+   * Open the add-a-journey sheet for a trip the Home screen only knows by id.
+   *
+   * The sheet needs the trip's full detail — its places, its legs, where the
+   * last one ended — and the snapshot does not carry that. One fetch, then the
+   * sheet, so somebody standing on a pavement gets there in one tap instead of
+   * navigating to the trip and scrolling to find the button.
+   */
+  const openAddLeg = async (tripId: string) => {
+    // THE BUTTON HAS TO SAY SOMETHING. The detail is fetched before the sheet
+    // can open, and with no busy state the first press looked like nothing had
+    // happened — in testing it took two presses before anything appeared, and
+    // the first press was doing the work all along.
+    if (openingTrip) return
+    setOpeningTrip(true)
+    try {
+      const detail = await te.trip(tripId)
+      setSheet({ name: 'addLeg', detail })
+    } catch (e) {
+      // Falling back to the trip rather than failing outright: the button is
+      // still there, one screen in.
+      setToast(errorText(e))
+      setView({ name: 'trip', id: tripId })
+    } finally {
+      setOpeningTrip(false)
+    }
+  }
+
   /** The Continue list knows a leg by its id; the screen needs the leg itself,
    *  which is in the snapshot it was listed from. */
   const openLeg = (tripId: string, legId: string) => {
@@ -212,6 +323,9 @@ export default function TeHome({ initialClaimId, onExit }: {
             : name === 'trips' ? { name: 'trips' }
               : name === 'advances' ? { name: 'advances' }
                 : name === 'approvals' ? { name: 'approvals' }
+                  : name === 'dashboard' ? { name: 'dashboard' }
+                    : name === 'traveldesk' ? { name: 'traveldesk' }
+                      : name === 'financedesk' ? { name: 'financedesk' }
               : { name: 'home' },
     )
   }
@@ -253,6 +367,18 @@ export default function TeHome({ initialClaimId, onExit }: {
               {r.k === 'claims' && open.length ? <span className="ct">{open.length}</span> : null}
             </button>
           ))}
+          {/* The two desks, under everything personal: this is work somebody
+              does on behalf of other people, not their own travel. */}
+          {onTravelDesk ? (
+            <button type="button" aria-current={view.name === 'traveldesk' ? 'page' : 'false'} onClick={() => goto('traveldesk')}>
+              <TeIcon name="plane" /><span>Travel desk</span>
+            </button>
+          ) : null}
+          {onFinanceDesk ? (
+            <button type="button" aria-current={view.name === 'financedesk' ? 'page' : 'false'} onClick={() => goto('financedesk')}>
+              <TeIcon name="claims" /><span>Finance desk</span>
+            </button>
+          ) : null}
           {RAIL_SOON.map(r => (
             <button key={r.label} type="button" aria-current="false" onClick={() => setToast(`${r.label} is build step ${r.step}.`)}>
               <TeIcon name={r.icon} /><span>{r.label}</span><span className="ct">soon</span>
@@ -289,6 +415,79 @@ export default function TeHome({ initialClaimId, onExit }: {
                 </div>
               </section>
 
+              {/* THE TRIP THAT STILL WANTS SOMETHING. The only way to log a
+                  local hop used to be Home -> Trips -> find the trip -> scroll
+                  to the Route card -> "Add a journey", which is four steps too
+                  many for somebody standing on a pavement in Mumbai.
+
+                  It covers a trip under way AND one you are back from with the
+                  claim not sent, because those are the two moments bills get
+                  added and the second is the commoner of them. The wording
+                  changes rather than claiming you are travelling when you are
+                  sitting at your desk. Still nothing at all for anybody with
+                  neither, so it never becomes clutter. */}
+              {onTrip ? (
+                <div className={`card ontrip${onTripUnderWay ? '' : ' back'}`}>
+                  <div className="row sp top">
+                    <div className="grow">
+                      <div className="eyebrow">{onTripUnderWay ? 'You are on a trip' : 'Back from a trip'}</div>
+                      <b>{onTrip.name || onTrip.no}</b>
+                      <div className="small muted">
+                        {/* The number IS the trip, so it opens it. Same act as
+                            "Open the trip" below, reached from the thing people
+                            actually recognise the trip by. */}
+                        <button
+                          type="button"
+                          className="tripno"
+                          onClick={() => setView({ name: 'trip', id: onTrip.id })}
+                          title={`Open ${onTrip.no} — the journeys, the bills, the stay and what it has cost so far`}
+                        >
+                          {onTrip.no}
+                        </button>
+                        {onTrip.to ? <> · {onTrip.to}</> : null}
+                      </div>
+                    </div>
+                    <span className={`chip ${onTripUnderWay ? 't-pos' : 't-warn'}`}>
+                      {onTripUnderWay ? 'On the way' : 'Not claimed yet'}
+                    </span>
+                  </div>
+                  <p className="small muted">
+                    {onTripUnderWay
+                      ? 'Paid for something, or hopping across the city? Put it on the trip now and it is paid with the rest of it, instead of becoming a loose bill you have to explain later.'
+                      : 'Add the hotel, the food and anything else you paid for, and any journey you did not record at the time. Then send the claim.'}
+                  </p>
+                  {/* BOTH ACTIONS, AND GIVEN REAL WEIGHT. This card offered
+                      "Add a journey" and nothing else, so the commoner of the
+                      two — you have just paid for a meal or a cab — meant
+                      opening the trip and scrolling to find the button. A bill
+                      is the thing people have in their hand; it goes first.
+
+                      Two wide targets side by side rather than three buttons in
+                      a row: on a phone a row of three collapses to something
+                      nobody can hit cleanly, and "Open the trip" is not the
+                      same KIND of act as the other two. It goes below, quieter,
+                      where it reads as "the rest of this trip" rather than
+                      competing with the thing you came to do. */}
+                  <div className="acts2">
+                    {onTripCan?.bill ? (
+                      <button type="button" className="btn pri actbtn" onClick={() => setSheet({ name: 'expense', tripId: onTrip.id })}>
+                        <TeIcon name="receipt" />
+                        <span>Add a bill</span>
+                      </button>
+                    ) : null}
+                    {onTripCan?.journey ? (
+                      <button type="button" className="btn pos actbtn" disabled={openingTrip} onClick={() => void openAddLeg(onTrip.id)}>
+                        <TeIcon name="route" />
+                        <span>{openingTrip ? 'Opening…' : 'Add a journey'}</span>
+                      </button>
+                    ) : null}
+                  </div>
+                  <button type="button" className="btn sm wide" onClick={() => setView({ name: 'trip', id: onTrip.id })}>
+                    Open the trip<TeIcon name="go" size="sm" />
+                  </button>
+                </div>
+              ) : null}
+
               <div className="kinds" role="list">
                 {KINDS.map(k => (
                   <button key={k.id} type="button" role="listitem" className={`kind k-${k.id}`} onClick={() => setSheet(k.id === 'other' ? { name: 'expense' } : { name: 'kind', kind: k.id, way: null })}>
@@ -299,6 +498,28 @@ export default function TeHome({ initialClaimId, onExit }: {
                   </button>
                 ))}
               </div>
+
+              {/* UNDER THE TILES, not above them. A draft is a trip somebody
+                  has already started, so it belongs with "start a trip" rather
+                  than in front of it — the tiles are the first thing somebody
+                  arriving to plan something new is looking for. Renders
+                  nothing at all when there are no drafts. */}
+              <TeDrafts
+                kind="trip"
+                title="Trip drafts"
+                reloadKey={draftTick}
+                onResume={d => {
+                  // The scope and "already travelled" live in the draft body,
+                  // which is the planner's own form state.
+                  const body = d.body as { scope?: TripScope; origin?: string }
+                  setSheet({
+                    name: 'plan',
+                    kind: body.scope ?? 'domestic',
+                    past: body.origin === 'POST_FACTO',
+                    resuming: d,
+                  })
+                }}
+              />
 
               {unclaimed.length || sentBack.length || queue.length ? (
                 <div className="card pad0 needs">
@@ -334,6 +555,13 @@ export default function TeHome({ initialClaimId, onExit }: {
           ) : null}
 
           {view.name === 'expenses' ? (
+            <>
+            <TeDrafts
+              kind="expense"
+              title="Expense drafts"
+              reloadKey={draftTick}
+              onResume={d => setSheet({ name: 'expense', resuming: d })}
+            />
             <TeOtherExpenses
               snap={snap}
               onAdd={() => setSheet({ name: 'expense' })}
@@ -342,12 +570,40 @@ export default function TeHome({ initialClaimId, onExit }: {
               // Screen 44: bills saved against a trip are claimed with that
               // trip, so the card that lists them goes to it.
               onOpenTrip={openTrip}
+              // A bill moved into a trip has left this bucket, so the snapshot
+              // this screen renders from is out of date the moment it happens.
+              onChanged={message => { setToast(message); reload() }}
             />
+            </>
           ) : null}
           {view.name === 'claims' ? <TeClaimList snap={snap} onOpen={id => setView({ name: 'claim', id })} /> : null}
           {view.name === 'limits' ? <TeLimitsAndRates snap={snap} onChanged={message => { setToast(message); reload() }} /> : null}
           {view.name === 'advances' ? <TeAdvances snap={snap} onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
           {view.name === 'approvals' ? <TeApprovals onToast={message => { setToast(message); reload() }} /> : null}
+          {view.name === 'dashboard' ? <TeDashboard onOpenTrip={id => setView({ name: 'trip', id })} /> : null}
+          {view.name === 'traveldesk' && onTravelDesk ? (
+            <TeTravelDesk
+              vehicleTypes={cfg?.vehicles ?? []}
+              fuelPrice={cfg?.fuelPrice ?? {}}
+              modes={cfg?.modes ?? []}
+              // A row on the desk is a line of a trip somebody planned. The
+              // whole plan — the route, the times they asked for, the hotels
+              // they suggested — is on the trip screen, so the desk opens it
+              // rather than restating a fraction of it on the row.
+              onOpenTrip={id => setView({ name: 'trip', id })}
+              onToast={message => { setToast(message); reload() }}
+            />
+          ) : null}
+          {/* Finance could not open a trip at all before this: every row in
+              every finance screen already carried trip_id and none of them
+              offered a way in, so the team settling a trip's money could not
+              read the trip. */}
+          {view.name === 'financedesk' && onFinanceDesk ? (
+            <TeFinanceDesk
+              onToast={message => { setToast(message); reload() }}
+              onOpenTrip={id => setView({ name: 'trip', id })}
+            />
+          ) : null}
           {view.name === 'tripClaim' ? (
             <TeOtherExpenses
               snap={snap}
@@ -397,8 +653,24 @@ export default function TeHome({ initialClaimId, onExit }: {
           {view.name === 'trip' ? (
             <TeTripDetail
               tripId={view.id}
+              masters={snap.masters}
               me={snap.me}
               today={snap.today}
+              // WHOSE MONEY THIS READER MAY SEE. A desk member, Finance or an
+              // administrator is looking at the trip to account for it and
+              // needs every traveller's lines; anybody else is looking at
+              // their own trip, and what a colleague was reimbursed is not
+              // theirs to read.
+              everyone={onTravelDesk || onFinanceDesk}
+              // FROM THE SNAPSHOT, which every employee has, not from the admin
+              // config. `cfg` is loaded by te.admin.config() and only for a desk
+              // administrator, so an ordinary traveller was handed [] and the
+              // bucket fell back to the built-in category copy: raw codes like
+              // "misc" where the company's own name belongs, and any category a
+              // company has added of its own forced into "Other". The ledger's
+              // own comment says these come from the snapshot precisely so that
+              // cannot happen; the call site was not honouring it.
+              cats={snap.cfg.cats}
               onBack={() => setView({ name: 'trips' })}
               onChanged={message => { setToast(message); reload() }}
               onEdit={d => setSheet({ name: 'plan', kind: d.trip.scope, past: d.trip.origin === 'POST_FACTO', editing: d.trip })}
@@ -413,6 +685,7 @@ export default function TeHome({ initialClaimId, onExit }: {
             <TeClaimDetail
               claimId={view.id}
               catName={catName}
+              resuming={view.resuming}
               onBack={() => setView({ name: 'claims' })}
               onChanged={message => { setToast(message); reload() }}
               // Screen 83d: a line the approver marked opens in the expense
@@ -556,13 +829,26 @@ export default function TeHome({ initialClaimId, onExit }: {
           snap={snap}
           detail={sheet.detail}
           onClose={() => setSheet(null)}
-          onAdded={(_legId, message) => done(message)}
+          onPlaceAdded={reload}
+          onAdded={(legId, message, opts) => {
+            const tripId = sheet.detail.trip.id
+            done(message)
+            // RECORDING HAS BEGUN, so land on the journey rather than the trip:
+            // the screen that shows the distance climbing is the one somebody
+            // who just pressed "Add and start now" is expecting. The journey
+            // was created a moment ago and is not in the snapshot this screen
+            // holds, so the trip is the honest fallback — it loads its own.
+            if (!opts?.started) return
+            const leg = snap.journeys.find(j => j.id === legId)
+            setView(leg ? { name: 'leg', tripId, leg } : { name: 'trip', id: tripId })
+          }}
         />
       ) : null}
       {sheet?.name === 'startNow' ? (
         <TeStartNow
           snap={snap}
           onClose={() => setSheet(null)}
+          onPlaceAdded={reload}
           onStarted={(tripId, legId, message) => {
             setSheet(null); setToast(message); reload()
             const leg = snap.journeys.find(j => j.id === legId)
@@ -578,7 +864,8 @@ export default function TeHome({ initialClaimId, onExit }: {
           scope={sheet.kind}
           origin={sheet.past ? 'POST_FACTO' : 'PRE_APPROVED'}
           editing={sheet.editing}
-          onClose={() => setSheet(null)}
+          resuming={sheet.resuming}
+          onClose={() => { setSheet(null); draftsChanged() }}
           // Screen 18: a plan you just sent lands on the trip itself, where the
           // approval chain and the next leg are. Going Home would hide the
           // thing that was just created behind a tile.
@@ -589,7 +876,7 @@ export default function TeHome({ initialClaimId, onExit }: {
         />
       ) : null}
       {sheet?.name === 'expense' ? (
-        <TeExpenseForm key={sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} tripId={sheet.tripId} onClose={() => setSheet(null)} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
+        <TeExpenseForm key={sheet.resuming?.id ?? sheet.line?.id ?? 'new'} snap={snap} line={sheet.line} tripId={sheet.tripId} resuming={sheet.resuming} onClose={() => { setSheet(null); draftsChanged() }} onSaved={message => { done(message); setView({ name: 'expenses' }) }} />
       ) : null}
 
       <div className="toasts" aria-live="polite">{toast ? <div className="toast">{toast}</div> : null}</div>

@@ -154,6 +154,240 @@
 .te .card{background:var(--ez-surface);border:1px solid var(--ez-line);border-radius:var(--te-r);padding:18px;box-shadow:var(--ez-shadow-raised);min-width:0}
 .te .card.flat{box-shadow:none}
 .te .card.pad0{padding:0;overflow:hidden}
+/* Puts the padding back on one child of a pad0 card — a header or a totals list
+   that should line up with the padded rows above it, inside a card whose own
+   padding was removed so its day-strips can run edge to edge. */
+.te .pad{padding:12px 14px}
+/* YOU ARE ON A TRIP RIGHT NOW, on the home screen. The only way to log a local
+   hop used to be Home -> Trips -> the trip -> scroll to the Route card, which is
+   three steps too many for somebody standing on a pavement. Shown only while a
+   trip of theirs is under way, so it is never clutter for anybody who is not
+   travelling. Bordered in the live colour, like .card.live and .livebar, because
+   it means the same thing. */
+/* ONE IDENTITY, AT THE EDGE — not a wash over the whole card.
+   This was background:var(--ez-positive-tint) with a positive border, and the
+   wash was the contrast bug: the secondary action's own background was the
+   SAME --ez-positive-tint, so "Add a journey" had no fill of its own and read
+   as a hole cut in the card. Three colour languages were competing in a card
+   four lines tall — a green wash, a filled blue button and a green ghost.
+
+   So the card is a plain surface, like every other card in the module, and its
+   identity is carried by a 3px inset edge plus the eyebrow and the chip. That
+   is the same accent device .draftrow.picked and .li.leg.nx already use.
+
+   The accent follows the state rather than staying green while the chip turns
+   amber: on the trip it is positive, back from it and unclaimed it is warning. */
+.te .ontrip{display:grid;gap:10px;box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-positive)}
+.te .ontrip .eyebrow{color:var(--ez-positive)}
+.te .ontrip.back{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-warning)}
+.te .ontrip.back .eyebrow{color:var(--ez-warning)}
+
+/* ── while a trip is under way (components/te/trip/TeTripNow.tsx) ──────────
+   Two hero tiles for the two things anybody does mid-trip, a strip above them
+   when a journey is recording, and a slim bar that takes over once the tiles
+   have scrolled away.
+
+   The tiles ARE .kind — the same component Home uses to start a trip — so all
+   that is needed here is the pair of accents. Blue for the bill because it is
+   the primary action of the two, green for the journey to match the "you are
+   on a trip" language the positive tint carries everywhere else in the module. */
+.te .k-bill{--te-k:var(--ez-brand);--te-kt:var(--ez-brand-tint)}
+.te .k-hop{--te-k:var(--ez-positive);--te-kt:var(--ez-positive-tint)}
+/* ITS OWN TWO-COLUMN GRID. These were `.kinds compact`, which was wrong twice
+   over: .kinds is a FOUR-column grid, so two tiles filled half the row and left
+   the other half empty on any desktop; and .compact is the dense horizontal
+   variant — min-height:0, a 40px icon, the footer line hidden — meant for a
+   list, not for the two biggest actions on the screen. Measured in the browser
+   at 1440px: 283x111 tiles in a 1172px row, icon chip 40px instead of 52px.
+   So: plain .kind tiles at their full size, in a grid of exactly two. */
+/* .kinds.triphero, not .triphero — `.te .kinds` and `.te .triphero` both carry
+   two classes, so with .kinds declared later it won on source order and kept
+   its four columns. Measured in the browser: the pair filled 578px of a 1172px
+   row. Naming both classes outranks it instead of racing it. */
+/* THE TRIP NUMBER IS THE TRIP'S IDENTITY, so it is also the way into it —
+   the same thing the desk screens already do with `link small mono`.
+
+   Underlined at rest rather than on hover only: this sits in a line of grey
+   secondary text, and a blue word among grey words is a weak signal on its
+   own. The underline is what says "this is a link" before anybody hovers.
+
+   A TINTED PILL WAS THE FIRST IDEA AND MEASURED WORSE. brand on --ez-brand-tint
+   is 4.75 in light — lower than brand on the plain card, because the tint
+   lifts the background toward the text. Deepening the blue on the card's own
+   surface instead gives 7.08, and a third filled blue thing on a card that
+   already has two filled blue buttons would have been noise anyway. */
+.te .tripno{background:none;border:0;padding:0;cursor:pointer;
+  font-family:var(--te-f-mono);font-size:12.5px;font-weight:700;letter-spacing:.01em;
+  color:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink));
+  text-decoration:underline;text-decoration-thickness:1.5px;text-underline-offset:3px;
+  text-decoration-color:color-mix(in srgb,var(--ez-brand) 40%,transparent)}
+/* Hover DEEPENS rather than lightening: a hover that reduces contrast is a
+   hover that punishes the person for aiming at it. 7.08 -> 8.34. */
+.te .tripno:hover{color:color-mix(in srgb,var(--ez-brand) 64%,var(--ez-ink));text-decoration-color:currentColor}
+.te .kinds.triphero{grid-template-columns:repeat(2,minmax(0,1fr));margin-bottom:16px}
+/* Two 172px tiles side by side on a phone would be a pair of slivers; one
+   column each is the whole point of them being big. */
+@media (max-width:640px){.te .kinds.triphero{grid-template-columns:minmax(0,1fr)}}
+.te .hero-end{height:0;margin:0}
+
+/* A trip's card on the Travel Desk's "By trip" view
+   (components/te/desk/TeDeskByTrip.tsx).
+
+   The accent edge is the same device .ontrip uses, for the same reason: a card
+   that needs somebody says so at its edge rather than by tinting everything
+   inside it, which is what put a button with no contrast on the Home card. */
+.te .tripbucket{padding:0}
+.te .tripbucket .ch{margin:0;padding:14px 16px 12px;align-items:flex-start}
+.te .tripbucket.needs{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-warning)}
+/* Nothing outstanding is still worth showing — it is the answer to "where are
+   we on this trip" — so it keeps a quieter edge rather than none. */
+.te .tripbucket:not(.needs){box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-line-strong,var(--ez-line))}
+.te .tripbucket .li{padding-left:16px;padding-right:16px}
+.te .tripbucket .li .b{display:flex;align-items:center;gap:8px}
+
+/* A trip's journeys, as a box that opens (components/te/desk/TeJourneyReview.tsx).
+
+   ONE BOX PER TRIP, SHUT BY DEFAULT. A desk with eight trips of journeys was
+   eight trips of maps and buttons stacked down one page; shut, it is eight
+   lines you can read in a glance and open the one you want. The head carries
+   the counts precisely so the box is worth shutting.
+
+   The accent edge says what is inside without opening it, the same device
+   .ontrip and .tripbucket use: critical when something is sent back and holding
+   a claim, warning when something waits, nothing when it is all agreed. */
+.te .jbox{padding:0;overflow:hidden}
+.te .jbox.back{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-critical)}
+.te .jbox.waiting{box-shadow:var(--ez-shadow-raised),inset 3px 0 0 var(--ez-warning)}
+
+/* The whole head is the button, so the target is the width of the box rather
+   than a chevron somebody has to aim at. */
+.te .jbox .jb-head{display:flex;align-items:flex-start;gap:10px;flex-wrap:wrap;width:100%;
+  padding:14px 16px;border:0;background:none;cursor:pointer;text-align:left;font:inherit;color:inherit}
+.te .jbox .jb-head:hover{background:var(--ez-brand-tint)}
+.te .jbox .jb-head .grow{min-width:0;display:grid;gap:2px}
+.te .jbox .jb-head .b,.te .jbox .jb-head .small{display:block}
+.te .jbox .jb-caret{flex-shrink:0;margin-top:2px;color:var(--ez-muted)}
+/* The number, readable while shut. Not a link here: a control inside a button
+   is not a control, so opening the trip lives in the body. */
+.te .jbox .jb-no{display:block;font-family:var(--te-f-mono);font-size:12px;font-weight:700;
+  color:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink))}
+.te .jbox .jb-body{display:grid;gap:12px;padding:0 16px 16px;border-top:1px solid var(--ez-line)}
+.te .jbox .jb-body .tripno{justify-self:start;margin-top:12px}
+@media (max-width:560px){
+  .te .jbox .jb-head{padding:12px 13px;gap:8px}
+  .te .jbox .jb-body{padding:0 13px 13px}
+}
+
+/* The on-a-trip card's two actions, on Home.
+
+   A PAIR OF WIDE TARGETS, not a row of three buttons. On a phone three in a
+   row wrap into something nobody can hit cleanly, and "Open the trip" is not
+   the same kind of act as the two that put something ON the trip — so it sits
+   below, quieter.
+
+   Icon above label rather than beside it: at this size the glyph is doing the
+   recognising, and stacking lets both buttons stay the same height however
+   long the label gets in another language. */
+.te .acts2{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+/* NAMED .actbtn, NOT .big — .big was already taken.
+   `.te .big` is a 46px display number and `.te .big span` paints its unit
+   --ez-muted. The label here lives in a <span>, so reusing .big put grey text
+   on a dark filled button: the button's own color:var(--ez-on-accent) was
+   never what the text took. Reported three times as "bad contrast"; every
+   measurement I made said AAA, because I was measuring the BUTTON and the
+   browser was painting the SPAN. Found by asking getComputedStyle. */
+.te .btn.actbtn{flex-direction:column;gap:6px;padding:14px 12px;min-height:84px;font-size:14px;border-radius:var(--te-r-sm);line-height:1.25}
+.te .btn.actbtn svg{width:24px;height:24px}
+/* THE LABEL ON A HERO BUTTON NEEDS MORE ROOM THAN THE TOKENS GIVE.
+   14px semibold on a filled background is NORMAL text to WCAG, not large — so
+   AA is 4.5 and AAA is 7.0. The base tokens deliver 5.17 (brand) and 5.48
+   (positive) in light: passing, but by two thirds of a point, and on a target
+   this size that margin is exactly what "the button text contrast is bad"
+   looks like. Reported twice before it was measured.
+
+   Mixing 24% toward --ez-ink puts every state past AAA in both themes:
+
+                     light rest / hover      dark rest / hover
+     bill   brand      7.08 / 8.34            9.18 / 10.16
+     journey positive  7.45 / 8.75           11.06 / 11.78
+
+   It works in both directions because ink is near-black in light, so the fill
+   deepens, and near-white in dark, so it lifts — and the dark label is
+   near-black, which wants a lighter fill anyway.
+
+   SCOPED TO .big DELIBERATELY. The module's ordinary .btn.pri is unchanged at
+   5.17; deepening every primary button in the product is a far larger change
+   than was asked for, and a bigger button carrying a slightly deeper fill
+   reads as emphasis rather than as a second shade of the same thing. */
+.te .btn.pri.actbtn{background:color-mix(in srgb,var(--ez-brand) 76%,var(--ez-ink));border-color:transparent}
+.te .btn.pri.actbtn:hover{background:color-mix(in srgb,var(--ez-brand) 64%,var(--ez-ink))}
+.te .btn.pos.actbtn{background:color-mix(in srgb,var(--ez-positive) 76%,var(--ez-ink));border-color:transparent}
+.te .btn.pos.actbtn:hover{background:color-mix(in srgb,var(--ez-positive) 64%,var(--ez-ink))}
+/* NO .btn.ok RULE HERE, deliberately. Adding one gave the pair two different
+   button species — a filled blue beside a green ghost on a green card — and it
+   reached further than intended: TeDrafts' "Keep them" is `btn ok glow`, which
+   had always taken its background from .btn, and gained a green fill it was
+   never designed with. .btn.ok.glow further down sets glow tokens only, which
+   is all `ok` was ever meant to mean. The two actions here are an ordinary
+   primary and secondary instead: same shape, same size, told apart by weight
+   and by their icons. */
+.te .ontrip .acts2{margin-top:2px}
+
+/* RECORDING NOW. Sticky, because an unfinished journey blocks the claim and so
+   deserves to follow the reader down the page. 57px is the header's height,
+   the offset .side already uses; below --ez-z-band so the header and any
+   popover still win. */
+.te .recnow{position:sticky;top:calc(env(safe-area-inset-top,0px) + 57px);z-index:var(--ez-z-rail);
+  display:flex;align-items:center;gap:12px;margin-bottom:12px;padding:11px 14px;
+  border:1px solid var(--ez-positive);border-radius:var(--te-r-sm);
+  background:var(--ez-positive-tint);box-shadow:var(--ez-shadow-raised)}
+.te .recnow .eyebrow{color:var(--ez-positive);display:block}
+.te .recnow b{display:block;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* The pulse reuses te-pulse, the keyframe the live chips already animate, so
+   "something is happening" looks the same wherever it is said. */
+.te .recnow .rdot{position:relative;width:12px;height:12px;flex-shrink:0;display:grid;place-items:center}
+.te .recnow .rdot:before{content:"";position:absolute;inset:0;border-radius:50%;background:var(--ez-positive);
+  animation:te-pulse 1.8s ease-out infinite}
+.te .recnow .rdot i{width:8px;height:8px;border-radius:50%;background:var(--ez-positive);position:relative}
+
+/* THE SLIM BAR, after the tiles have gone. Fixed, not sticky: it appears and
+   disappears with the scroll position, and a sticky element doing that would
+   shift the page under the reader's thumb as it mounted. Below the header, not
+   over the bottom, because .tabbar already owns the bottom of a phone. */
+/* left:228px, not 0 — .shell is a 228px rail plus the page above 860px, and a
+   bar pinned to the viewport's left edge would sit on top of the rail. Below
+   860px the rail becomes a horizontal strip and the bar takes the full width;
+   that override is in the phone block further down. */
+.te .nowbar{position:fixed;left:228px;right:0;top:calc(env(safe-area-inset-top,0px) + 57px);
+  z-index:var(--ez-z-rail);display:flex;align-items:center;gap:12px;
+  padding:9px max(14px,env(safe-area-inset-left,0px)) 9px max(14px,env(safe-area-inset-right,0px));
+  background:var(--ez-surface);border-bottom:1px solid var(--ez-line);
+  box-shadow:var(--ez-shadow-raised);animation:te-nowbar-in .18s ease-out}
+@keyframes te-nowbar-in{from{opacity:0;transform:translateY(-6px)}to{opacity:1;transform:none}}
+.te .nowbar .nb-what{display:inline-flex;align-items:center;gap:7px;color:var(--ez-positive);min-width:0}
+.te .nowbar .nb-what b{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.te .nowbar .nb-do{display:flex;gap:8px;margin-left:auto;flex-shrink:0}
+
+@media (max-width:860px){
+  /* The rail stops being a column here, so the bar may have the full width. */
+  .te .nowbar{left:0}
+}
+@media (max-width:560px){
+  /* The tiles are the whole point on a phone, so they keep their description
+     where .kind would normally drop it — a tile that says only "Add a bill" is
+     a button with extra padding. */
+  .te .triphero .kind .kt small{display:block;font-size:12.5px}
+  .te .recnow{gap:10px;padding:10px 12px}
+  .te .recnow .btn{padding:8px 11px}
+  /* The label goes; the actions take the width. Nobody needs telling they are
+     on a trip by a bar they summoned by scrolling. */
+  .te .nowbar .nb-what b{display:none}
+  .te .nowbar .nb-do{width:100%;margin-left:0}
+  .te .nowbar .nb-do .btn{flex:1 1 0}
+}
+/* A draft row that is ticked for bulk discard. The same brand wash .row.picked
+   uses for the same meaning, on the draft list's own row element. */
+.te .draftrow.picked{background:var(--ez-brand-tint);box-shadow:inset 3px 0 0 var(--ez-brand)}
 .te .card h3{font-size:15px}
 .te .card .ch{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:12px;flex-wrap:wrap}
 .te .sunk{background:var(--ez-sunken);border-radius:var(--te-r-sm);padding:12px 14px}
@@ -172,6 +406,22 @@
 .te .btn:hover{border-color:var(--ez-brand);color:var(--ez-brand)}
 .te .btn.pri{background:var(--ez-brand);border-color:var(--ez-brand);color:var(--ez-on-accent)}
 .te .btn.pri:hover{background:var(--ez-brand-deep);color:var(--ez-on-accent)}
+/* A SECOND FILLED BUTTON, for a genuinely co-equal action.
+   The on-a-trip card offers two things of the same importance — put a bill on
+   the trip, or record a journey — and they were a filled blue beside an almost
+   invisible ghost. Measured: the ghost's border was 1.24 against the card it
+   sat on, which is not a button anybody is drawn to.
+   Filled positive instead: 5.48 against the card in light and 8.99 in dark,
+   with the on-accent label at 5.48 / 9.84. Same species, same size, same
+   radius as .pri — told apart by hue, by icon and by label, because the two
+   fills are only 1.06 apart in luminance and hue alone should never be the
+   whole signal. */
+.te .btn.pos{background:var(--ez-positive);border-color:var(--ez-positive);color:var(--ez-on-accent)}
+/* There is no --ez-positive-deep; only brand has a pressed token. Mixing
+   toward --ez-ink is theme-correct both ways — ink is near-black in light, so
+   the green darkens, and near-white in dark, so it lifts. Either way it moves,
+   which is all a hover has to do. */
+.te .btn.pos:hover{background:color-mix(in srgb,var(--ez-positive) 88%,var(--ez-ink));color:var(--ez-on-accent)}
 .te .btn.dan{color:var(--ez-critical)}
 .te .btn.dan:hover{border-color:var(--ez-critical)}
 .te .btn.sm{padding:5px 10px;font-size:12.5px;border-radius:8px}
@@ -181,6 +431,10 @@
 .te .btn.onhero{background:rgba(255,255,255,.95);border-color:transparent;color:#1E3A8A}
 .te .btn.onhero.alt{background:var(--te-hero-glass);color:var(--ez-on-dark);border-color:rgba(255,255,255,.3)}
 .te .link{background:none;border:0;padding:0;color:var(--ez-brand);cursor:pointer;font-weight:600}
+/* It had no hover state at all, so nothing but the colour said these were
+   clickable — and colour alone is never enough on its own. One line, and every
+   link in the module gains the affordance. */
+.te .link:hover{text-decoration:underline;text-underline-offset:3px}
 .te .fld{display:flex;flex-direction:column;gap:5px;min-width:0}
 .te .fld>span{font-size:12px;color:var(--ez-ink-soft);font-weight:600}
 .te .fld small{color:var(--ez-muted);font-size:11.5px}
@@ -255,6 +509,15 @@
 .te .li:last-child{border-bottom:0}
 .te .li.click{cursor:pointer}
 .te .li.click:hover{background:var(--ez-brand-tint)}
+/* A row that is a real <button>: Approvals, the evidence lists, the trip log,
+   the desk picker and Finance's verification queue all build rows that way,
+   because a row you activate should be a button and not a div with a role.
+   A button sizes to its content though, so without this the row stopped
+   wherever its text stopped — a 473px row in an 1180px card — and brought the
+   UA's border, centred text and system font with it. Everything here is
+   undoing that; the look belongs to .li above. */
+.te button.li{width:100%;border:0;border-bottom:1px solid var(--ez-line);border-radius:0;background:none;font:inherit;color:inherit;text-align:left;appearance:none}
+.te button.li:last-child{border-bottom:0}
 /* a row that opens into a panel underneath it, rather than a single line */
 .te .li.col{flex-direction:column;align-items:stretch}
 /* one of several things to pick between: the whole row is the target, not the
@@ -270,6 +533,23 @@
    component so a caller can ask for a taller one; the rest is the frame the
    schematic panels already use, so the two look like the same thing. */
 .te .gmap{width:100%;border-radius:var(--te-r-sm);overflow:hidden;border:1px solid var(--ez-line);background:var(--ez-sunken)}
+/* THE ROUTE A JOURNEY ACTUALLY TOOK (TeRouteMap). Same frame as .gmap, because
+   it is the same kind of object; the footer underneath carries the point count
+   and the distance, so a reader is never left estimating the length by eye. */
+.te .routemap{margin-top:9px}
+.te .rm-canvas{width:100%;border-radius:var(--te-r-sm);overflow:hidden;border:1px solid var(--ez-line);background:var(--ez-sunken)}
+.te .rm-foot{margin-top:5px}
+/* One recorded journey as a desk reviews it: the facts, the map, then the two
+   things that can be done about it. */
+.te .jrev{border:1px solid var(--ez-line);border-radius:var(--te-r-sm);padding:12px 13px;background:var(--ez-surface);display:grid;gap:9px}
+.te .jrev.back{border-color:var(--ez-critical-edge);background:var(--ez-critical-tint)}
+.te .jrev.done{border-color:var(--ez-positive-edge)}
+.te .jrev-head{display:flex;align-items:flex-start;gap:9px;flex-wrap:wrap}
+.te .jrev-head .grow{min-width:0}
+.te .jrev-route{font-weight:600;color:var(--ez-ink)}
+.te .jrev-facts{display:flex;gap:7px;flex-wrap:wrap;align-items:center}
+.te .jrev-ask{display:grid;gap:7px;padding-top:4px;border-top:1px dashed var(--ez-line)}
+.te .jrev-ask textarea{min-height:66px}
 .te .pickrow input{width:16px;height:16px;accent-color:var(--ez-brand);flex:0 0 auto}
 .te .li[aria-current="true"]{background:var(--ez-brand-tint);box-shadow:inset 3px 0 0 var(--ez-brand)}
 .te .li .ico{width:36px;height:36px;border-radius:10px;background:var(--ez-sunken);display:grid;place-items:center;color:var(--ez-ink-soft);flex:none}
@@ -326,6 +606,14 @@
 .te .dl header h2{font-size:18px}
 .te .dl .body{padding:16px 20px;overflow:auto;display:flex;flex-direction:column;gap:16px;flex:1}
 .te .dl footer{padding:12px 20px;border-top:1px solid var(--ez-line);display:flex;gap:10px;justify-content:flex-end;align-items:center;flex-wrap:wrap;background:var(--ez-sunken)}
+/* THE SENTENCE THAT SAYS WHY SAVE IS DEAD, kept readable beside the buttons.
+   The footer already wraps, but a bare .grow is flex:1 1 0 with min-width:0,
+   so the note shrank instead of wrapping: "1 thing to fix below before this
+   can be saved." was measured at 61px wide and 94px tall -- five lines, one
+   word each -- next to Cancel, Save as draft and Save expense in a 560px
+   drawer. A real basis makes it claim a row of its own when the buttons
+   leave it less than about twenty characters, which is what wrap is for. */
+.te .dl footer .grow{flex:1 1 22ch}
 .te .sec h4{font-size:11.5px;letter-spacing:.08em;text-transform:uppercase;color:var(--ez-muted);margin-bottom:8px}
 .te pre.file{background:var(--ez-sunken);border:1px solid var(--ez-line);border-radius:10px;padding:12px;overflow:auto;font-family:var(--te-f-mono);font-size:12px;margin:0;white-space:pre}
 .te .toasts{position:fixed;left:50%;transform:translateX(-50%);bottom:calc(env(safe-area-inset-bottom,0px) + 20px);z-index:calc(var(--ez-z-modal) + 1);display:flex;flex-direction:column;gap:8px;align-items:center;pointer-events:none}
@@ -545,7 +833,16 @@
 .te .locb.hubb .ico-b{background:var(--ez-brand-tint);color:var(--ez-brand)}
 @media (max-width:720px){.te .hubs{grid-template-columns:1fr}}
 .te .wbar{padding:10px 20px 12px;border-bottom:1px solid var(--ez-line);background:var(--ez-surface)}
-.te .wsteps{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px;position:relative}
+/* FIVE STEPS, ONE ROW. Was repeat(3) when the planner had three steps; five
+   in a three-column grid silently wrapped into three cramped rows. Each box is
+   narrower now, so only the step you are ON spells out what it is for — the
+   other four are a number and a word, which is all a stepper needs. */
+.te .wsteps{display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:6px;position:relative}
+.te .ws:not(.on) .wt small{display:none}
+/* The one subtitle on screen is allowed two lines. At five columns "Where and
+   when" was ellipsised to "Where and w…", which is worse than useless — it
+   reads as a bug. The grid row grows and every box stretches with it. */
+.te .ws.on .wt small{white-space:normal;overflow:visible;text-overflow:clip;line-height:1.25}
 .te .ws{display:flex;gap:10px;align-items:center;text-align:left;border:1px solid var(--ez-line);background:var(--ez-surface);border-radius:12px;padding:8px 10px;cursor:pointer;color:var(--ez-ink);min-width:0}
 .te .ws:hover{border-color:var(--ez-brand-edge)}
 .te .ws .wn{width:26px;height:26px;border-radius:50%;display:grid;place-items:center;font-weight:700;font-size:12.5px;flex:none;background:var(--ez-sunken);color:var(--ez-muted);border:1px solid var(--ez-line)}
@@ -610,7 +907,7 @@
 .te .iconbtn.sm{width:30px;height:30px}
 @media (max-width:720px){
 .te .wbar{padding:8px 12px}
-.te .ws{padding:6px 8px;gap:6px}.te .ws .wt small{display:none}
+.te .ws{padding:6px;gap:6px;justify-content:center}.te .ws .wt small{display:none}.te .ws:not(.on) .wt{display:none}
 .te .ppl-row{grid-template-columns:24px minmax(0,1fr) 30px}.te .ppl-row .ppl-n{grid-row:1;grid-column:1}.te .ppl-row .pid{grid-row:1;grid-column:2}.te .ppl-row .iconbtn{grid-row:1;grid-column:3}.te .ppl-row .pnm{grid-row:2;grid-column:2}.te .ppl-row .ppl-st{grid-row:3;grid-column:2/-1}
 .te .rs{padding-left:4px}
 .te .wfoot .tw-bar{width:100%}
@@ -670,6 +967,24 @@
 .te .fsep{flex:1;height:2px;min-width:12px;background:var(--ez-line);border-radius:2px}
 .te .fs:disabled{opacity:1}
 .te .fcrumb{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:6px}
+/* ── LONG UNBROKEN STRINGS ───────────────────────────────────────────────────
+   A filename, a pasted hotel URL, a GSTIN or a registration number has no
+   spaces to break at, so it pushes its container wider than the screen. .grow
+   already carries min-width:0, which lets the BOX shrink; these let the TEXT
+   inside it, which is the half that was missing.
+
+   Targeted rather than a blanket rule on .te: break-anywhere on everything
+   would also break the tabular money columns, where a number splitting across
+   two lines is worse than a wide one. */
+.te .drop .grow b{overflow-wrap:anywhere}
+.te .kv dt,.te .kv dd{overflow-wrap:anywhere;min-width:0}
+/* The RC photo label carries the file's own name, which is often one long
+   token, in an inline-flex box sized to its content with nothing stopping it. */
+.te .vphoto{max-width:100%;overflow-wrap:anywhere;text-align:left}
+/* The decision column on an approval row: 170px is a floor, and on a phone a
+   floor wider than the gap it sits in is an overflow. */
+@media (max-width:420px){.te .dec{min-width:0}}
+
 .te .fpath{font-size:12.5px;color:var(--ez-ink-soft);display:inline-flex;align-items:center;gap:6px;flex-wrap:wrap}
 .te .fstep{font-size:11px;font-weight:700;color:var(--ez-brand);background:var(--ez-brand-tint);border-radius:99px;padding:2px 8px}
 .te .hk{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:9px;background:var(--te-k);color:var(--ez-surface);margin-right:8px;vertical-align:-6px}
@@ -692,6 +1007,9 @@
 .te .rtop{margin-bottom:8px;gap:8px;flex-wrap:wrap}
 .te .rdate{display:flex;align-items:flex-end;gap:8px 14px;flex-wrap:wrap;margin-bottom:10px}
 .te .rdate .fld{width:180px;flex:none}
+/* A time belongs beside the date it qualifies, not under it. Narrower than a
+   date field because 'HH:MM' needs less room than a date picker. */
+.te .rdate .fld.tm{width:122px}
 .te .rdate p{margin:0 0 9px}
 .te .rhint{margin:-2px 0 8px}
 .te .rlist{position:relative;display:flex;flex-direction:column;gap:2px}
@@ -725,27 +1043,15 @@
 .te .redit .opts.sm,.te .redit .seg.sm{margin:0}
 .te .redit .loc .locb>.mk{display:none}
 .te .rfoot{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
-.te .rseg{position:relative;padding:2px 0 2px 36px}
-.te .rshead{display:flex;align-items:center;gap:8px;width:100%;text-align:left;border:1px solid var(--ez-line);background:var(--ez-sunken);color:var(--ez-ink-soft);border-radius:99px;padding:4px 12px;min-height:34px;font:inherit;font-size:13px;cursor:pointer}
-.te .rshead:hover{border-color:var(--ez-brand)}
-.te .rshead b{font-weight:600;color:var(--ez-ink);white-space:nowrap}
-.te .rshead .rsub{font-size:12px}
-.te .rshead .grow{flex:1}
-.te .rtag{display:inline-flex;align-items:center;gap:4px;font-size:11.5px;color:var(--ez-muted);white-space:nowrap}
-.te .rseg.open .rshead{border-color:var(--ez-brand-edge);background:var(--ez-brand-tint)}
-.te .rseg.need .rshead,.te .rseg.bad .rshead{border-color:var(--ez-warning);background:var(--ez-warning-tint)}
-.te .rseg>.hubs{margin-top:6px}
-.te .rseg>.ferr{margin:4px 0 0 4px}
-.te .redit.sg{margin:6px 0 4px}
-.te .radd{display:flex;align-items:center;gap:10px;padding:3px 0;flex-wrap:wrap}
-.te .raddstop{position:relative;z-index:var(--ez-z-raised);display:inline-flex;align-items:center;gap:7px;border:1.5px dashed var(--ez-brand);background:var(--ez-surface);color:var(--ez-brand);border-radius:99px;padding:4px 13px 4px 5px;font:inherit;font-size:13px;font-weight:600;cursor:pointer;min-height:32px}
-.te .raddstop:hover{background:var(--ez-brand-tint)}
-.te .raddstop .ic{background:var(--ez-brand);color:var(--ez-on-accent);border-radius:50%;padding:2px;width:19px;height:19px;stroke-width:2.4}
 @media (max-width:640px){
-.te .rdate .fld{width:100%;flex:1 1 100%}.te .rdate p{margin:0}
-.te .redit{margin-left:0}.te .rseg{padding-left:30px}
+/* On a phone each field was full width, so a round trip with times became four
+   stacked rows. Pair each date with its own time instead. */
+.te .rdate .fld{width:100%;flex:1 1 100%}
+.te .rdate .fld.dt{width:auto;flex:1 1 58%}
+.te .rdate .fld.tm{width:auto;flex:1 1 34%}
+.te .rdate p{margin:0}
+.te .redit{margin-left:0}
 .te .rtag{display:none}
-.te .rshead .rsub{display:none}
 }
 .te .rline>.mk .ic{width:14px;height:14px;stroke-width:2.2}
 .te .sec.namefirst{padding-top:4px}
@@ -852,3 +1158,343 @@
 .te .wfsave .small{flex:1 1 100%}
 }
 @media (max-width:760px){.te .ph .seg{flex-wrap:wrap;max-width:100%}.te .ph .seg button{flex:1 1 auto;white-space:normal;text-align:left}}
+
+/* ════════════════════════════════════════════════════════════════════════
+   THE PLANNER — steps 2, 3 and 4
+   ────────────────────────────────────────────────────────────────────────
+   WHY THE ROUTE IS HORIZONTAL NOW. It used to be a vertical accordion: one
+   row per place, tap a row and it expanded in place. That reads as a list of
+   form rows, not as a journey — and on a trip with stops the row being edited
+   was pushed below the fold by the rows above it, so you lost sight of the
+   shape of the trip exactly while changing it.
+
+   It is drawn left to right now, the way a person sketches a trip on paper:
+   each place a card, each journey the link between two cards, one editor
+   panel underneath. The strip stays on screen while you work in the panel.
+
+   The strip scrolls horizontally rather than wrapping. A trip has an order
+   and wrapping breaks it — "Delhi → Pune" on one line and "→ Mumbai" on the
+   next reads as two trips. Scrolling keeps one line and one direction, which
+   is the whole point of the shape.
+   ════════════════════════════════════════════════════════════════════════ */
+
+/* The planner needs the width. The entry-flow sheets share `wide` and are
+   small choice screens, so they must not get it.
+   Behind a min-width so the existing full-bleed mobile rule keeps the small
+   screen: this rule is later in the file and would otherwise win it on equal
+   specificity, and `100vw` there is the viewport PLUS the scrollbar. */
+@media (min-width:860px){.te dialog.drawer.roomy{width:min(1060px,100vw)}}
+
+/* ── the flow strip ── */
+.te .jflow-wrap{position:relative;border:1px solid var(--ez-line);border-radius:16px;background:var(--ez-sunken)}
+.te .jflow{display:flex;align-items:stretch;overflow-x:auto;overflow-y:hidden;scroll-snap-type:x proximity;padding:14px;scrollbar-width:thin}
+.te .jflow:focus-visible{outline:2px solid var(--ez-brand);outline-offset:-2px}
+/* The fades say "there is more this way" without a scrollbar having to. They
+   are decoration over the scroller, so they must never eat a click. */
+.te .jflow-wrap:before,.te .jflow-wrap:after{content:"";position:absolute;top:1px;bottom:1px;width:26px;pointer-events:none;z-index:var(--ez-z-raised);border-radius:16px}
+.te .jflow-wrap:before{left:1px;background:linear-gradient(90deg,var(--ez-sunken),transparent)}
+.te .jflow-wrap:after{right:1px;background:linear-gradient(270deg,var(--ez-sunken),transparent)}
+
+/* ── a place ── */
+.te .jnode{flex:0 0 auto;width:176px;scroll-snap-align:center;display:flex;flex-direction:column;gap:7px;text-align:left;border:1.5px solid var(--ez-line);background:var(--ez-surface);color:var(--ez-ink);border-radius:14px;padding:11px 12px;cursor:pointer;font:inherit;min-height:112px;transition:border-color .15s,box-shadow .15s,transform .15s}
+.te .jnode:hover{border-color:var(--ez-brand-edge);transform:translateY(-1px)}
+.te .jnode .jn-top{display:flex;align-items:center;gap:7px;width:100%}
+.te .jnode .jn-k{font-size:10.5px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--ez-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.te .jnode .jn-name{font-size:14.5px;font-weight:650;line-height:1.3;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.te .jnode .jn-meta{font-size:11.5px;color:var(--ez-muted);line-height:1.35;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.te .jnode .jn-name.ph0{color:var(--ez-brand);font-weight:600}
+.te .jnode.empty{border-style:dashed}
+.te .jnode.on{border-color:var(--ez-brand);background:var(--ez-brand-tint);box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-brand) 15%,transparent)}
+.te .jnode.bad{border-color:var(--ez-critical);background:var(--ez-critical-tint)}
+.te .jnode.bad .jn-meta{color:var(--ez-critical)}
+/* Selected AND wrong. The red must win on the border — it is the more urgent
+   thing to say — but without the ring you cannot tell which card the panel
+   below belongs to, which is exactly the card you are most likely to be
+   looking at. The ring says "selected", the border still says "wrong". */
+.te .jnode.on.bad{box-shadow:0 0 0 3px color-mix(in srgb,var(--ez-critical) 20%,transparent)}
+.te .jnode .jn-x{margin-left:auto;flex:none;width:22px;height:22px;display:grid;place-items:center;border:0;background:none;border-radius:50%;color:var(--ez-muted);cursor:pointer;padding:0}
+.te .jnode .jn-x:hover{color:var(--ez-critical);background:var(--ez-critical-tint)}
+
+/* ── the journey between two places ── */
+.te .jlink{flex:0 0 auto;width:104px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:5px;position:relative;padding:0 2px}
+/* The rule runs behind the mode pill, drawn from the middle of each
+   neighbouring card so the line meets the cards rather than floating. */
+.te .jlink:before{content:"";position:absolute;left:-2px;right:-2px;top:50%;border-top:2px dashed var(--ez-brand-edge)}
+.te .jlink-m{position:relative;z-index:var(--ez-z-raised);display:inline-flex;align-items:center;gap:5px;max-width:100%;border:1px solid var(--ez-line);background:var(--ez-surface);color:var(--ez-ink-soft);border-radius:99px;padding:4px 9px;font-size:11.5px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.te .jlink-m .ic{flex:none;color:var(--ez-brand)}
+.te .jlink-m.todo{border-style:dashed;color:var(--ez-muted)}
+.te .jlink-add{position:relative;z-index:var(--ez-z-raised);display:inline-flex;align-items:center;gap:4px;border:1px dashed var(--ez-brand);background:var(--ez-surface);color:var(--ez-brand);border-radius:99px;padding:2px 9px 2px 4px;font:inherit;font-size:11.5px;font-weight:600;cursor:pointer;opacity:0;transition:opacity .15s}
+.te .jflow:hover .jlink-add,.te .jlink-add:focus-visible{opacity:1}
+.te .jlink-add:hover{background:var(--ez-brand-tint)}
+.te .jlink-add .ic{width:15px;height:15px;stroke-width:2.6}
+/* Touch has no hover, so the add button cannot be hidden behind one. */
+@media (hover:none){.te .jlink-add{opacity:1}}
+
+/* ── the editor under the strip ── */
+.te .jpanel{border:1px solid var(--ez-brand-edge);border-radius:16px;background:var(--ez-surface);box-shadow:var(--ez-shadow-raised);padding:14px;display:flex;flex-direction:column;gap:12px}
+.te .jpanel-h{display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.te .jpanel-h h5{margin:0;font-size:15px;font-weight:650}
+.te .jpanel-h .grow{flex:1}
+.te .jp-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(190px,1fr));gap:10px}
+.te .jp-grid .fld small{display:block;margin-top:3px;font-size:11.5px;color:var(--ez-muted)}
+
+/* ── step 3: the mode tiles ── */
+.te .mtiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(118px,1fr));gap:8px}
+.te .mtile{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;min-height:76px;border:1.5px solid var(--ez-line);background:var(--ez-surface);color:var(--ez-ink-soft);border-radius:14px;padding:10px 8px;font:inherit;cursor:pointer;text-align:center;transition:border-color .15s,transform .15s}
+.te .mtile:hover{border-color:var(--ez-brand);transform:translateY(-1px)}
+.te .mtile .ic{width:22px;height:22px;color:var(--ez-brand)}
+.te .mtile b{font-size:13px;font-weight:600}
+.te .mtile small{font-size:11px;color:var(--ez-muted);line-height:1.25}
+.te .mtile[aria-pressed="true"]{border-color:var(--ez-brand);background:var(--ez-brand-tint);color:var(--ez-ink)}
+.te .mtile[aria-pressed="true"] small{color:var(--ez-ink-soft)}
+
+/* ── step 4: the two questions ── */
+.te .qcards{display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:10px}
+.te .qcard{display:flex;align-items:center;gap:10px;text-align:left;border:1.5px solid var(--ez-line);background:var(--ez-surface);color:var(--ez-ink);border-radius:14px;padding:12px;font:inherit;cursor:pointer;min-height:66px;transition:border-color .15s,transform .15s}
+.te .qcard:hover{border-color:var(--ez-brand);transform:translateY(-1px)}
+.te .qcard .ic{flex:none;width:22px;height:22px;color:var(--ez-brand)}
+.te .qcard span{display:flex;flex-direction:column;gap:2px;min-width:0}
+.te .qcard b{font-size:14px;font-weight:650}
+.te .qcard small{font-size:11.5px;color:var(--ez-muted);line-height:1.3}
+.te .qcard[aria-pressed="true"]{border-color:var(--ez-brand);background:var(--ez-brand-tint)}
+.te .hgrid{display:grid;grid-template-columns:repeat(auto-fit,minmax(270px,1fr));gap:10px}
+.te .hcard{position:relative;border:1px solid var(--ez-line);border-radius:14px;background:var(--ez-surface);padding:12px;display:flex;flex-direction:column;gap:9px}
+.te .hcard.first{border-color:var(--ez-brand-edge);background:var(--ez-brand-tint)}
+.te .hcard .hc-h{display:flex;align-items:center;gap:8px}
+.te .hcard .hc-n{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:700;background:var(--ez-sunken);color:var(--ez-muted);flex:none}
+.te .hcard.first .hc-n{background:var(--ez-brand);color:var(--ez-on-accent)}
+.te .hcard .hc-h b{font-size:13.5px}
+.te .hcard .hc-h .chip{margin-left:auto}
+/* One field per line inside a card. .form is two columns, which is right in a
+   full-width sheet and wrong in a 270px column — "The name of the hotel"
+   placeholder was cut to "The name of the h". */
+.te .hcard .form{grid-template-columns:1fr;gap:9px}
+/* A money figure the step exists to show, so it is sized like one. */
+.te .bigmoney{display:flex;align-items:baseline;gap:9px;flex-wrap:wrap}
+.te .bigmoney b{font-size:30px;font-weight:700;letter-spacing:-.02em;line-height:1.1}
+.te .bigmoney span{font-size:12.5px;color:var(--ez-muted)}
+
+@media (max-width:720px){
+.te .jnode{width:150px;min-height:104px}
+.te .jlink{width:78px}
+.te .jflow{padding:12px 10px}
+.te .jpanel{padding:12px;border-radius:14px}
+.te .bigmoney b{font-size:25px}
+}
+
+/* ── what the traveller asks the Travel Desk to book (step 3) ──
+   Set apart from the rest of the journey panel because it is a different kind
+   of thing: everything above it is what the trip IS, and this is a request
+   about it. Tinted rather than bordered so it reads as a note inside the
+   panel and not as another form. */
+.te .prefbox{border:1px dashed var(--ez-brand-edge);background:var(--ez-brand-tint);border-radius:14px;padding:12px;display:flex;flex-direction:column;gap:9px}
+.te .prefbox .pref-h{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.te .prefbox .pref-h b{font-size:13.5px;font-weight:650}
+.te .prefbox .pref-h .ic{color:var(--ez-brand);flex:none}
+.te .prefbox .pref-h .chip{margin-left:auto}
+.te .prefbox p{margin:0}
+.te .prefbox .fld small{display:block;margin-top:3px;font-size:11.5px;color:var(--ez-muted)}
+.te .prefbox .fld small.bad{color:var(--ez-critical)}
+/* The desk reads these back on its own screen, where they are facts rather
+   than fields. */
+.te .askrow{display:flex;gap:7px;align-items:flex-start;font-size:12.5px;color:var(--ez-ink-soft);margin-top:4px}
+.te .askrow .ic{flex:none;color:var(--ez-brand);margin-top:2px}
+.te .askrow a{color:var(--ez-brand);overflow-wrap:anywhere}
+
+/* "Your work is saved", beside the buttons that act on it — which is where
+   somebody looks before deciding whether it is safe to close the drawer.
+   Holds its height whether or not anything is showing, so the buttons under
+   it do not jump every time a save finishes. */
+.te .savedline{display:flex;align-items:center;min-height:18px;margin:0 0 6px}
+.te .savedline span{display:inline-flex;align-items:center;gap:5px}
+.te .savedline .warn{color:var(--ez-warning)}
+
+/* One unfinished trip in the Trip drafts list.
+   -------------------------------------------------------------------------
+   STILL DASHED, because it is still not a record: nothing here has a number
+   and nobody else can see it. The dash is the one thing that says "not real
+   yet", so the depth below is layered on top of it rather than replacing it.
+
+   THE DEPTH IS TWO SHADOWS, not one. A single soft shadow reads as blur; a
+   tight contact shadow under a wider ambient one reads as a card sitting
+   above the page, which is the whole point of lifting it on hover. The same
+   pair of rgba values the cards in this file already use, so the drafts do
+   not look like they came from another product. */
+.te .draftrow{
+  position:relative;
+  border:1px dashed var(--ez-line-strong);
+  border-radius:14px;
+  background:linear-gradient(180deg,var(--ez-surface),var(--ez-sunken));
+  padding:12px 14px;
+  display:flex;align-items:center;gap:12px;
+  margin-bottom:10px;
+  box-shadow:0 1px 2px rgba(17,24,39,.05), 0 6px 14px -8px rgba(17,24,39,.18);
+  transition:transform .18s ease, box-shadow .18s ease, border-color .18s ease;
+  will-change:transform;
+}
+/* A quiet band of the brand colour down the left edge, so a stack of rows
+   reads as a list of one kind of thing rather than four loose boxes. */
+.te .draftrow:before{
+  content:"";position:absolute;left:0;top:12px;bottom:12px;width:4px;
+  border-radius:0 4px 4px 0;background:var(--ez-brand);opacity:.55;
+  transition:opacity .18s ease, top .18s ease, bottom .18s ease;
+}
+.te .draftrow:hover{
+  transform:translateY(-2px);
+  border-color:var(--ez-brand-edge);
+  box-shadow:0 2px 4px rgba(17,24,39,.06), 0 14px 28px -12px rgba(17,24,39,.28);
+}
+/* The band grows to the full height on hover: the row is "selected" by the
+   pointer without anything moving under the cursor. */
+.te .draftrow:hover:before{opacity:1;top:6px;bottom:6px}
+/* Pressed, it settles back onto the page. Without this a card that lifts on
+   hover feels unresponsive to the click that follows. */
+.te .draftrow:active{transform:translateY(0);box-shadow:0 1px 2px rgba(17,24,39,.05)}
+.te .draftrow .grow{min-width:0}
+.te .draftrow .dt{font-weight:600;color:var(--ez-ink);overflow-wrap:anywhere}
+.te .draftrow .dt.none{font-weight:500;color:var(--ez-muted);font-style:italic}
+/* The icon sits in a raised well of its own, which is what stops the row
+   reading as flat text with a picture next to it. */
+.te .draftrow .ico{
+  flex:none;display:inline-flex;align-items:center;justify-content:center;
+  width:34px;height:34px;border-radius:11px;
+  background:var(--ez-surface);border:1px solid var(--ez-line);
+  box-shadow:inset 0 1px 0 var(--ez-surface), 0 1px 2px rgba(17,24,39,.06);
+  color:var(--ez-brand);
+  transition:transform .18s ease, border-color .18s ease;
+}
+.te .draftrow:hover .ico{transform:scale(1.06);border-color:var(--ez-brand-edge)}
+
+/* THEY ARRIVE RATHER THAN APPEAR. The list is fetched after the screen paints,
+   so without this the rows pop in fully formed and the eye reads it as a
+   layout shift. A short rise, staggered down the stack, reads as the list
+   settling into place. Capped at six: past that the last row would be waiting
+   on an animation nobody is watching. */
+@keyframes te-draft-in{from{opacity:0;transform:translateY(6px)}to{opacity:1;transform:none}}
+@media (prefers-reduced-motion: no-preference){
+  .te .draftrow{animation:te-draft-in .26s ease both}
+  .te .draftrow:nth-child(2){animation-delay:.04s}
+  .te .draftrow:nth-child(3){animation-delay:.08s}
+  .te .draftrow:nth-child(4){animation-delay:.12s}
+  .te .draftrow:nth-child(5){animation-delay:.16s}
+  .te .draftrow:nth-child(n+6){animation-delay:.2s}
+}
+/* No transform transition for somebody who asked for less motion: the depth
+   and the colour still answer the pointer, nothing slides. */
+@media (prefers-reduced-motion: reduce){
+  .te .draftrow,.te .draftrow:hover,.te .draftrow:active{transform:none}
+}
+
+/* The plan as the traveller filled it in: places down the page, each journey
+   hanging under the place it leaves from. One column on every width — this is
+   read top to bottom, like an itinerary, not scanned like a table. */
+.te .planlist{list-style:none;margin:0;padding:0}
+.te .planstep{position:relative}
+.te .planpt{display:flex;gap:10px;align-items:flex-start;padding:10px 0}
+.te .planpt .pn{flex:none;width:22px;height:22px;border-radius:50%;background:var(--ez-brand);color:var(--ez-on-accent);font-size:11.5px;font-weight:600;display:inline-flex;align-items:center;justify-content:center}
+/* A stop is passed through, not arrived at, so it is drawn lighter. */
+.te .planpt.stop .pn{background:var(--ez-sunken);color:var(--ez-ink-soft);border:1px dashed var(--ez-line-strong)}
+.te .planpt.ret .pn{background:var(--ez-positive)}
+.te .planpt .b{display:flex;align-items:center;gap:7px;flex-wrap:wrap}
+.te .planpt .grow{min-width:0}
+/* The journey, indented under its starting place and joined to it by a rule. */
+.te .planseg{display:flex;gap:10px;align-items:flex-start;margin:0 0 4px 11px;padding:8px 0 8px 20px;border-left:2px solid var(--ez-line)}
+.te .planseg .grow{min-width:0}
+.te .planseg .pl{display:none}
+
+/* A question on step 1 whose answer changes what the rest of the form asks.
+   NOT .qcard, which is a button you press to choose a thing — this is a
+   container holding a question and a Yes/No beside it, and inheriting a
+   button's cursor and hover would promise a click the card does not take. */
+.te .askqs{display:grid;grid-template-columns:repeat(auto-fit,minmax(272px,1fr));gap:10px}
+.te .askq{border:1.5px solid var(--ez-line);background:var(--ez-surface);border-radius:14px;padding:12px}
+/* Marked only after they have tried to move on, like every other field here. */
+.te .askq.bad{border-color:var(--ez-critical)}
+.te .askq .qh{display:flex;align-items:flex-start;gap:10px;margin-bottom:10px}
+.te .askq .qh .grow{min-width:0}
+.te .askq .qh b{display:block;font-size:13.5px;font-weight:650}
+.te .askq .qh small{display:block;font-size:11.5px;color:var(--ez-muted);line-height:1.35;margin-top:2px}
+.te .askq .seg{width:100%}
+.te .askq .seg button{flex:1 1 0}
+
+/* A BUTTON THAT HAS TO BE NOTICED. Used where a choice is consequential enough
+   that the pair should not read as two more grey outlines — the two buttons
+   that decide whether somebody's only copy of their work survives.
+
+   The glow takes its colour from the tone the button already carries, through
+   three variables, so this is one rule rather than one per colour. Every value
+   is a theme token: the dark palette redefines them and the glow follows.
+
+   The crisp 1px ring sits INSIDE the soft blur, so the edge stays sharp at any
+   zoom while the halo does the glowing. */
+.te .btn.glow{
+  --glow:      var(--ez-brand);
+  --glow-edge: var(--ez-brand-edge);
+  --glow-tint: var(--ez-brand-tint);
+  border-color:var(--glow);
+  box-shadow:0 0 0 1px var(--glow-edge), 0 0 10px 1px var(--glow-tint);
+}
+.te .btn.glow:hover{
+  background:var(--glow-tint);
+  box-shadow:0 0 0 1px var(--glow), 0 0 14px 2px var(--glow-edge);
+}
+/* An icon inside takes the button's tone rather than the icon default. */
+.te .btn.glow .ic{color:var(--glow)}
+
+/* Destroying something. */
+.te .btn.dan.glow{
+  --glow:      var(--ez-critical);
+  --glow-edge: var(--ez-critical-edge);
+  --glow-tint: var(--ez-critical-tint);
+}
+/* Keeping it. Green rather than the same red, because the two buttons are not
+   the same kind of answer — one ends the work and one saves it, and a pair
+   glowing in one colour would make them look interchangeable. */
+.te .btn.ok.glow{
+  --glow:      var(--ez-positive);
+  --glow-edge: var(--ez-positive-edge);
+  --glow-tint: var(--ez-positive-tint);
+  color:var(--ez-positive);
+}
+
+/* Nothing should pulse at somebody who has asked for less motion. */
+@media (prefers-reduced-motion: no-preference){
+  .te .btn.glow{transition:box-shadow .18s ease, background .18s ease}
+}
+
+/* How far a request has got through its approvers, on a desk row.
+   The sentence carries the meaning; the steps under it are there so the desk
+   can see who is next by name without opening the trip. */
+.te .chain{margin-top:6px}
+.te .chain-say{display:flex;align-items:center;gap:8px;flex-wrap:wrap}
+.te .chain-steps{list-style:none;margin:6px 0 0;padding:0;display:flex;flex-wrap:wrap;gap:6px}
+.te .chain-step{display:inline-flex;align-items:center;gap:6px;padding:3px 9px 3px 5px;border-radius:99px;background:var(--ez-sunken);border:1px solid var(--ez-line);font-size:11.5px;min-width:0}
+.te .chain-step .cs-m{display:inline-flex;flex:none}
+.te .chain-step .cs-t{display:inline-flex;align-items:baseline;gap:5px;min-width:0}
+.te .chain-step b{font-weight:650;color:var(--ez-ink)}
+.te .chain-step .cs-who{color:var(--ez-muted);overflow-wrap:anywhere}
+/* The state of each step, in the same colours the chips use. */
+.te .chain-step.ok{background:var(--ez-positive-tint);border-color:transparent}
+.te .chain-step.ok .cs-m{color:var(--ez-positive)}
+.te .chain-step.wait .cs-m{color:var(--ez-warning)}
+.te .chain-step.no{background:var(--ez-critical-tint);border-color:transparent}
+.te .chain-step.no .cs-m{color:var(--ez-critical)}
+.te .chain-step.back .cs-m{color:var(--ez-warning)}
+.te .chain-step.off{opacity:.55}
+
+/* How to reach the traveller, on a desk row. Real tel: and mailto: links,
+   because the point is to ring them — not to read a number and retype it. */
+.te .contactline{display:flex;flex-wrap:wrap;gap:6px;margin-top:6px}
+.te .contactline .cx{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:99px;border:1px solid var(--ez-line);background:var(--ez-surface);color:var(--ez-ink-soft);font-size:11.5px;text-decoration:none;min-width:0}
+.te .contactline .cx span{overflow-wrap:anywhere}
+.te .contactline .cx svg{flex:none;color:var(--ez-brand)}
+.te .contactline .cx:hover{border-color:var(--ez-brand);color:var(--ez-brand);background:var(--ez-brand-tint)}
+
+/* A preview of the mail the traveller will receive. Framed like a message
+   rather than a form field, so an administrator reads it as the thing it
+   becomes and not as more settings. */
+.te .mailprev{border:1px solid var(--ez-line);border-radius:var(--te-r-sm);background:var(--ez-surface);overflow:hidden}
+.te .mailprev .mp-subject{padding:10px 12px;border-bottom:1px solid var(--ez-line);background:var(--ez-sunken);font-weight:650;color:var(--ez-ink)}
+.te .mailprev .mp-body{padding:12px;white-space:pre-wrap;font-size:13px;line-height:1.6;color:var(--ez-ink-soft)}
+.te .mailprev .mp-attach{display:flex;align-items:center;gap:7px;padding:8px 12px;border-top:1px solid var(--ez-line);background:var(--ez-sunken);font-size:12px;color:var(--ez-muted)}
+.te .mailprev .mp-attach svg{color:var(--ez-brand)}

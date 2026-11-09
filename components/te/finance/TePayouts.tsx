@@ -43,7 +43,12 @@ export default function TePayouts({ onToast }: { onToast: (message: string) => v
       .catch(e => { if (current) { setPayable([]); setError(errorText(e)) } })
     te.finance.payouts()
       .then(p => { if (current) setBatches(p.rows ?? []) })
-      .catch(() => { if (current) setBatches([]) })
+      // SAY SO, rather than rendering a refusal as "no batches". This used to
+      // swallow the error and leave the list empty, which is a different claim
+      // from the truth and one the reader cannot tell apart from it: a module
+      // administrator was refused this route while being allowed the Finance
+      // desk around it, and the screen told them there were no payouts.
+      .catch(e => { if (current) { setBatches([]); setError(errorText(e)) } })
     return () => { current = false }
   }, [tick])
 

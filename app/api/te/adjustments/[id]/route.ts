@@ -14,7 +14,7 @@ export async function POST(req: NextRequest, { params }: { params: Promise<{ id:
     const adjustmentId = needUuid(id, 'Adjustment')
     const body = await t.body<{ action?: string; reference?: string }>()
     const action = needOneOf(body.action, ['done', 'cancel'] as const, 'action')
-    await t.permit('Finance', 'VIEW')
+    await t.permitFinanceDesk()
     return adjustmentClose(await t.ctx(), adjustmentId, action, optText(body.reference))
   })
 }

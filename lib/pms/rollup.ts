@@ -15,7 +15,11 @@
 // not resolve at all.
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from './status.ts'
 
-/** One row of vw_pms_fill_status, narrowed to what a roll-up needs. */
+/** One row of vw_pms_fill_status, narrowed to what a roll-up needs.
+ *
+ *  The second group is not used by the roll-up at all — it is what §6.3's
+ *  "export all columns" has to put in the file. Optional, so a caller that
+ *  only wants counts need not select them. */
 export interface FillRow {
   employee_name?: string | null
   employee_code?: string | null
@@ -23,6 +27,15 @@ export interface FillRow {
   fill_status?: string | null
   kra_count?: number | null
   total_weightage?: number | null
+  employment_flag?: string | null
+  one_to_one_status?: string | null
+  self_score?: number | null
+  final_rating?: number | null
+  final_rating_code?: string | null
+  finalised_by_role?: string | null
+  workflow_status?: string | null
+  last_action_at?: string | null
+  period_code?: string | null
 }
 
 export interface Rollup {

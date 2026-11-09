@@ -42,11 +42,35 @@ export const MODE_LABEL: Record<Mode, string> = {
   IN_PERSON: 'In person', VIDEO: 'Video call', PHONE: 'Phone',
 }
 
+/** One agreed weightage change, as pms_one_to_one.weightage_changes stores
+ *  them. The column has carried this exact shape since 066 and nothing has
+ *  ever written it — the one-to-one is where weightages are settled, so the
+ *  record of what moved belongs on the log of that conversation, not inferred
+ *  afterwards from the goals table. */
+export interface WeightageChange {
+  seq_no: number
+  old_wt: number
+  new_wt: number
+  reason?: string | null
+}
+
 export interface Log {
+  /**
+   * The row's own id. Already selected by every caller and simply never
+   * carried on the type, which meant a screen could display a discussion but
+   * not act on a specific one — so an acknowledgement had to be addressed by
+   * (employee, period, type) and would hit every row of that type at once.
+   */
+  id?: string
   discussion_type: DiscussionType
   discussion_date?: string | null
   mode?: Mode | null
+  /** Minutes. pms_one_to_one.duration_minutes, unused until now. A
+   *  "discussion" of four minutes and one of ninety are different events, and
+   *  the column exists so the difference is on the record. */
+  duration_minutes?: number | null
   discussion_points?: string | null
+  weightage_changes?: WeightageChange[] | null
   employee_ack?: boolean | null
   manager_ack?: boolean | null
 }

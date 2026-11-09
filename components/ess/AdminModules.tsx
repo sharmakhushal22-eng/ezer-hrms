@@ -55,6 +55,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   // Compliance & Docs
   compliance:           lazy(() => import('@/app/dashboard/compliance/page')),
   letters:              lazy(() => import('@/app/dashboard/letters/page')),
+  esign:                lazy(() => import('@/app/dashboard/esign/page')),
   policies:             lazy(() => import('@/app/dashboard/policies/page')),
   reports:              lazy(() => import('@/app/dashboard/reports/page')),
   // Setup

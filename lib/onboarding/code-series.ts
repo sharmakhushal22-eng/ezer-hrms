@@ -5,9 +5,15 @@
 //      STC0006 in use does not make STC0005 the next), and nobody types a code by hand.
 //   2. FIFO: codes are generated in the order candidates arrived in Onboarding. While an
 //      earlier arrival of the same company has no code yet, the later one waits — the card's
-//      Generate code is disabled and the API refuses.
+//      Generate code is disabled and the API refuses. SWITCHED OFF for now (CODE_QUEUE_ENFORCED):
+//      any joiner whose teams have approved can get their code, in any order.
 
 import type { SupabaseClient } from '@supabase/supabase-js'
+
+/** The FIFO code queue. Off on request (30-Oct-2026): HR generates codes in any order. Set it
+ *  back to true to restore the queue — the onboarding page, the Generate code modal, the API
+ *  and create-employee all read it through queueAheadOf() or this flag. */
+export const CODE_QUEUE_ENFORCED = false
 
 /** The number inside a code of this company's series: "STC9074" / "STC-9074" → 9074; "STCINT0001" → null (another series). */
 export function seriesNumber(code: string | null | undefined, prefix: string): number | null {
@@ -50,6 +56,7 @@ export async function nextCompanyCode(sb: SupabaseClient, companyId: string, com
 export async function queueAheadOf(sb: SupabaseClient, onboardingId: string): Promise<{ me: Blocker & { company_id: string | null } | null; ahead: Blocker[] }> {
   const { data: me } = await sb.from('onboarding_candidates').select('id, full_name, status, created_at, company_id, employee_code').eq('id', onboardingId).maybeSingle()
   if (!me) return { me: null, ahead: [] }
+  if (!CODE_QUEUE_ENFORCED) return { me: me as any, ahead: [] }
   const { data: all } = await sb.from('onboarding_candidates').select('id, full_name, status, created_at, company_id, employee_code').eq('company_id', me.company_id).neq('status', 'EMPLOYEE_CREATED').is('employee_code', null).lte('created_at', me.created_at).order('created_at').limit(500)
   const ahead = queueAhead((all || []) as any[], me as any).map(c => ({ id: c.id, full_name: c.full_name, status: c.status, created_at: c.created_at }))
   return { me: me as any, ahead }
