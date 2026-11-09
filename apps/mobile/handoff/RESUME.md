@@ -3,6 +3,13 @@
 Branch **`feat/mobile-app`**. App in `apps/mobile/` (Expo SDK 57, React Native). It mirrors the website's
 employee self-service portal (`/ess`), same backend, admin excluded.
 
+## Play Store prep (7 Nov 2026)
+* `eas.json`: versionCode now counted by EAS (`appVersionSource: remote`, production `autoIncrement`), and a `submit.production` profile (internal track, draft) reading `google-play-service-account.json` (git-ignored).
+* Store listing text, Data safety / content-rating answers and graphics: `store/` (`PLAY-STORE-LISTING.md`, `icon-512.png`, `feature-graphic-1024x500.jpg`).
+* Privacy policy: website page `app/privacy/page.tsx` → `/privacy`. It goes live only when it reaches `main`. `CONTACT_EMAIL` there is a placeholder until the real mailbox exists.
+* The first AAB must be uploaded by hand in Play Console (Google's API cannot create the first release); `eas submit` works after that.
+* Review risk: Messages and the Wall are user-generated content with no "report post" / "block" action; Google may ask for one.
+
 ## Round after the phone UI pass (1 Nov 2026, version 1.2.0 / versionCode 3)
 * Entrance on cold start: `features/intro/` (2.6 s, one UI-thread clock, tap skips, reduced motion = logo hold + fade, skipped on deep links, not replayed after sign-out). The doorway is a real hole in the scene, so the next screen shows through it. The login screen is the lobby (`LobbyHeader`, `LobbyBackdrop`).
 * Home hero: boxed tiles gone; `HeroFacts` sits beside a smaller dial.
