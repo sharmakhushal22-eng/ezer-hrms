@@ -7,6 +7,8 @@
 //   • the gap between declared and proven, per employee
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
+import type { ProofFile } from '@/components/ess/InvestmentProofs'
 import { useGrant } from '@/lib/rms/client'
 import { companyFilter } from '@/lib/rms/resolve'
 // Design tokens, aliased as TK — many of these files already declare
@@ -45,8 +47,8 @@ const TONE: Record<string, [string, string]> = {
 }
 
 // Outside the parent so the per-row inputs keep focus while typing.
-function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject, busy }: {
-  r: Row; name: string; code: string; leaving: string | null
+function ProofCard({ r, name, code, leaving, files, draft, onDraft, onApprove, onReject, busy }: {
+  r: Row; name: string; code: string; leaving: string | null; files: ProofFile[]
   draft: string; onDraft: (v: string) => void
   onApprove: () => void; onReject: () => void; busy: boolean
 }) {
@@ -93,6 +95,29 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
         )}
       </div>
 
+      {/* The bills themselves. Approval is against these, not against a typed reference. */}
+      <div style={{ marginTop: 10 }}>
+        <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.05em', fontWeight: 700, marginBottom: 4 }}>
+          Documents {files.length ? `(${files.length})` : ''}
+        </div>
+        {files.length === 0 ? (
+          <div style={{ fontSize: 12, color: done ? C.muted : C.amber }}>
+            {done ? 'No document was attached.' : 'No document attached yet — the employee has only typed a reference.'}
+          </div>
+        ) : (
+          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+            {files.map(f => (
+              <a key={f.id} href={f.url || '#'} target="_blank" rel="noreferrer"
+                style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: C.purpleD, background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 8, padding: '5px 10px', textDecoration: 'none', maxWidth: 320 }}>
+                <span aria-hidden>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+                <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</span>
+                <span style={{ color: C.muted, fontWeight: 500 }}>{fmtDate(f.uploaded_at)}</span>
+              </a>
+            ))}
+          </div>
+        )}
+      </div>
+
       {!done && gap > 0 && (
         <div style={{ fontSize: 11, color: C.amber, marginTop: 8 }}>
           {inr(gap)} stays unproven — that much will not be exempt and will be taxed.
@@ -114,6 +139,7 @@ function ProofCard({ r, name, code, leaving, draft, onDraft, onApprove, onReject
 export default function InvestmentProofsPage() {
   const { grant } = useGrant()
   const [rows, setRows] = useState<Row[]>([])
+  const [files, setFiles] = useState<ProofFile[]>([])
   const [emps, setEmps] = useState<Record<string, { name: string; code: string; leaving: string | null }>>({})
   const [draft, setDraft] = useState<Record<string, string>>({})
   const [status, setStatus] = useState('SUBMITTED')
@@ -148,6 +174,12 @@ export default function InvestmentProofsPage() {
       const d: Record<string, string> = {}
       list.forEach(r => { d[r.id] = String(num(r.submitted_amount) || '') })
       setDraft(d)
+      // The attached bills, with 30-minute signed links, scoped server-side to the caller's companies.
+      try {
+        const fr = await fetch(`/api/ess/investment-proofs?scope=company&fy=${FY}`, { headers: await authHeaders() })
+        const fj = await fr.json().catch(() => ({}))
+        setFiles(fr.ok ? ((fj.files || []) as ProofFile[]) : [])
+      } catch { setFiles([]) }
     } catch (e: any) { setErr(e.message || String(e)) } finally { setLoading(false) }
   }, [grant]) // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { load() }, [load])
@@ -231,6 +263,7 @@ export default function InvestmentProofsPage() {
           <ProofCard key={r.id} r={r}
             name={emps[r.employee_id]?.name || '—'} code={emps[r.employee_id]?.code || '—'}
             leaving={emps[r.employee_id]?.leaving || null}
+            files={files.filter(f => f.proof_id === r.id)}
             draft={draft[r.id] ?? ''} onDraft={v => setDraft(d => ({ ...d, [r.id]: v }))}
             onApprove={() => decide(r, true)} onReject={() => decide(r, false)}
             busy={busy === r.id} />

@@ -23,7 +23,7 @@ import { resilientFetch } from '@/lib/resilient-fetch'
 import { NextRequest, NextResponse } from 'next/server'
 import { verifyEssToken } from '@/lib/ess-session'
 import { grantForRequest, LEGACY_SUPABASE_BRIDGE } from '@/lib/rms/server'
-import { hasLevel } from '@/lib/rms/resolve'
+import { holds } from '@/lib/rms/authz'
 import type { AccessLevel, Module } from '@/lib/rms/modules'
 
 const admin = createClient(
@@ -89,8 +89,12 @@ export async function requireModule(
   const base = await requireDashboardUser(req)
   if (base.error) return base
 
+  // Strict: what the roles grant, with no roll-out bypass. hasLevel() opens up while
+  // rms_config.enforce_module_access is off because it decides what the sidebar shows; an
+  // API gate that did the same would let every signed-in employee call every endpoint the
+  // moment that flag was switched off (lib/rms/authz.ts has the full reasoning).
   const grant = await grantForRequest(req)
-  if (!hasLevel(grant, module, level)) {
+  if (!holds(grant, module, level)) {
     return {
       user: null,
       error: NextResponse.json({ error: `${module} is not part of your access.` }, { status: 403 }),

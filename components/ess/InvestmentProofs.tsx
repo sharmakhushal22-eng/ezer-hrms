@@ -8,8 +8,13 @@
 // The line that costs money: anything declared but not proven — rejected, or simply never
 // submitted before the deadline — stops being exempt. The screen says so plainly, because
 // an employee who does not know that only finds out in their final settlement.
-import { useState, useEffect, useCallback } from 'react'
+//
+// Every declared line takes documents — receipts, policy statements, rent receipts — through
+// /api/ess/investment-proofs (private bucket, signed URLs). A reference number alone used
+// to be the whole "proof"; HR now opens the actual file before approving.
+import { useState, useEffect, useCallback, useRef } from 'react'
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
 import PayStyles from '@/components/ess/payroll/PayStyles'
 
 const FY = '2026-27'
@@ -20,11 +25,20 @@ const fmtDate = (d: any) => {
   const x = new Date(d)
   return `${String(x.getDate()).padStart(2, '0')} ${['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][x.getMonth()]} ${x.getFullYear()}`
 }
+const fmtSize = (b: number | null | undefined) => {
+  const n = Number(b) || 0
+  return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
+}
+const ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp'
 
 interface Proof {
   id: string; section: string; declared_item: string
   declared_amount: number; submitted_amount: number
   proof_reference: string | null; status: string; rejection_reason: string | null; deadline: string | null
+}
+export interface ProofFile {
+  id: string; proof_id: string; file_name: string; mime_type: string | null; size_bytes: number | null
+  uploaded_at: string; url: string | null
 }
 
 const TONE: Record<string, { cls: string; label: string }> = {
@@ -34,10 +48,60 @@ const TONE: Record<string, { cls: string; label: string }> = {
   REJECTED:  { cls: 'is-bad', label: 'Rejected' },
 }
 
+/** The documents attached to one line: what is there, and a way to add more. Also used
+ *  read-only (no `onUpload`) by HR's review screen, so the two never drift apart. */
+export function ProofDocuments({ files, locked, onUpload, onRemove, uploading, compact }: {
+  files: ProofFile[]; locked: boolean
+  onUpload?: (f: File) => void; onRemove?: (f: ProofFile) => void; uploading?: boolean; compact?: boolean
+}) {
+  const inputRef = useRef<HTMLInputElement>(null)
+  return (
+    <div style={{ marginTop: compact ? 8 : 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <label className="ezp-label" style={{ margin: 0 }}>Documents</label>
+        <span className="ezp-muted" style={{ fontSize: 12 }}>
+          {files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : 'none yet'}
+        </span>
+        {!locked && onUpload && (
+          <>
+            <input ref={inputRef} type="file" accept={ACCEPT} style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) onUpload(f); e.target.value = '' }} />
+            <button type="button" className="ezp-ghost" style={{ marginLeft: 'auto' }} disabled={uploading}
+              onClick={() => inputRef.current?.click()}>
+              {uploading ? 'Uploading…' : '＋ Upload document'}
+            </button>
+          </>
+        )}
+      </div>
+      {files.length > 0 && (
+        <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 6 }}>
+          {files.map(f => (
+            <li key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--ez-sunken)', border: '1px solid var(--ez-line)' }}>
+              <span aria-hidden style={{ fontSize: 16, lineHeight: 1 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</div>
+                <div className="ezp-muted" style={{ fontSize: 11 }}>{fmtSize(f.size_bytes)} · {fmtDate(f.uploaded_at)}</div>
+              </div>
+              {f.url && <a className="ezp-ghost" href={f.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>View</a>}
+              {!locked && onRemove && (
+                <button type="button" className="ezp-ghost is-danger" onClick={() => onRemove(f)} aria-label={`Remove ${f.file_name}`}>Remove</button>
+              )}
+            </li>
+          ))}
+        </ul>
+      )}
+      {!locked && onUpload && files.length === 0 && (
+        <div className="ezp-muted" style={{ fontSize: 12, marginTop: 6 }}>PDF, JPG, PNG or WEBP, up to 10 MB each. Receipts, policy statements, rent receipts — whatever proves this line.</div>
+      )}
+    </div>
+  )
+}
+
 // Outside the parent so typing in an amount box never remounts the row.
-function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
-  p: Proof; draftAmt: string; draftRef: string
-  onAmt: (v: string) => void; onRef: (v: string) => void; onSave: () => void; busy: boolean
+function ProofRow({ p, files, draftAmt, draftRef, onAmt, onRef, onSave, onUpload, onRemove, busy, uploading }: {
+  p: Proof; files: ProofFile[]; draftAmt: string; draftRef: string
+  onAmt: (v: string) => void; onRef: (v: string) => void; onSave: () => void
+  onUpload: (f: File) => void; onRemove: (f: ProofFile) => void; busy: boolean; uploading: boolean
 }) {
   const t = TONE[p.status] || TONE.PENDING
   const locked = p.status === 'APPROVED'
@@ -64,10 +128,12 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
         <div style={{ gridColumn: 'span 2' }}>
           <label className="ezp-label">Bill / policy reference</label>
           <input className="ezp-input"
-            value={draftRef} readOnly={locked} placeholder="Policy no. / receipt no. / drive link"
+            value={draftRef} readOnly={locked} placeholder="Policy no. / receipt no."
             onChange={e => onRef(e.target.value)} />
         </div>
       </div>
+
+      <ProofDocuments files={files} locked={locked} onUpload={onUpload} onRemove={onRemove} uploading={uploading} />
 
       {!locked && shortfall > 0 && (
         <div className="ezp-note is-warn" style={{ margin: '12px 0 0' }}>
@@ -80,10 +146,13 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
         </div>
       )}
       {!locked && (
-        <div style={{ marginTop: 12 }}>
+        <div style={{ marginTop: 12, display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           <button className="ezp-btn" onClick={onSave} disabled={busy}>
             {p.status === 'PENDING' ? 'Submit proof' : 'Update proof'}
           </button>
+          {files.length === 0 && (
+            <span className="ezp-muted" style={{ fontSize: 12 }}>Attach the bill or receipt before submitting — HR approves against the document.</span>
+          )}
         </div>
       )}
     </div>
@@ -92,13 +161,23 @@ function ProofRow({ p, draftAmt, draftRef, onAmt, onRef, onSave, busy }: {
 
 export default function InvestmentProofs({ employeeId }: { employeeId: string }) {
   const [rows, setRows] = useState<Proof[]>([])
+  const [files, setFiles] = useState<ProofFile[]>([])
   const [draft, setDraft] = useState<Record<string, { amt: string; ref: string }>>({})
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState('')
+  const [uploading, setUploading] = useState('')
   const [msg, setMsg] = useState(''); const [err, setErr] = useState('')
   const [leaving, setLeaving] = useState<string | null>(null)
   const [hasDecl, setHasDecl] = useState(false)
   const [regime, setRegime] = useState('')
+
+  const loadFiles = useCallback(async () => {
+    try {
+      const r = await fetch(`/api/ess/investment-proofs?employee_id=${encodeURIComponent(employeeId)}&fy=${FY}`, { headers: await authHeaders() })
+      const j = await r.json().catch(() => ({}))
+      if (r.ok) setFiles((j.files || []) as ProofFile[])
+    } catch { /* the list stays as it was */ }
+  }, [employeeId])
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -119,8 +198,9 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
       const dr: Record<string, { amt: string; ref: string }> = {}
       list.forEach(p => { dr[p.id] = { amt: num(p.submitted_amount) ? String(num(p.submitted_amount)) : '', ref: p.proof_reference || '' } })
       setDraft(dr)
+      await loadFiles()
     } catch (e: any) { setErr(e.message || String(e)) } finally { setLoading(false) }
-  }, [employeeId])
+  }, [employeeId, loadFiles])
   useEffect(() => { load() }, [load])
 
   async function openWindow() {
@@ -144,6 +224,31 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
     if (error) { setErr(error.message); return }
     setMsg(`${p.section} proof submitted. HR will review it.`)
     load()
+  }
+
+  async function uploadFile(p: Proof, file: File) {
+    setErr(''); setMsg(''); setUploading(p.id)
+    try {
+      const fd = new FormData()
+      fd.append('proof_id', p.id)
+      fd.append('file', file)
+      const r = await fetch('/api/ess/investment-proofs', { method: 'POST', headers: await authHeaders(), body: fd })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok) { setErr(j.error || 'The document could not be uploaded.'); return }
+      setFiles(fs => [j.file as ProofFile, ...fs])
+      setMsg(j.resubmitted ? `${file.name} attached to ${p.section}; the line has gone back to HR for review.` : `${file.name} attached to ${p.section}.`)
+      if (j.resubmitted) load()
+    } catch { setErr('The document could not be uploaded. Check your connection and try again.') }
+    finally { setUploading('') }
+  }
+
+  async function removeFile(p: Proof, f: ProofFile) {
+    if (!window.confirm(`Remove ${f.file_name} from ${p.section}?`)) return
+    setErr(''); setMsg('')
+    const r = await fetch(`/api/ess/investment-proofs?id=${encodeURIComponent(f.id)}`, { method: 'DELETE', headers: await authHeaders() })
+    const j = await r.json().catch(() => ({}))
+    if (!r.ok) { setErr(j.error || 'The document could not be removed.'); return }
+    setFiles(fs => fs.filter(x => x.id !== f.id))
   }
 
   const deadline = rows[0]?.deadline || null
@@ -189,6 +294,7 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
             <div className="ezp-tiles">
               <div className="ezp-tile"><div className="ezp-tile-name">Proven</div><div className="ezp-tile-num ezp-ok">{inr(proven)}</div></div>
               <div className="ezp-tile"><div className="ezp-tile-name">Not yet proven</div><div className={`ezp-tile-num${declared - proven > 0 ? ' ezp-warn' : ''}`}>{inr(Math.max(0, declared - proven))}</div></div>
+              <div className="ezp-tile"><div className="ezp-tile-name">Documents</div><div className="ezp-tile-num">{files.length}</div></div>
               {deadline && (
                 <div className="ezp-tile"><div className="ezp-tile-name">Deadline</div><div className={`ezp-tile-num${overdue ? ' ezp-bad' : ''}`}>{fmtDate(deadline)}</div></div>
               )}
@@ -206,11 +312,12 @@ export default function InvestmentProofs({ employeeId }: { employeeId: string })
             </div>
           ) : (
             rows.map(p => (
-              <ProofRow key={p.id} p={p}
+              <ProofRow key={p.id} p={p} files={files.filter(f => f.proof_id === p.id)}
                 draftAmt={draft[p.id]?.amt ?? ''} draftRef={draft[p.id]?.ref ?? ''}
                 onAmt={v => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], amt: v } }))}
                 onRef={v => setDraft(d => ({ ...d, [p.id]: { ...d[p.id], ref: v } }))}
-                onSave={() => saveProof(p)} busy={busy === p.id} />
+                onSave={() => saveProof(p)} busy={busy === p.id}
+                onUpload={f => uploadFile(p, f)} onRemove={f => removeFile(p, f)} uploading={uploading === p.id} />
             ))
           )}
         </>
