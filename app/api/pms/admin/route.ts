@@ -27,12 +27,13 @@
 
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb, grantForRequest, actorFromRequest } from '@/lib/rms/server'
-import { companyFilter } from '@/lib/rms/resolve'
+import { companyFilter, allowedCompanies } from '@/lib/rms/resolve'
 import { canManage } from '@/lib/rms/resolve'
 import { isHrRole, pmsRoleOf } from '@/lib/pms/postFinal'
 import { authorityOf, authorityFromRow } from '@/lib/pms/authority'
 import { chainFault, normaliseRungs, usedBy, RUNG_CHOICES } from '@/lib/pms/chainBuilder'
 import { policyKpiRangeFault } from '@/lib/pms/kpi'
+import { scopeVerdict, scopeRefusal } from '@/lib/pms/tenancy'
 
 export const dynamic = 'force-dynamic'
 
@@ -254,16 +255,154 @@ async function rungCoverage(): Promise<Record<string, { have: number; of: number
   return out
 }
 
-async function gate(req: NextRequest, action?: string, periodId?: string | null) {
+/**
+ * ════════════════════════════════════════════════════════════════════════
+ * WHICH COMPANY'S ROW IS THIS, AND MAY THIS CALLER TOUCH IT?
+ * ════════════════════════════════════════════════════════════════════════
+ *
+ * canManage(grant, 'Performance') is an ACCESS LEVEL. It answers "may this
+ * person configure Performance" and says nothing whatever about WHOSE
+ * Performance. Company scoping in this product is a separate thing —
+ * companyFilter, whose own comment calls it "the single choke-point that
+ * stops '' / 'ALL' from leaking other companies".
+ *
+ * That choke-point was on all four INSERT paths and none of the eleven that
+ * address an existing row, every one of which reads its id straight from the
+ * request body and runs through rmsServiceClient — the SERVICE ROLE key, so
+ * RLS is not behind it either. Three organisations share this database. A
+ * Performance=FULL admin scoped to one of them could rewrite the other two's
+ * policies, rating bands, periods, KRA library and chains, using ids this
+ * route's own GET hands over unfiltered.
+ *
+ * ── WHY THIS LIVES IN gate() AND NOT AT FIFTEEN CALL SITES ───────────────
+ *
+ * Because the failure mode is FORGETTING. The insert paths prove the author
+ * knew the rule and applied it where it was in view; what went wrong is that
+ * nothing connected the cases. A check inside the switch would be fifteen
+ * chances to leave one out, and the sixteenth action somebody adds next year
+ * would be the one that slips. Declared in a map and run before the switch,
+ * an omission is a missing KEY — and admin-route-tenancy.test.ts fails on a
+ * case that has no entry.
+ *
+ * ── FAIL CLOSED, UNLIKE uploadAllowed ────────────────────────────────────
+ *
+ * uploadAllowed deliberately falls back to pre-217 behaviour when its read
+ * fails, and says why: a permissions lookup that fails shut would close the
+ * route on a database hiccup. That is right for a question about what a
+ * feature allows and wrong for a tenancy boundary. A hiccup here must not
+ * hand somebody another company's data, so an unreadable row is refused —
+ * transiently, and the message says to try again.
+ */
+const SCOPED_BY: Record<string, {
+  /** Where the row lives. */
+  table: 'pms_policies' | 'pms_periods' | 'pms_rating_scale'
+       | 'pms_kra_master' | 'pms_chain' | 'pms_training_catalogue'
+  /** Body keys that may carry its id, in the order the case reads them.
+   *  An action whose keys are all absent is creating rather than editing,
+   *  and creation is already pinned by companyFilter. */
+  keys: readonly string[]
+}> = {
+  kra_upsert:           { table: 'pms_kra_master',         keys: ['id'] },
+  kra_set_active:       { table: 'pms_kra_master',         keys: ['id'] },
+  catalogue_upsert:     { table: 'pms_training_catalogue', keys: ['id'] },
+  catalogue_set_active: { table: 'pms_training_catalogue', keys: ['id'] },
+  chain_upsert:         { table: 'pms_chain',              keys: ['id'] },
+  chain_set_active:     { table: 'pms_chain',              keys: ['id'] },
+  policy_update:        { table: 'pms_policies',           keys: ['id'] },
+  scale_upsert:         { table: 'pms_rating_scale',       keys: ['id'] },
+  // Keyed on the POLICY, not a period: this one creates the periods.
+  periods_generate:     { table: 'pms_policies',           keys: ['policy_id'] },
+  period_update:        { table: 'pms_periods',    keys: ['period_id', 'id'] },
+  period_open:          { table: 'pms_periods',            keys: ['period_id'] },
+  finalise:             { table: 'pms_periods',            keys: ['period_id'] },
+  kra_action:           { table: 'pms_periods',            keys: ['period_id'] },
+  kra_lock:             { table: 'pms_periods',            keys: ['period_id'] },
+  upload_commit:        { table: 'pms_periods',            keys: ['period_id'] },
+}
+
+type Grant = Awaited<ReturnType<typeof grantForRequest>>
+type ScopedTable = (typeof SCOPED_BY)[keyof typeof SCOPED_BY]['table']
+
+/**
+ * Refuse one row that belongs to a company this caller's roles are not valid
+ * in. Returns a response to send, or null to carry on.
+ *
+ * The first test mirrors companyFilter's first branch EXACTLY: a caller who
+ * already reaches beyond their own company — a super admin, an ORG-scoped
+ * role, or the legacy shared dashboard login, which has no employee row and
+ * therefore no company — is the same caller companyFilter lets pick any
+ * company. Nothing changes for them, which is what keeps today's dashboard
+ * working while the gap closes for everybody else.
+ *
+ * `groupIsFine` separates EDITING a row from POINTING AT one. A chain with no
+ * company belongs to the whole group: changing it changes every company, so
+ * that takes group reach — but a single company's policy may perfectly well
+ * USE it, which is what the group library is for.
+ */
+async function rowOutOfScope(
+  grant: Grant, table: ScopedTable, id: string,
+  opts: { groupIsFine?: boolean } = {},
+): Promise<NextResponse | null> {
+  // Asked before the read, so an unrestricted caller costs no round trip.
+  // scopeVerdict asks it again — it has to, being pure — and they agree
+  // because tenancy.ts copied the test from companyFilter.
+  if (grant.crossCompany || !grant.companyId) return null
+
+  const r = await sb.from(table).select('company_id').eq('id', id).maybeSingle()
+  if (r.error) {
+    return bad('Could not check which company this belongs to, so nothing '
+             + 'was changed. Try again in a moment.', 503)
+  }
+  if (!r.data) {
+    return bad('That no longer exists. Reload the screen — somebody may have '
+             + 'removed it.', 404)
+  }
+
+  const verdict = scopeVerdict({
+    crossCompany: grant.crossCompany,
+    companyId: grant.companyId,
+    allowed: allowedCompanies(grant, 'Performance'),
+    owner: r.data.company_id as string | null,
+    groupIsFine: opts.groupIsFine,
+  })
+  return verdict === 'ALLOWED' ? null : bad(scopeRefusal(verdict), 403)
+}
+
+/** The same question asked of whatever row THIS ACTION names. */
+async function outOfScope(
+  grant: Grant, action: string, body: Record<string, unknown>,
+): Promise<NextResponse | null> {
+  if (grant.crossCompany || !grant.companyId) return null
+
+  const rule = SCOPED_BY[action]
+  if (!rule) return null            // not an action that names a row
+
+  const id = rule.keys
+    .map(k => typeof body[k] === 'string' ? (body[k] as string).trim() : '')
+    .find(v => v.length > 0)
+  if (!id) return null              // creating, not editing
+
+  return rowOutOfScope(grant, rule.table, id)
+}
+
+async function gate(req: NextRequest, action?: string,
+                    body?: Record<string, unknown>) {
   const grant = await grantForRequest(req)
+  const periodId = typeof body?.period_id === 'string' ? body.period_id : null
   const manages = canManage(grant, 'Performance')
   const hrMay = !!action && HR_ACTIONS.has(action)
-             && await uploadAllowed(grant, periodId ?? null)
+             && await uploadAllowed(grant, periodId)
   if (!manages && !hrMay) {
     return { error: bad(action && HR_ACTIONS.has(action)
       ? 'A bulk rating upload is HR\'s to commit. This account is not an HR '
         + 'Manager, HR Head or Admin.'
       : 'You need full access to Performance to change this.', 403) } as const
+  }
+  // AFTER the level check and before anything is written: knowing WHAT a
+  // caller may do comes first, WHOSE row it is second.
+  if (action) {
+    const wrongCompany = await outOfScope(grant, action, body ?? {})
+    if (wrongCompany) return { error: wrongCompany } as const
   }
   const actor = await actorFromRequest(req)
   return { grant, actor } as const
@@ -340,10 +479,11 @@ export async function POST(req: NextRequest) {
   const body = await req.json().catch(() => ({})) as Record<string, unknown>
   const action = String(body.action ?? '')
 
-  // The period is read from the body for the gate, because 217 makes the
-  // answer depend on which company's policy the upload lands in.
-  const g = await gate(req, action,
-    typeof body.period_id === 'string' ? body.period_id : null)
+  // The WHOLE BODY goes to the gate now, not just the period. 217 made the
+  // upload's answer depend on which company's policy it lands in, and the
+  // scope check needs whichever id this particular action names — a policy,
+  // a period, a band, a chain. Nothing is written from it there; gate reads.
+  const g = await gate(req, action, body)
   if ('error' in g) return g.error
   const { actor } = g
 
@@ -563,6 +703,21 @@ export async function POST(req: NextRequest) {
       if (!Object.keys(fields).length) return bad('Nothing to change.')
 
       /**
+       * WHERE THIS POLICY IS BEING POINTED, as well as whose it is.
+       *
+       * gate() has checked the policy itself. chain_id is in POLICY_COLS, so
+       * this edit can also hang the policy off a chain — and another
+       * company's chain is a configuration nobody here should be reading,
+       * let alone appraising against. A GROUP chain is fine and is the whole
+       * point of the group library, hence groupIsFine.
+       */
+      if (typeof fields.chain_id === 'string' && fields.chain_id.trim()) {
+        const wrongCompany = await rowOutOfScope(
+          g.grant, 'pms_chain', fields.chain_id.trim(), { groupIsFine: true })
+        if (wrongCompany) return wrongCompany
+      }
+
+      /**
        * THE KPI RANGE, EXPLAINED BEFORE THE DATABASE REFUSES IT.
        *
        * CHECK pms_policies_kpi_range is still what makes this impossible;
@@ -605,6 +760,23 @@ export async function POST(req: NextRequest) {
     case 'scale_upsert': {
       const id = str('id')
       const fields = pick(body, SCALE_COLS)
+
+      /**
+       * THE DESTINATION IS A SCOPE QUESTION TOO.
+       *
+       * gate() has already checked the BAND this edits. policy_id is in
+       * SCALE_COLS, so the band can also be pointed somewhere — and a band
+       * of ours attached to another company's policy is the same leak
+       * wearing different clothes. It applies on insert as well: company_id
+       * comes from companyFilter and would be ours while the policy it hangs
+       * off is not.
+       */
+      if (typeof fields.policy_id === 'string' && fields.policy_id.trim()) {
+        const wrongCompany = await rowOutOfScope(
+          g.grant, 'pms_policies', fields.policy_id.trim())
+        if (wrongCompany) return wrongCompany
+      }
+
       if (id) {
         const r = await sb.from('pms_rating_scale').update(fields).eq('id', id).select().single()
         return r.error ? bad(r.error.message) : okay(r.data)
