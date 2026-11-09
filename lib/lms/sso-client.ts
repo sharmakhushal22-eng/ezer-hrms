@@ -7,7 +7,9 @@ import { signOutEverywhere } from '@/components/SessionGuard'
 import { ESS_KEY, LOGIN_AT_KEY } from '@/lib/session-policy'
 import { HRMS_URL, LMS_URL } from './site'
 
-/** Set when the person arrived from HRMS, so the LMS can offer a way back. */
+/** Where the person arrived from: '1' for the HRMS website, so the LMS can offer a way back;
+ *  'app' for the EZER HRMS phone app, which opens the LMS in its own in-app browser — closing
+ *  that browser is the way back, and a link to the HRMS website would only lead away from it. */
 const VIA_HRMS_KEY = 'ezl_via_hrms'
 
 /** HRMS: leave for the LMS domain at the same screen, signed in. With no session, or if the
@@ -29,10 +31,13 @@ export async function handOffToLms(): Promise<void> {
  *  replaces whoever was signed in here before, since the person just came from somewhere they
  *  are signed in. Returns once the session is in place, or once it is clear there is none. */
 export async function adoptHandoff(): Promise<void> {
+  const fromApp = /(?:^#|&)from=app(?:&|$)/.test(location.hash)
   const m = /(?:^#|&)sso=([^&]+)/.exec(location.hash)
-  if (!m) return
+  if (fromApp) { try { localStorage.setItem(VIA_HRMS_KEY, 'app') } catch { /* private mode */ } }
+  if (!m && !fromApp) return
   // Off the address at once: out of history, out of anything copied or shared.
   history.replaceState(history.state, '', location.pathname + location.search)
+  if (!m) return
   let d: { kind?: string; employee_id?: string; name?: string; email?: string; token?: string; token_hash?: string; employee?: { id: string; name: string } | null }
   try {
     const r = await fetch('/api/lms/sso/redeem', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ code: decodeURIComponent(m[1]) }), cache: 'no-store' })
@@ -50,7 +55,7 @@ export async function adoptHandoff(): Promise<void> {
       if (d.employee) localStorage.setItem(ESS_KEY, JSON.stringify({ employee_id: d.employee.id, name: d.employee.name, email: d.email || '', token: null }))
     } else return
     localStorage.setItem(LOGIN_AT_KEY, String(Date.now()))
-    localStorage.setItem(VIA_HRMS_KEY, '1')
+    localStorage.setItem(VIA_HRMS_KEY, fromApp ? 'app' : '1')
   } catch { /* private mode: they are asked to sign in here */ }
 }
 
