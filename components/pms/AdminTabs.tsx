@@ -1224,12 +1224,17 @@ function HrFinalBlock({ row, required, scale, canSettle, onSettle, busy }: {
  * being typed, this weighs what was saved, because a batch releases
  * results that were already prepared.
  */
-function BulkPublish({ rows, deptNames, periodLabel, canAct, onPublishMany }: {
+function BulkPublish({ rows, deptNames, periodLabel, canAct, onPublishMany,
+                       bands = [] }: {
   rows: PublishRow[] | null
   deptNames: Record<string, string>
   periodLabel?: string | null
   canAct: boolean
   onPublishMany?: (ids: string[], onDone: (n: number) => void) => Promise<BulkOutcome>
+  /** THE RATING SCALE, because one of the five gate rules lives on the band
+   *  rather than on the row — see improvementRequired below. Same shape
+   *  PublishTab already declares; it is the only caller. */
+  bands?: { value: number; label: string; improvementMandatory?: boolean }[]
 }) {
   const [filter, setFilter] = useState<BulkFilter>({})
   const [picked, setPicked] = useState<Set<string> | null>(null)
@@ -1245,12 +1250,29 @@ function BulkPublish({ rows, deptNames, periodLabel, canAct, onPublishMany }: {
     published: r.published,
     finalRating: r.finalRating,
     appreciation: r.appreciation, improvement: r.improvement,
-    // The band's own rule travels with the row; the card computes it from
-    // `bands` and this must not guess differently.
-    improvementRequired: false,
+    /**
+     * THE BAND'S RULE, COMPUTED — it was hardcoded `false`.
+     *
+     * The comment here used to say "the band's own rule travels with the
+     * row", and it does not: PublishRow carries no such field. So the bulk
+     * preview applied four of the five gate rules and silently skipped the
+     * fifth, while the card beside it applied all five.
+     *
+     * What that looked like: somebody on a band that mandates improvement
+     * feedback, with none written, was listed under "Ready to publish" and
+     * counted in the number on the confirm button. publishMany then computed
+     * the rule properly from bandList and refused them — and the outcome
+     * banner reported them among the SERVER's refusals, which it was not.
+     * The admin pressed publish on N and got fewer, with the shortfall
+     * explained as something the database had done.
+     *
+     * The card's line is `!!bands.find(b => b.value === finalRating)
+     * ?.improvementMandatory`. This is that line, for the same reason.
+     */
+    improvementRequired: !!bands.find(b => b.value === r.finalRating)?.improvementMandatory,
     signedOff: r.signedOff, hrDirect: r.hrDirect,
     hrFinal: r.hrFinal, hrFinalRequired: r.hrFinalRequired,
-  })), [rows, deptNames])
+  })), [rows, deptNames, bands])
 
   const opts = useMemo(() => bulkChoices(all), [all])
   const inScope = useMemo(() => selectRows(all, filter), [all, filter])
@@ -1693,7 +1715,8 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
       </Card>
 
       <BulkPublish rows={scoped} deptNames={deptNames} periodLabel={periodLabel}
-                   canAct={canAct && !!onPublishMany} onPublishMany={onPublishMany} />
+                   canAct={canAct && !!onPublishMany} onPublishMany={onPublishMany}
+                   bands={bands} />
 
       {member && (
         <Card title={`${member.name} — ${member.code}`}
