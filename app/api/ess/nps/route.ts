@@ -5,8 +5,15 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPranCreationEmail } from '@/lib/nps/pran-email'
+import { requireSelfOrModule } from '@/lib/rms/authz'
 
 export const runtime = 'nodejs'
+
+// Identity comes from the session. An employee acts on their own enrolment; Payroll staff
+// (Payroll EDIT, same company) act for an employee from Statutory & Tax → NPS, which is what
+// `source: 'HR'` records. The employee_id in the request is honoured only in those two cases —
+// it used to be taken on trust, so anyone could read a person's basic salary or enrol/stop
+// NPS for them.
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -39,8 +46,9 @@ async function loadEmpCtc(employeeId: string): Promise<{ emp: any; ctc: any } | 
 }
 
 export async function GET(req: NextRequest) {
-  const employeeId = req.nextUrl.searchParams.get('employee_id')
-  if (!employeeId) return NextResponse.json({ error: 'employee_id required' }, { status: 400 })
+  const who = await requireSelfOrModule(req, req.nextUrl.searchParams.get('employee_id'), 'Payroll', 'VIEW')
+  if (who.error) return who.error
+  const employeeId = who.subjectId
 
   const r = await loadEmpCtc(employeeId)
   if (!r) return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
@@ -69,9 +77,14 @@ export async function POST(req: NextRequest) {
   // `source` lets Payroll → Statutory & Tax → NPS enrol on an employee's behalf through
   // this same route. Sharing it is the point: two enrolment paths that each did their own
   // arithmetic would eventually disagree about the same person's contribution.
-  const { employee_id, has_existing_pran, pran_number, pran_holder_name, tier_type, acknowledged,
-          source, performed_by_name } = await req.json()
-  const src = String(source || '').toUpperCase() === 'HR' ? 'HR' : 'ESS'
+  const { employee_id: asked, has_existing_pran, pran_number, pran_holder_name, tier_type, acknowledged,
+          performed_by_name } = await req.json()
+  const who = await requireSelfOrModule(req, asked, 'Payroll', 'EDIT')
+  if (who.error) return who.error
+  const employee_id = who.subjectId
+  // Acting for somebody else IS the HR path; the body cannot claim it.
+  const src = who.onBehalf ? 'HR' : 'ESS'
+  const performed_by = who.grant.employeeId ?? employee_id
   if (!acknowledged) return NextResponse.json({ error: 'Acknowledgement required' }, { status: 400 })
 
   if (has_existing_pran) {
@@ -114,7 +127,7 @@ export async function POST(req: NextRequest) {
     action: 'DECLARED',
     new_value: { has_existing_pran, regime, percent, monthly_nps: monthlyNps, status: created.status,
                  ...(src === 'HR' ? { enrolled_by: performed_by_name || 'HR' } : {}) },
-    monthly_nps_amount: monthlyNps, performed_by: employee_id, source: src,
+    monthly_nps_amount: monthlyNps, performed_by, source: src,
   })
 
   if (isPending) {
@@ -129,8 +142,11 @@ export async function POST(req: NextRequest) {
 }
 
 export async function PATCH(req: NextRequest) {
-  const { employee_id, action, pran_number, stopped_reason, source: pSource, performed_by_name } = await req.json()
-  const pSrc = String(pSource || '').toUpperCase() === 'HR' ? 'HR' : 'ESS'
+  const { employee_id: asked, action, pran_number, stopped_reason, performed_by_name } = await req.json()
+  const who = await requireSelfOrModule(req, asked, 'Payroll', 'EDIT')
+  if (who.error) return who.error
+  const employee_id = who.subjectId
+  const pSrc = who.onBehalf ? 'HR' : 'ESS'
   const { data: rec } = await supabase.from('nps_declarations').select('*')
     .eq('employee_id', employee_id).in('status', ['ACTIVE', 'PENDING_PRAN']).maybeSingle()
   if (!rec) return NextResponse.json({ error: 'No NPS declaration found' }, { status: 404 })

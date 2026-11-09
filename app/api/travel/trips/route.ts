@@ -22,6 +22,7 @@ import {
 } from '@/lib/travel/access';
 import { findEntitlement } from '@/lib/travel/calc';
 import { errorResponse } from '@/lib/travel/errors';
+import { travelApprover, travelOwnerOrStaff } from '@/lib/travel/approver';
 
 export const dynamic = 'force-dynamic';
 
@@ -309,7 +310,7 @@ export async function POST(req: NextRequest) {
 export async function PATCH(req: NextRequest) {
   try {
     const sb = serviceClient();
-    const { trip_id, action, actioned_by, remarks } = (await req.json()) ?? {};
+    const { trip_id, action, actioned_by: claimedActor, remarks } = (await req.json()) ?? {};
 
     if (!trip_id || !action) {
       return NextResponse.json({ error: 'trip_id and action are required' }, { status: 400 });
@@ -322,6 +323,17 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle();
 
     if (!trip) return NextResponse.json({ error: 'Trip not found' }, { status: 404 });
+
+    // This handler had no authentication at all: anyone on the internet could approve,
+    // reject or cancel any trip and name any approver. Now: the traveller submits or
+    // cancels their own trip (or travel staff do); approving and rejecting is for the
+    // traveller's L1 manager or travel staff of the company; the actor is the caller.
+    const subject = { employee_id: trip.employee_id as string, company_id: trip.company_id as string | null };
+    const who = action === 'APPROVE' || action === 'REJECT'
+      ? await travelApprover(req, sb, subject, 'RM')
+      : await travelOwnerOrStaff(req, subject);
+    if (!who.ok) return who.response;
+    const actioned_by: string | null = who.actor ?? (who.grant.legacy ? (claimedActor ?? null) : null);
 
     const policy = await getActivePolicy(sb, trip.company_id);
     const patch: Record<string, unknown> = {};

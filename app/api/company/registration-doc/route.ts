@@ -22,6 +22,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb, grantForRequest } from '@/lib/rms/server'
 import { companyEditRight } from '@/lib/company/authz'
+import { inCompany } from '@/lib/rms/authz'
 
 export const dynamic = 'force-dynamic'
 
@@ -59,9 +60,14 @@ export async function GET(req: NextRequest) {
   if (!id) return NextResponse.json({ error: 'Which registration?' }, { status: 400 })
 
   const { data: reg } = await sb.from('registrations')
-    .select('id, reg_type, document_path, document_name, document_mime')
+    .select('id, company_id, reg_type, document_path, document_name, document_mime')
     .eq('id', id).maybeSingle()
   if (!reg) return NextResponse.json({ error: 'No such registration.' }, { status: 404 })
+  // A statutory certificate (PAN / GST / EPF / ESIC) belongs to a company — only someone
+  // whose role covers that company may open it, not any signed-in employee.
+  if (!inCompany(grant, reg.company_id as string | null, 'Company Profile')) {
+    return NextResponse.json({ error: 'This document belongs to a company outside your access.' }, { status: 403 })
+  }
   if (!reg.document_path) {
     return NextResponse.json({ error: 'No document has been uploaded for this registration.' }, { status: 404 })
   }

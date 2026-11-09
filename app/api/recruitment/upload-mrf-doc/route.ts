@@ -43,7 +43,7 @@ export async function POST(req: NextRequest) {
 
     const { error: upErr } = await supa.storage
       .from('onboarding-docs')
-      .upload(path, buffer, { contentType: file.type || 'application/octet-stream', upsert: true })
+      .upload(path, buffer, { contentType: file.type || 'application/octet-stream', upsert: false })
     if (upErr) {
       return NextResponse.json({ error: 'Storage upload failed: ' + upErr.message }, { status: 500 })
     }
@@ -74,15 +74,29 @@ export async function POST(req: NextRequest) {
   }
 }
 
+/** The paths actually recorded against one requisition. A signed URL — or a delete — is
+ *  only allowed for a path that is in here, so a guessed path for some other candidate's
+ *  KYC document in the same bucket is refused. */
+async function pathBelongsToMrf(mrfId: string, path: string): Promise<boolean> {
+  const { data: row } = await supa.from('manpower_requisitions').select('attachments').eq('id', mrfId).maybeSingle()
+  const existing = Array.isArray(row?.attachments)
+    ? row!.attachments
+    : (typeof row?.attachments === 'string' ? JSON.parse(row!.attachments) : [])
+  return existing.some((a: any) => a?.path === path)
+}
+
 // Signed URL for viewing an already-uploaded attachment (bucket is private).
 export async function GET(req: NextRequest) {
-  // A signed URL for any path is a read of any file in the bucket — guessing a path
-  // should not be enough.
+  // A signed URL for any path is a read of any file in the bucket — guessing a path should
+  // not be enough, so the path has to belong to the requisition named.
   const gate = await requireModule(req, 'Recruitment')
   if (gate.error) return gate.error
 
+  const mrfId = req.nextUrl.searchParams.get('mrf_id')
   const path = req.nextUrl.searchParams.get('path')
-  if (!path) return NextResponse.json({ error: 'path required' }, { status: 400 })
+  if (!mrfId || !path) return NextResponse.json({ error: 'mrf_id and path required' }, { status: 400 })
+  if (!(await pathBelongsToMrf(mrfId, path))) return NextResponse.json({ error: 'That document is not on this requisition.' }, { status: 403 })
+
   const { data, error } = await supa.storage
     .from('onboarding-docs').createSignedUrl(path, 60 * 60)
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
@@ -91,13 +105,15 @@ export async function GET(req: NextRequest) {
 
 // Remove an attachment from both storage and the requisition's JSONB.
 export async function DELETE(req: NextRequest) {
-  // Deleting somebody's document is the one that cannot be undone.
-  const gate = await requireModule(req, 'Recruitment')
+  // Deleting somebody's document is the one that cannot be undone — needs EDIT, and the
+  // path must belong to this requisition (not an arbitrary object in the shared bucket).
+  const gate = await requireModule(req, 'Recruitment', 'EDIT')
   if (gate.error) return gate.error
 
   const mrfId = req.nextUrl.searchParams.get('mrf_id')
   const path = req.nextUrl.searchParams.get('path')
   if (!mrfId || !path) return NextResponse.json({ error: 'mrf_id and path required' }, { status: 400 })
+  if (!(await pathBelongsToMrf(mrfId, path))) return NextResponse.json({ error: 'That document is not on this requisition.' }, { status: 403 })
 
   await supa.storage.from('onboarding-docs').remove([path])
 

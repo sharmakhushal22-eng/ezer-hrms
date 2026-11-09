@@ -65,12 +65,32 @@ const nextConfig: NextConfig = {
   // The fingerprinted chunks stay immutably cached, so this costs one small
   // revalidation per navigation rather than re-downloading the app.
   async headers() {
+    // Sent on every response. These are the headers a security review expects to see and
+    // the app did not set any of them: no clickjacking frame rule, no MIME-sniffing guard,
+    // no referrer or permissions policy, HSTS only by Vercel's default.
+    //
+    // No Content-Security-Policy yet: the app relies on inline styles and a few inline
+    // scripts (the theme bootstrap), so a CSP has to be measured in report-only mode first
+    // or it breaks the UI. Framing, sniffing, referrer and permissions are safe to set now.
+    const securityHeaders = [
+      { key: 'X-Frame-Options', value: 'SAMEORIGIN' },
+      { key: 'X-Content-Type-Options', value: 'nosniff' },
+      { key: 'Referrer-Policy', value: 'strict-origin-when-cross-origin' },
+      { key: 'Permissions-Policy', value: 'camera=(self), microphone=(), geolocation=(self), payment=(), usb=()' },
+      { key: 'Strict-Transport-Security', value: 'max-age=63072000; includeSubDomains; preload' },
+    ]
     return [
       {
         source: '/dashboard/:path*',
         headers: [
           { key: 'Cache-Control', value: 'no-cache, no-store, must-revalidate' },
         ],
+      },
+      // The SCORM content route serves uploaded package files and is framed by the player;
+      // it sets its own CORS/sandbox rules, so the global frame rule must not reach it.
+      {
+        source: '/((?!learn-scorm).*)',
+        headers: securityHeaders,
       },
     ]
   },

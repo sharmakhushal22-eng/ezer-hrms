@@ -3,8 +3,14 @@
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { calcEMI, maxEligibleLoan } from '@/lib/loans/schedule-generator'
+import { requireSelfOrModule, refuse } from '@/lib/rms/authz'
 
 export const runtime = 'nodejs'
+
+// Identity comes from the session: the caller acts on themself, or Loans staff act for an
+// employee of their company. The employee_id in the query/body is the request's claim and is
+// only honoured when it matches one of those. (These handlers took it on trust before — any
+// request could read anyone's loans and CTC-derived eligibility, or file a loan as them.)
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!
@@ -20,8 +26,9 @@ async function empWithCtc(employeeId: string) {
 
 // GET ?employee_id=xxx → loan types + eligibility + my loans + pending requests
 export async function GET(req: NextRequest) {
-  const employeeId = req.nextUrl.searchParams.get('employee_id')
-  if (!employeeId) return NextResponse.json({ error: 'employee_id required' }, { status: 400 })
+  const who = await requireSelfOrModule(req, req.nextUrl.searchParams.get('employee_id'), 'Loans', 'VIEW')
+  if (who.error) return who.error
+  const employeeId = who.subjectId
   const ctx = await empWithCtc(employeeId)
   if (!ctx) return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
 
@@ -35,7 +42,12 @@ export async function GET(req: NextRequest) {
 
 // POST — submit loan request
 export async function POST(req: NextRequest) {
-  const { employee_id, loan_type_id, requested_amount, requested_tenure_months, reason } = await req.json()
+  const { employee_id: asked, loan_type_id, requested_amount, requested_tenure_months, reason } = await req.json()
+  // A loan is applied for by the borrower themself, never on their behalf.
+  const who = await requireSelfOrModule(req, asked, 'Loans', 'FULL')
+  if (who.error) return who.error
+  if (who.onBehalf) return refuse(403, 'A loan request is filed by the employee themself.')
+  const employee_id = who.subjectId
   const ctx = await empWithCtc(employee_id)
   if (!ctx) return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
   const { data: lt } = await supabase.from('loan_types').select('*').eq('id', loan_type_id).single()
@@ -65,9 +77,15 @@ export async function POST(req: NextRequest) {
 
 // PATCH — closure / part-payment / extra-deduction request
 export async function PATCH(req: NextRequest) {
-  const { loan_id, employee_id, request_type, amount, apply_in_month } = await req.json()
+  const { loan_id, employee_id: asked, request_type, amount, apply_in_month } = await req.json()
+  const who = await requireSelfOrModule(req, asked, 'Loans', 'FULL')
+  if (who.error) return who.error
+  if (who.onBehalf) return refuse(403, 'A closure request is filed by the borrower themself.')
+  const employee_id = who.subjectId
   const { data: loan } = await supabase.from('loans').select('*').eq('id', loan_id).single()
   if (!loan) return NextResponse.json({ error: 'Loan not found' }, { status: 404 })
+  if (loan.employee_id !== employee_id) return refuse(403, 'This loan is not yours.')
+  if (!['CLOSURE', 'PART_PAYMENT', 'EXTRA_DEDUCTION'].includes(String(request_type))) return refuse(400, 'Unknown request_type')
   const { data: cr, error } = await supabase.from('loan_closure_requests').insert({
     loan_id, employee_id, request_type,
     amount: request_type === 'CLOSURE' ? loan.outstanding_principal : amount,

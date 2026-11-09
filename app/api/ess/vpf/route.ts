@@ -4,8 +4,13 @@
 // left-join ctc_master (no !inner) so employees without a CTC row don't 404.
 import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
+import { requireSelfOrModule } from '@/lib/rms/authz'
 
 export const runtime = 'nodejs'
+
+// Identity comes from the session: the employee on their own VPF, or Payroll staff (Payroll
+// EDIT, same company) for an employee. The employee_id in the request used to be taken on
+// trust, so anyone could read a person's PF wage figures or set 88% VPF on their salary.
 
 const supabase = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -38,8 +43,9 @@ async function loadEmpCtc(employeeId: string): Promise<{ emp: any; ctc: any } | 
 
 // GET ?employee_id=xxx → EPF wage base + current active VPF
 export async function GET(req: NextRequest) {
-  const employeeId = req.nextUrl.searchParams.get('employee_id')
-  if (!employeeId) return NextResponse.json({ error: 'employee_id required' }, { status: 400 })
+  const who = await requireSelfOrModule(req, req.nextUrl.searchParams.get('employee_id'), 'Payroll', 'VIEW')
+  if (who.error) return who.error
+  const employeeId = who.subjectId
 
   const r = await loadEmpCtc(employeeId)
   if (!r) return NextResponse.json({ error: 'Employee not found' }, { status: 404 })
@@ -72,7 +78,12 @@ export async function GET(req: NextRequest) {
 
 // POST — declare / modify (percent only)
 export async function POST(req: NextRequest) {
-  const { employee_id, vpf_percent, effective_from_month, acknowledged } = await req.json()
+  const { employee_id: asked, vpf_percent, effective_from_month, acknowledged } = await req.json()
+  const who = await requireSelfOrModule(req, asked, 'Payroll', 'EDIT')
+  if (who.error) return who.error
+  const employee_id = who.subjectId
+  const performed_by = who.grant.employeeId ?? employee_id
+  const source = who.onBehalf ? 'HR' : 'ESS'
   if (!acknowledged) return NextResponse.json({ error: 'Acknowledgement required' }, { status: 400 })
 
   const r = await loadEmpCtc(employee_id)
@@ -109,14 +120,17 @@ export async function POST(req: NextRequest) {
     action: existing ? 'MODIFIED' : 'DECLARED',
     old_value: existing ? { vpf_percent: existing.vpf_percent, base: existing.epf_wage_base, monthly_vpf: existing.monthly_vpf_amount } : null,
     new_value: { vpf_percent: safePercent, base: wageBase, monthly_vpf: monthlyVpf },
-    monthly_vpf_amount: monthlyVpf, performed_by: employee_id, source: 'ESS',
+    monthly_vpf_amount: monthlyVpf, performed_by, source,
   })
   return NextResponse.json({ success: true, declaration: created })
 }
 
 // PATCH — stop VPF
 export async function PATCH(req: NextRequest) {
-  const { employee_id, stopped_reason, stopped_from_month } = await req.json()
+  const { employee_id: asked, stopped_reason, stopped_from_month } = await req.json()
+  const who = await requireSelfOrModule(req, asked, 'Payroll', 'EDIT')
+  if (who.error) return who.error
+  const employee_id = who.subjectId
   const { data: active } = await supabase.from('vpf_declarations')
     .select('*').eq('employee_id', employee_id).eq('status', 'ACTIVE').maybeSingle()
   if (!active) return NextResponse.json({ error: 'No active VPF found' }, { status: 404 })
@@ -128,7 +142,7 @@ export async function PATCH(req: NextRequest) {
   await supabase.from('vpf_audit_log').insert({
     declaration_id: active.id, employee_id, action: 'STOPPED',
     old_value: { vpf_percent: active.vpf_percent, monthly_vpf: active.monthly_vpf_amount },
-    monthly_vpf_amount: 0, performed_by: employee_id, source: 'ESS',
+    monthly_vpf_amount: 0, performed_by: who.grant.employeeId ?? employee_id, source: who.onBehalf ? 'HR' : 'ESS',
   })
   return NextResponse.json({ success: true })
 }

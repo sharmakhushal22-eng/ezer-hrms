@@ -18,6 +18,7 @@ import { runLeaveDaily } from '@/lib/leave/daily'
 import nodemailer from 'nodemailer'
 import { runJoiningFollowups } from '@/lib/recruitment/joining-followup-run'
 import { runPrepareMails, runWelcomeMails, runLinkReminders } from '@/lib/onboarding/joining-day-run'
+import { requireCron } from '@/lib/cron-auth'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -44,11 +45,8 @@ export async function GET(req: NextRequest) {
 
 async function run(req: NextRequest) {
   // Optional protection: if CRON_SECRET is set, require it (Vercel sends it automatically).
-  const secret = process.env.CRON_SECRET
-  if (secret) {
-    const auth = req.headers.get('authorization')
-    if (auth !== `Bearer ${secret}`) return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+  const denied = requireCron(req)
+  if (denied) return denied
 
   // The daily leave & attendance job (balances + approver reminders) rides on
   // this cron instead of adding one of its own. It never fails this run.

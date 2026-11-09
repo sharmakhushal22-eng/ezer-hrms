@@ -5,6 +5,7 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { runImmigrationReminders } from '@/lib/onboarding/immigration'
+import { requireCron } from '@/lib/cron-auth'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -15,11 +16,8 @@ const supabase = createClient(
 )
 
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (secret) {
-    const auth = req.headers.get('authorization') || ''
-    if (auth !== `Bearer ${secret}` && req.nextUrl.searchParams.get('secret') !== secret) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCron(req)
+  if (denied) return denied
   try {
     const out = await runImmigrationReminders(supabase as any, { baseUrl: process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin })
     return NextResponse.json({ ok: true, ...out, ran_at: new Date().toISOString() })

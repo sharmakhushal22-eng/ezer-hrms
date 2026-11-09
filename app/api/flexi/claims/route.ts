@@ -4,8 +4,8 @@
 // GET: claims by employee_id or company_id (+ month/year/status filters).
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
-import { grantForRequest } from '@/lib/rms/server'
 import { companyFilter } from '@/lib/rms/resolve'
+import { requireAccess, requireSelfOrModule, inCompany, refuse } from '@/lib/rms/authz'
 import { resolveFlexi, COMP_NAMES } from '@/lib/flexi/resolve-server'
 
 const supa = createClient(
@@ -13,13 +13,32 @@ const supa = createClient(
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!
 )
 
+// Who may do what here, from the session (none of this was checked before — any request
+// could approve claims, raise somebody's tax-free limits or read a whole company's bills):
+//   SUBMIT / REQUEST_LIMIT      the employee themself (Flexi staff may file for someone)
+//   APPROVE / REJECT / limits   Flexi Claims EDIT, on claims of a company in the caller's scope
+//   GET ?employee_id            the employee, or Flexi Claims VIEW in their company
+//   GET ?company_id             Flexi Claims VIEW, pinned to the caller's companies
+
+/** The claims named by `ids`, refusing the whole batch if any is outside the caller's companies. */
+async function claimsInScope(ids: string[], g: Parameters<typeof inCompany>[0]) {
+  const { data } = await supa.from('flexi_claims').select('id, company_id, claim_amount').in('id', ids)
+  const rows = data ?? []
+  if (rows.length !== ids.length) return { error: refuse(404, 'One or more claims were not found.'), rows }
+  if (rows.some(r => !inCompany(g, r.company_id, 'Flexi Claims'))) return { error: refuse(403, 'Some of these claims belong to a company outside your access.'), rows }
+  return { error: null, rows }
+}
+
 export async function POST(req: NextRequest) {
   try {
     const body = await req.json()
     const { action } = body
 
     if (action === 'SUBMIT') {
-      const { employee_id, component_code, claim_amount, bill_date, bill_no, agency_name, vendor_desc, remark, supporting_remark } = body
+      const { employee_id: asked, component_code, claim_amount, bill_date, bill_no, agency_name, vendor_desc, remark, supporting_remark } = body
+      const who = await requireSelfOrModule(req, asked, 'Flexi Claims', 'EDIT')
+      if (who.error) return who.error
+      const employee_id = who.subjectId
       if (!(claim_amount > 0)) return NextResponse.json({ error: 'Claim amount must be greater than zero.' }, { status: 400 })
       // The window is the 1st–20th of every month, on its own (lib/flexi/window): the claim
       // goes on this month's window for the employee's company, whatever window_id the caller
@@ -52,19 +71,29 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'APPROVE') {
-      const { ids, reviewed_by, approved_by } = body
+      const { ids } = body
       if (!ids?.length) return NextResponse.json({ error: 'No claim ids' }, { status: 400 })
+      const gate = await requireAccess(req, 'Flexi Claims', 'EDIT')
+      if (gate.error) return gate.error
+      const scope = await claimsInScope(ids, gate.grant)
+      if (scope.error) return scope.error
+      const reviewer = gate.grant.name || gate.grant.empCode || 'Payroll'
       const { error } = await supa.from('flexi_claims')
-        .update({ status: 'APPROVED', reviewed_by: reviewed_by || null, approved_by: approved_by || 'Payroll Manager', reviewed_at: new Date().toISOString(), rejection_reason: null })
+        .update({ status: 'APPROVED', reviewed_by: gate.grant.employeeId, approved_by: reviewer, reviewed_at: new Date().toISOString(), rejection_reason: null })
         .in('id', ids)
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ success: true, approved: ids.length })
     }
 
     if (action === 'REJECT') {
-      const { ids, reviewed_by, approved_by, rejection_reason, approved_amount } = body
+      const { ids, rejection_reason, approved_amount } = body
       if (!ids?.length) return NextResponse.json({ error: 'No claim ids' }, { status: 400 })
       if (!rejection_reason?.trim()) return NextResponse.json({ error: 'Rejection reason required' }, { status: 400 })
+      const gate = await requireAccess(req, 'Flexi Claims', 'EDIT')
+      if (gate.error) return gate.error
+      const scope = await claimsInScope(ids, gate.grant)
+      if (scope.error) return scope.error
+      const reviewed_by = gate.grant.employeeId, approved_by = gate.grant.name || gate.grant.empCode || 'Payroll'
 
       // Partial rejection: ₹3,000 claimed but only ₹2,000 has a valid bill → ₹1,000 is
       // what loses its exemption. The rejected part is what Payroll taxes (sql99), so it
@@ -96,19 +125,28 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'REQUEST_LIMIT') {
-      const { employee_id, company_id, fy, component_code, current_limit, requested_limit, reason } = body
+      const { employee_id: asked, fy, component_code, current_limit, requested_limit, reason } = body
       if (!reason?.trim()) return NextResponse.json({ error: 'Reason required' }, { status: 400 })
+      const who = await requireSelfOrModule(req, asked, 'Flexi Claims', 'EDIT')
+      if (who.error) return who.error
+      const employee_id = who.subjectId
+      // The company is the employee's, from their record — not whatever the body says.
+      const { data: emp } = await supa.from('employees').select('company_id').eq('id', employee_id).maybeSingle()
       const { data, error } = await supa.from('flexi_limit_requests').insert({
-        employee_id, company_id, fy, component_code, current_limit, requested_limit, reason, status: 'PENDING',
+        employee_id, company_id: emp?.company_id ?? null, fy, component_code, current_limit, requested_limit, reason, status: 'PENDING',
       }).select().single()
       if (error) return NextResponse.json({ error: error.message }, { status: 500 })
       return NextResponse.json({ success: true, request_id: data?.id })
     }
 
     if (action === 'APPROVE_LIMIT_REQUEST') {
-      const { request_id, approved_by, reject_note } = body
+      const { request_id, reject_note } = body
+      const gate = await requireAccess(req, 'Flexi Claims', 'EDIT')
+      if (gate.error) return gate.error
       const { data: r } = await supa.from('flexi_limit_requests').select('*').eq('id', request_id).single()
       if (!r) return NextResponse.json({ error: 'Request not found' }, { status: 404 })
+      if (!inCompany(gate.grant, r.company_id, 'Flexi Claims')) return refuse(403, 'This request belongs to a company outside your access.')
+      const approved_by = gate.grant.name || gate.grant.empCode || 'Payroll'
       if (reject_note) {
         await supa.from('flexi_limit_requests').update({ status: 'REJECTED', reviewed_by: approved_by || null, reviewed_at: new Date().toISOString(), rejection_note: reject_note }).eq('id', request_id)
         return NextResponse.json({ success: true, rejected: true })
@@ -123,8 +161,15 @@ export async function POST(req: NextRequest) {
     }
 
     if (action === 'OVERRIDE_LIMIT') {
-      const { employee_id, company_id, fy, overrides, reason, approved_by } = body
+      const { employee_id, fy, overrides, reason } = body
       if (!reason?.trim()) return NextResponse.json({ error: 'Override reason required' }, { status: 400 })
+      // Raising somebody's tax-free limits is a Payroll decision, scoped to their company.
+      const gate = await requireAccess(req, 'Flexi Claims', 'EDIT')
+      if (gate.error) return gate.error
+      const { data: emp } = await supa.from('employees').select('company_id').eq('id', String(employee_id || '')).maybeSingle()
+      if (!emp) return refuse(404, 'Employee not found.')
+      if (!inCompany(gate.grant, emp.company_id, 'Flexi Claims')) return refuse(403, 'This employee belongs to a company outside your access.')
+      const company_id = emp.company_id, approved_by = gate.grant.name || gate.grant.empCode || 'Payroll'
       const rows = Object.entries(overrides || {}).filter(([, v]) => v).map(([code, limit]) => ({
         employee_id, company_id, fy, component_code: code,
         override_limit: Number(limit), override_reason: reason, approved_by: approved_by || null, is_active: true,
@@ -156,17 +201,21 @@ export async function GET(req: NextRequest) {
   const year = p.get('year')
 
   if (empId) {
+    // The employee's own history, or Flexi staff looking at an employee of their company.
+    const who = await requireSelfOrModule(req, empId, 'Flexi Claims', 'VIEW')
+    if (who.error) return who.error
     const { data } = await supa.from('flexi_claims')
       .select('*, flexi_claim_files(id, file_name, file_type, file_url, uploaded_at)')
-      .eq('employee_id', empId).order('submitted_at', { ascending: false })
+      .eq('employee_id', who.subjectId).order('submitted_at', { ascending: false })
     return NextResponse.json({ claims: data })
   }
 
   if (compId) {
-    // Pin to the caller's own company unless a cross-company (super-admin) role. A
-    // non-cross caller asking for another company — or 'ALL' — is forced back to theirs.
-    const grant = await grantForRequest(req)
-    const company = companyFilter(grant, compId, 'Flexi Claims')
+    // Flexi staff only. Pin to the caller's own company unless a cross-company (super-admin)
+    // role: a non-cross caller asking for another company — or 'ALL' — is forced back to theirs.
+    const gate = await requireAccess(req, 'Flexi Claims', 'VIEW')
+    if (gate.error) return gate.error
+    const company = companyFilter(gate.grant, compId, 'Flexi Claims')
     let q = supa.from('flexi_claims')
       .select('*, employees(emp_code, full_name, department_id, location_id, company_id, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)), flexi_claim_files(id, file_name, file_type, file_url)')
     if (company) q = q.eq('company_id', company)

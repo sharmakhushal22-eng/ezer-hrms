@@ -16,6 +16,7 @@
 
 import { NextRequest, NextResponse } from 'next/server';
 import { requireModule } from '@/lib/api-auth';
+import { requireAccess, requireCompany } from '@/lib/rms/authz';
 import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient, monthStart } from '@/lib/travel/access';
 
@@ -94,15 +95,18 @@ export async function GET(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   try {
-    // Opening, closing and locking an expense month is an HR/Finance
-    // action, not an employee one.
-    const gate = await requireModule(req, 'Travel Claims');
+    // Opening, closing and locking an expense month is an HR/Finance action, not an
+    // employee one: Travel Claims EDIT, on a company the caller's role covers.
+    const gate = await requireAccess(req, 'Travel Claims', 'EDIT');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
     const body = await req.json();
-    const { company_id, period_month, actioned_by, submit_open_from, submit_open_till, remarks } =
+    const { company_id, period_month, submit_open_from, submit_open_till, remarks } =
       body ?? {};
+    const scope = requireCompany(gate.grant, company_id, 'Travel Claims');
+    if (scope) return scope;
+    const actioned_by = gate.grant.employeeId;
 
     if (!company_id || !period_month) {
       return NextResponse.json(
@@ -170,10 +174,11 @@ export async function POST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
   try {
-    // Opening, closing and locking an expense month is an HR/Finance
-    // action, not an employee one.
-    const gate = await requireModule(req, 'Travel Claims');
+    // Opening, closing and locking an expense month is an HR/Finance action, not an
+    // employee one: Travel Claims EDIT, on the period's own company.
+    const gate = await requireAccess(req, 'Travel Claims', 'EDIT');
     if (gate.error) return gate.error;
+    const actioned_by = gate.grant.employeeId;
 
     const sb = serviceClient();
     const body = await req.json();
@@ -181,7 +186,6 @@ export async function PATCH(req: NextRequest) {
       period_id,
       action,
       reason,
-      actioned_by,
       payroll_run_id,
       submit_open_from,
       submit_open_till,
@@ -201,6 +205,8 @@ export async function PATCH(req: NextRequest) {
     if (!period) {
       return NextResponse.json({ error: 'Period not found' }, { status: 404 });
     }
+    const scope = requireCompany(gate.grant, period.company_id, 'Travel Claims');
+    if (scope) return scope;
 
     if (period.status === 'LOCKED' && action !== 'LOCK') {
       return NextResponse.json(

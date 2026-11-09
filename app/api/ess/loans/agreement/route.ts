@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { resolveLetterhead, letterheadHeaderHtml, letterheadFooterHtml } from '@/lib/letterheads';
 import { resolveTemplate, employeeScope } from '@/lib/config/store';
 import { renderLetterParagraphs, paragraphsToHtml } from '@/lib/config/render';
+import { requireAccess, requireCompany, requireSelfOrModule, refuse } from '@/lib/rms/authz';
 export const runtime = 'nodejs';
 
 const supabase = createClient(
@@ -28,6 +29,10 @@ export async function GET(req: NextRequest) {
     .from('loan_agreements').select('*').eq('request_id', requestId)
     .order('created_at', { ascending: false }).limit(1).maybeSingle();
   if (!agr) return NextResponse.json({ error: 'No agreement' }, { status: 404 });
+  // The borrower, or Loans staff of their company. (This answered anyone who knew a request
+  // id with the employee's name, code, principal and full EMI schedule.)
+  const who = await requireSelfOrModule(req, agr.employee_id, 'Loans', 'VIEW');
+  if (who.error) return who.error;
 
   if (format === 'html') {
     const [{ data: request }, { data: emp }] = await Promise.all([
@@ -91,12 +96,17 @@ ${letterheadFooterHtml(lh)}
 // ============================================================
 export async function POST(req: NextRequest) {
   const body = await req.json();
-  const { agreement_id, employee_id, signature_type,
+  const { agreement_id, signature_type,
           esign_name, esign_image_url, signed_pdf_url } = body;
 
   const { data: agr } = await supabase
     .from('loan_agreements').select('*').eq('id', agreement_id).single();
   if (!agr) return NextResponse.json({ error: 'Agreement not found' }, { status: 404 });
+  // Only the borrower signs their own agreement — nobody signs on their behalf.
+  const who = await requireSelfOrModule(req, agr.employee_id, 'Loans', 'FULL');
+  if (who.error) return who.error;
+  if (who.onBehalf) return refuse(403, 'A loan agreement is signed by the borrower themself.');
+  const employee_id = who.subjectId;
   if (agr.status !== 'GENERATED') {
     return NextResponse.json({ error: 'Already signed or processed' }, { status: 400 });
   }
@@ -132,12 +142,21 @@ export async function POST(req: NextRequest) {
 // Body: { agreement_id, reviewer_id, action:'APPROVED'|'REJECTED', review_remarks }
 // ============================================================
 export async function PATCH(req: NextRequest) {
+  // Reviewing a signed agreement is a Loans-desk action; the reviewer is whoever is signed
+  // in, not a reviewer_id from the body.
+  const gate = await requireAccess(req, 'Loans', 'EDIT');
+  if (gate.error) return gate.error;
   const body = await req.json();
-  const { agreement_id, reviewer_id, action, review_remarks } = body;
+  const { agreement_id, action, review_remarks } = body;
+  if (action !== 'APPROVED' && action !== 'REJECTED') return refuse(400, 'action must be APPROVED or REJECTED');
 
   const { data: agr } = await supabase
     .from('loan_agreements').select('*').eq('id', agreement_id).single();
   if (!agr) return NextResponse.json({ error: 'Agreement not found' }, { status: 404 });
+  const scope = requireCompany(gate.grant, agr.company_id, 'Loans');
+  if (scope) return scope;
+  if (agr.status !== 'UNDER_REVIEW') return refuse(409, `This agreement is ${String(agr.status).toLowerCase().replace(/_/g, ' ')}, not awaiting review.`);
+  const reviewer_id = gate.grant.employeeId ?? gate.grant.name ?? 'Admin';
 
   await supabase.from('loan_agreements').update({
     status: action, reviewed_by: reviewer_id,

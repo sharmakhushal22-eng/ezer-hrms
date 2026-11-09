@@ -11,6 +11,7 @@ import { createClient } from '@supabase/supabase-js'
 import { NextRequest, NextResponse } from 'next/server'
 import { sendPranCreationEmail } from '@/lib/nps/pran-email'
 import { requireModule } from '@/lib/api-auth'
+import { cronSecretGiven } from '@/lib/cron-auth'
 
 export const runtime = 'nodejs'
 
@@ -21,7 +22,10 @@ const supabase = createClient(
 
 /** GET — who would be chased, without sending anything. Lets the screen show a count
  *  and lets anyone check the list before firing mail at real people. */
-export async function GET() {
+export async function GET(req: NextRequest) {
+  // Names, codes and e-mails of real employees: Payroll only (it answered anyone before).
+  const gate = await requireModule(req, 'Payroll', 'VIEW')
+  if (gate.error) return gate.error
   const { data, error } = await supabase.from('nps_declarations')
     .select('employee_id, pran_deadline, pran_email_sent_at, created_at, employees(emp_code, full_name, office_email, personal_email)')
     .eq('status', 'PENDING_PRAN')
@@ -43,7 +47,7 @@ export async function GET() {
 
 export async function POST(req: NextRequest) {
   // Mails real employees: Payroll (edit) from the NPS report, or a scheduled job holding CRON_SECRET.
-  const cron = !!process.env.CRON_SECRET && req.headers.get('authorization') === `Bearer ${process.env.CRON_SECRET}`
+  const cron = cronSecretGiven(req)
   if (!cron) {
     const gate = await requireModule(req, 'Payroll', 'EDIT')
     if (gate.error) return gate.error

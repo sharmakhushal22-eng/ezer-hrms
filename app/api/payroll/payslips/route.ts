@@ -15,6 +15,7 @@
 // timeout, and finding that out at month-end is the wrong time (A2).
 import { NextRequest, NextResponse } from 'next/server'
 import { requireModule } from '@/lib/api-auth'
+import { requireAccess, requireCompany } from '@/lib/rms/authz'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { assemblePayslip, payslipFileName, type PayslipData } from '@/lib/payroll/payslip'
 import { renderPayslipPdf } from '@/lib/payroll/payslip-pdf'
@@ -182,13 +183,17 @@ function assembleFor(ctx: RunCtx, aux: Aux, s: any): PayslipData {
 }
 
 export async function GET(req: NextRequest) {
-  const auth = await requireModule(req, 'Payroll', 'VIEW')
+  const auth = await requireAccess(req, 'Payroll', 'VIEW')
   if (auth.error) return auth.error
   const runId = req.nextUrl.searchParams.get('run_id') || ''
   if (!runId) return NextResponse.json({ error: 'run_id is required' }, { status: 400 })
 
   const ctx = await loadRun(runId)
   if ('error' in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
+  // A run belongs to a company; a Payroll role scoped to company A must not read B's
+  // payslips by passing B's run_id.
+  const scope = requireCompany(auth.grant, ctx.run.company_id, 'Payroll')
+  if (scope) return scope
 
   const { eligible, missing } = eligibility(ctx)
   const stale = staleReason(ctx)
@@ -210,7 +215,8 @@ export async function GET(req: NextRequest) {
 }
 
 export async function POST(req: NextRequest) {
-  const auth = await requireModule(req, 'Payroll', 'VIEW')
+  // Generating and downloading payslips in bulk is an EDIT-level action, not a VIEW one.
+  const auth = await requireAccess(req, 'Payroll', 'EDIT')
   if (auth.error) return auth.error
   const body = await req.json().catch(() => ({}))
   const runId = String(body.run_id || '')
@@ -223,6 +229,8 @@ export async function POST(req: NextRequest) {
 
   const ctx = await loadRun(runId)
   if ('error' in ctx) return NextResponse.json({ error: ctx.error }, { status: ctx.status })
+  const scope = requireCompany(auth.grant, ctx.run.company_id, 'Payroll')
+  if (scope) return scope
   const stale = staleReason(ctx)
   if (stale && !body.force_settled) return NextResponse.json({ error: stale }, { status: 409 })
 
@@ -248,8 +256,8 @@ export async function POST(req: NextRequest) {
   // Who took whose payslips, when — the audit row the answers ask for (A2).
   await sb.from('payroll_audit_log').insert({
     run_id: ctx.run.id, company_id: ctx.run.company_id, action: 'PAYSLIPS_GENERATED',
-    detail: { codes: files.map(f => f.code), count: files.length, format, refused: refused.map(r => r.code), by_employee_id: auth.user.employeeId, kind: auth.user.kind },
-    performed_by: auth.user.email || auth.user.employeeId || 'HR',
+    detail: { codes: files.map(f => f.code), count: files.length, format, refused: refused.map(r => r.code), by_employee_id: auth.grant.employeeId, kind: auth.grant.legacy ? 'legacy' : 'ess' },
+    performed_by: auth.grant.name || auth.grant.employeeId || 'HR',
   })
 
   return NextResponse.json({ files, refused })

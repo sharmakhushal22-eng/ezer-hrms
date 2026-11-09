@@ -7,6 +7,7 @@ import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { runOffboardingDaily } from '@/lib/offboarding/run'
 import { runExitDaily } from '@/lib/exit/case'
+import { requireCron } from '@/lib/cron-auth'
 
 export const runtime = 'nodejs'
 export const maxDuration = 60
@@ -17,11 +18,8 @@ const supabase = createClient(
 )
 
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (secret) {
-    const auth = req.headers.get('authorization') || ''
-    if (auth !== `Bearer ${secret}` && req.nextUrl.searchParams.get('secret') !== secret) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCron(req)
+  if (denied) return denied
   try {
     const out = await runOffboardingDaily(supabase as any)
     const exit = await runExitDaily(supabase as any).catch((e: any) => ({ errors: [String(e?.message || e)] }))

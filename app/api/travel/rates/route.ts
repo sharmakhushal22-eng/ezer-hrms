@@ -18,6 +18,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { errorResponse } from '@/lib/travel/errors';
 import { serviceClient, getActivePolicy, todayISO } from '@/lib/travel/access';
 import { requireModule } from '@/lib/api-auth';
+import { requireAccess, requireCompany } from '@/lib/rms/authz';
 
 export const dynamic = 'force-dynamic';
 
@@ -85,9 +86,9 @@ export async function GET(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function POST(req: NextRequest) {
   try {
-    // Money: this sets what the company pays per kilometre. Dashboard
-    // session required — it ran open to the internet otherwise.
-    const gate = await requireModule(req, 'Travel Claims');
+    // Money: this sets what the company pays per kilometre. Travel Claims EDIT, on a
+    // company the caller's role covers; the person setting it is the caller.
+    const gate = await requireAccess(req, 'Travel Claims', 'EDIT');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
@@ -96,9 +97,11 @@ export async function POST(req: NextRequest) {
       type_code,
       rate_per_km,
       effective_from = todayISO(),
-      set_by = null,
       notes = null,
     } = (await req.json()) ?? {};
+    const scope = requireCompany(gate.grant, company_id, 'Travel Claims');
+    if (scope) return scope;
+    const set_by = gate.grant.employeeId;
 
     if (!company_id || !type_code) {
       return NextResponse.json(
@@ -212,9 +215,9 @@ export async function POST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
   try {
-    // Money: this sets what the company pays per kilometre. Dashboard
-    // session required — it ran open to the internet otherwise.
-    const gate = await requireModule(req, 'Travel Claims');
+    // Switching an expense type on or off, or its evidence rules, changes what gets paid.
+    // Travel Claims EDIT, on the type's own company.
+    const gate = await requireAccess(req, 'Travel Claims', 'EDIT');
     if (gate.error) return gate.error;
 
     const sb = serviceClient();
@@ -224,6 +227,10 @@ export async function PATCH(req: NextRequest) {
     if (!type_id) {
       return NextResponse.json({ error: 'type_id is required' }, { status: 400 });
     }
+    const { data: owner } = await sb.from('travel_expense_types').select('company_id').eq('id', type_id).maybeSingle();
+    if (!owner) return NextResponse.json({ error: 'Expense type not found' }, { status: 404 });
+    const scope = requireCompany(gate.grant, owner.company_id, 'Travel Claims');
+    if (scope) return scope;
 
     const patch: Record<string, unknown> = {};
     if (is_active !== undefined) patch.is_active = !!is_active;

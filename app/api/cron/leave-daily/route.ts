@@ -5,16 +5,15 @@
 // changing a quota, say — with the same CRON_SECRET protection.
 import { NextRequest, NextResponse } from 'next/server'
 import { runLeaveDaily } from '@/lib/leave/daily'
+import { requireCron } from '@/lib/cron-auth'
 
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 export const maxDuration = 60
 
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (secret && req.headers.get('authorization') !== `Bearer ${secret}`) {
-    return NextResponse.json({ error: 'unauthorized' }, { status: 401 })
-  }
+  const denied = requireCron(req)
+  if (denied) return denied
   const r = await runLeaveDaily()
   return NextResponse.json({ ok: !r.balances.error, ...r })
 }

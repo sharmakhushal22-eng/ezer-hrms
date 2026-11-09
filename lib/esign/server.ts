@@ -5,6 +5,7 @@
 import { createClient } from '@supabase/supabase-js'
 import type { NextRequest } from 'next/server'
 import { sendMail } from '@/lib/mail/send'
+import { appUrl } from '@/lib/app-url'
 import { clientIp, istStamp, maskEmail, newToken, categoryLabel } from './core'
 
 export const sb = createClient(
@@ -14,11 +15,11 @@ export const sb = createClient(
 )
 export const BUCKET = 'esign'
 
-/** Base URL for links in mails: the deployment the request came to (so a link made on a
- *  preview or on localhost opens there), else NEXT_PUBLIC_APP_URL. */
-export function appBase(req: NextRequest): string {
-  const origin = req.headers.get('origin') || req.nextUrl.origin
-  return (origin || process.env.NEXT_PUBLIC_APP_URL || 'https://app.ezerhrms.com').replace(/\/+$/, '')
+/** Base URL for links in mails. Built from server config only (lib/app-url): these links
+ *  carry signing tokens, so the request's Origin / forwarded-host must never decide where
+ *  they point — a signer could otherwise aim the next signer's e-mail at their own host. */
+export function appBase(_req: NextRequest): string {
+  return appUrl()
 }
 export const signUrl = (base: string, token: string) => `${base}/sign/${token}`
 export const verifyUrl = (base: string, envelopeNo?: string) => `${base}/sign/verify${envelopeNo ? `?id=${encodeURIComponent(envelopeNo)}` : ''}`

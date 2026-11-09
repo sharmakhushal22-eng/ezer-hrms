@@ -35,7 +35,8 @@ import {
   monthStart,
 } from '@/lib/travel/access';
 import type { ClaimPendingStatus } from '@/lib/travel/access';
-import { requireDashboardUser } from '@/lib/api-auth';
+import { requireGrant } from '@/lib/rms/authz';
+import { travelApprover, travelStaff, stageOfStatus } from '@/lib/travel/approver';
 import { resolveActor } from '@/lib/travel/actor';
 import { errorResponse } from '@/lib/travel/errors';
 
@@ -165,11 +166,20 @@ export async function GET(req: NextRequest) {
     // session. "My claims" further down goes through resolveActor instead,
     // because an ESS employee cannot satisfy this gate.
     if (approverId) {
-      const gate = await requireDashboardUser(req);
+      const gate = await requireGrant(req);
       if (gate.error) return gate.error;
 
       const access = await requireReadAccess(sb, approverId);
       if (!access.ok) return guardResponse(access.guard);
+
+      // Whose inbox? Your own, or — for travel / finance staff of that company — anyone's.
+      // approver_id used to be taken on trust, so any signed-in employee could read every
+      // manager's inbox and the whole company's Finance queue by naming an id.
+      const g = gate.grant;
+      const finance = stage === 'FINANCE';
+      if (g.employeeId !== approverId && !travelStaff(g, access.employee!.company_id, finance ? 'FINANCE' : null)) {
+        return NextResponse.json({ error: 'You can only open your own approval inbox.' }, { status: 403 });
+      }
 
       // Finance sees the whole company — it is not a per-reportee inbox.
       if (stage === 'FINANCE') {
@@ -445,12 +455,8 @@ export async function POST(req: NextRequest) {
 // ---------------------------------------------------------------------------
 export async function PATCH(req: NextRequest) {
   try {
-    // Approving, rejecting and marking paid all move money. Dashboard only.
-    const gate = await requireDashboardUser(req);
-    if (gate.error) return gate.error;
-
     const sb = serviceClient();
-    const { claim_id, action, actioned_by, remarks, lines, payroll_run_id } =
+    const { claim_id, action, actioned_by: claimedActor, remarks, lines, payroll_run_id } =
       (await req.json()) ?? {};
 
     if (!claim_id || !action) {
@@ -464,6 +470,20 @@ export async function PATCH(req: NextRequest) {
       .maybeSingle();
 
     if (!claim) return NextResponse.json({ error: 'Claim not found' }, { status: 404 });
+
+    // Approving, rejecting and marking paid all move money. The caller must be the stage's
+    // approver for THIS employee, or travel / finance staff of the claim's company — decided
+    // from the token and the employee record, never from an actioned_by in the body (any
+    // signed-in employee used to be able to walk their own claim through to PAID that way).
+    const stage =
+      action === 'RM_APPROVE' ? 'RM'
+      : action === 'HR_APPROVE' ? 'HR'
+      : action === 'FINANCE_APPROVE' || action === 'MARK_PAID' ? 'FINANCE'
+      : stageOfStatus(claim.status);
+    const who = await travelApprover(req, sb, { employee_id: claim.employee_id, company_id: claim.company_id }, stage);
+    if (!who.ok) return who.response;
+    // The legacy shared login has no employee row; only it may name the approver it acts for.
+    const actioned_by: string | null = who.actor ?? (who.grant.legacy ? (claimedActor ?? null) : null);
 
     // a locked period freezes everything, including approvals
     const { data: period } = await sb
@@ -548,9 +568,18 @@ export async function PATCH(req: NextRequest) {
         // line-level partial approval
         let approved = 0;
         if (Array.isArray(lines) && lines.length > 0) {
+          // The claimed amount is what the line says, not what the body says, and an
+          // approval can never exceed it — otherwise "partial approval" is a way to pay
+          // out more than was claimed. Lines that are not on this claim are ignored.
+          const { data: stored } = await sb
+            .from('travel_claim_lines')
+            .select('id, amount_claimed')
+            .eq('claim_id', claim_id);
+          const claimedOf = new Map((stored ?? []).map((s) => [s.id as string, Number(s.amount_claimed ?? 0)]));
           for (const l of lines) {
-            const claimed = Number(l.amount_claimed ?? 0);
-            const ok = Number(l.amount_approved ?? 0);
+            if (!claimedOf.has(l.id)) continue;
+            const claimed = claimedOf.get(l.id)!;
+            const ok = Math.min(Math.max(Number(l.amount_approved ?? 0) || 0, 0), claimed);
             await sb
               .from('travel_claim_lines')
               .update({

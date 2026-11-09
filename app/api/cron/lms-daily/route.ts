@@ -4,16 +4,14 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { runLmsDaily } from '@/lib/lms/daily'
 import { errorResponse } from '@/lib/lms/server'
+import { requireCron } from '@/lib/cron-auth'
 
 export const runtime = 'nodejs'
 export const maxDuration = 300
 
 async function run(req: NextRequest) {
-  const secret = process.env.CRON_SECRET
-  if (secret) {
-    const auth = req.headers.get('authorization') || ''
-    if (auth !== `Bearer ${secret}` && req.nextUrl.searchParams.get('secret') !== secret) return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
-  }
+  const denied = requireCron(req)
+  if (denied) return denied
   try { return NextResponse.json({ ok: true, ...(await runLmsDaily()), ran_at: new Date().toISOString() }) }
   catch (e) { return errorResponse(e) }
 }

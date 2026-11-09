@@ -12,6 +12,7 @@
 import { NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import * as XLSX from 'xlsx'
+import { secretMatches } from '@/lib/rms/authz'
 
 export const dynamic = 'force-dynamic'
 export const maxDuration = 300
@@ -23,15 +24,17 @@ export async function GET(req: Request) {
   // completely — so it has to be gated, otherwise locking the payroll tables down
   // achieves nothing: anyone could just download the whole database from here.
   // Pass the secret as ?key=… or an x-export-secret header.
-  const secret = process.env.DB_EXPORT_SECRET || process.env.CRON_SECRET
-  const given = req.headers.get('x-export-secret') || new URL(req.url).searchParams.get('key')
+  // Its own secret, never the cron one (that value has been written down in docs), and
+  // header only — a key in the query string ends up in access logs and browser history.
+  const secret = process.env.DB_EXPORT_SECRET
+  const given = req.headers.get('x-export-secret')
   if (!secret) {
     // No secret configured → refuse rather than fall open. Local dev can opt out
     // explicitly with DB_EXPORT_ALLOW_UNPROTECTED=1.
-    if (process.env.DB_EXPORT_ALLOW_UNPROTECTED !== '1') {
-      return NextResponse.json({ error: 'Export is disabled: set DB_EXPORT_SECRET (or CRON_SECRET) first.' }, { status: 503 })
+    if (process.env.DB_EXPORT_ALLOW_UNPROTECTED !== '1' || process.env.NODE_ENV === 'production') {
+      return NextResponse.json({ error: 'Export is disabled: set DB_EXPORT_SECRET first.' }, { status: 503 })
     }
-  } else if (given !== secret) {
+  } else if (!secretMatches(given, secret)) {
     return NextResponse.json({ error: 'Unauthorized' }, { status: 401 })
   }
 
