@@ -257,7 +257,7 @@ export default function LearnApp() {
             )}
             {backHref && (
               <a className="lx-nav-item" href={backHref} title="Back to EZER HRMS">
-                <span className="lx-nav-ic"><GExit size={19} /></span><span>Back to EZER HRMS</span>
+                <span className="lx-nav-ic"><GArrowLeft size={19} /></span><span>Back to EZER HRMS</span>
               </a>
             )}
             {LMS_SITE && (
@@ -296,8 +296,8 @@ export default function LearnApp() {
                 {route.name === 'studio' && learner && <a className="lx-btn lx-btn--sm lx-hide-sm" {...linkProps(to.home())}><GArrowLeft size={15} /> My learning</a>}
                 {route.name !== 'studio' && studioOn && <a className="lx-btn lx-btn--sm lx-hide-sm" {...linkProps(to.studio())}><GStudio size={15} /> Studio</a>}
                 <ThemeButton />
-                {backHref && <a className="lx-btn lx-btn--sm" href={backHref} title="Back to EZER HRMS"><GExit size={15} /> <span className="lx-hide-sm">EZER HRMS</span></a>}
-                {LMS_SITE && <button type="button" className="lx-btn lx-btn--sm" onClick={() => void signOutOfLms()} title="Sign out of EZER Learn"><GExit size={15} /> <span className="lx-hide-sm">Sign out</span></button>}
+                {backHref && <a className="lx-btn lx-btn--sm" href={backHref} title="Back to EZER HRMS" aria-label="Back to EZER HRMS"><GArrowLeft size={15} /> <span className="lx-hide-sm">EZER HRMS</span></a>}
+                {LMS_SITE && <button type="button" className="lx-btn lx-btn--sm" onClick={() => void signOutOfLms()} title="Sign out of EZER Learn" aria-label="Sign out of EZER Learn"><GExit size={15} /> <span className="lx-hide-sm">Sign out</span></button>}
               </div>
             </header>
           )}
@@ -312,7 +312,7 @@ export default function LearnApp() {
         {learner && !focus && (
           <nav className="lx-tabbar" aria-label="EZER Learn">
             {[...nav.learn.slice(0, 4), ...(studioOn ? [{ key: 'studio', label: 'Studio', href: to.studio(), icon: <GStudio size={20} />, match: (r: LearnRoute) => r.name === 'studio' }] : [])].map(n => (
-              <a key={n.key} aria-current={n.match(route) ? 'page' : undefined} {...linkProps(n.href)}>{n.icon}<span>{n.label === 'Explore courses' ? 'Explore' : n.label === 'My learning' ? 'Learning' : n.label}</span></a>
+              <a key={n.key} aria-current={n.match(route) ? 'page' : undefined} {...linkProps(n.href)}>{n.icon}<span>{n.label === 'Explore courses' ? 'Explore' : n.label === 'My learning' ? 'Learning' : n.label === 'Achievements' ? 'Awards' : n.label}</span></a>
             ))}
           </nav>
         )}
