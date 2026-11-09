@@ -13,6 +13,7 @@ import { useRef } from 'react'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { authHeaders } from '@/lib/auth-headers'
 
 const C = {
   bg: TK.canvas, navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep,
@@ -53,7 +54,7 @@ function StatusBadge({ status }: { status: string }) {
 }
 
 async function post(body: any) {
-  const r = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) })
+  const r = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json', ...(await authHeaders()) }, body: JSON.stringify(body) })
   return r.json()
 }
 
@@ -77,7 +78,7 @@ function ApprovalsTab({ companyId, notify }: { companyId: string; notify: (m: st
     setLoading(true)
     const [y, m] = fMonth.split('-')
     // '' = All companies → the API's explicit ALL token.
-    const res = await fetch(`/api/flexi/claims?company_id=${companyId || 'ALL'}&month=${Number(m)}&year=${y}`).then(r => r.json())
+    const res = await fetch(`/api/flexi/claims?company_id=${companyId || 'ALL'}&month=${Number(m)}&year=${y}`, { headers: await authHeaders() }).then(r => r.json())
     setClaims(res.claims || []); setLoading(false); setSelected(new Set())
   }, [companyId, fMonth])
   useEffect(() => { load() }, [load])

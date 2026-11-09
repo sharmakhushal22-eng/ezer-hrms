@@ -9,6 +9,7 @@ import { scopedCompanies, defaultCompanyId, companyFilter } from '@/lib/rms/reso
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
+import { authHeaders } from '@/lib/auth-headers'
 
 // ── Admin C palette ──────────────────────────────────────────────
 const C = {
@@ -80,7 +81,7 @@ function PendingApprovals({ companyId, companyEmpIds, empMap, typeMap, notify }:
     const lv = levels[r.id]
     if (!lv) { notify('No pending approval level found', 'error'); return }
     setBusy(r.id)
-    const res = await fetch('/api/loans/admin', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ request_id: r.id, approver_id: 'admin', approver_role: lv.approver_role, action, remarks: '' }) })
+    const res = await fetch('/api/loans/admin', { method:'POST', headers:{ 'Content-Type':'application/json', ...(await authHeaders()) }, body: JSON.stringify({ request_id: r.id, action, remarks: '' }) })
     const d = await res.json().catch(() => ({}))
     setBusy(null)
     if (res.ok) load(); else notify(d.error || 'Failed', 'error')
@@ -124,7 +125,7 @@ function AgreementsReview({ companyEmpIds, empMap, notify }: { companyEmpIds: Se
 
   const act = async (a: any, action: 'APPROVED' | 'REJECTED') => {
     setBusy(a.id)
-    const res = await fetch('/api/ess/loans/agreement', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ agreement_id: a.id, reviewer_id: 'admin', action, review_remarks: '' }) })
+    const res = await fetch('/api/ess/loans/agreement', { method:'PATCH', headers:{ 'Content-Type':'application/json', ...(await authHeaders()) }, body: JSON.stringify({ agreement_id: a.id, action, review_remarks: '' }) })
     const d = await res.json().catch(() => ({}))
     setBusy(null)
     if (res.ok) load(); else notify(d.error || 'Failed', 'error')
@@ -158,7 +159,7 @@ function DisburseRow({ agr, empMap, onDone, notify }: { agr: any; empMap: Record
   const submit = async () => {
     if (!utr.trim()) { notify('Enter a UTR number', 'error'); return }
     setBusy(true)
-    const res = await fetch('/api/loans/admin', { method:'PUT', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ agreement_id: agr.id, disbursed_by: 'admin', utr_number: utr.trim(), sanction_date: sanction, disbursement_date: disb }) })
+    const res = await fetch('/api/loans/admin', { method:'PUT', headers:{ 'Content-Type':'application/json', ...(await authHeaders()) }, body: JSON.stringify({ agreement_id: agr.id, utr_number: utr.trim(), sanction_date: sanction, disbursement_date: disb }) })
     const d = await res.json().catch(() => ({}))
     setBusy(false)
     if (res.ok) onDone(); else notify(d.error || 'Failed to disburse', 'error')

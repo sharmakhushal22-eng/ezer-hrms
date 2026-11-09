@@ -12,6 +12,7 @@ import { loadEntitlements, ComponentLimit, NO_INVOICE, ACCEPTED_TYPES, FY } from
 import { C as TK, E, R } from '@/lib/ui'
 import PayStyles from '@/components/ess/payroll/PayStyles'
 import { windowOpenAt, windowDaysLeft, nextOpening, closingDay } from '@/lib/flexi/window'
+import { essAuthHeaders } from '@/lib/ess-session-client'
 
 const V = {
   navy: TK.ink, purple: TK.brand, purpleDark: TK.brandDeep, border: TK.line, muted: TK.muted,
@@ -198,7 +199,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
     const ent = await loadEntitlements(employeeId)
     setCompanyId(ent.companyId); setRegime(ent.regime); setSlabLabel(ent.slabLabel); setLimits(ent.limits)
     // Employee's own submitted claims — powers the per-component History drawer.
-    fetch(`/api/flexi/claims?employee_id=${employeeId}`).then(r => r.json()).then(r => setClaimHist(r.claims || [])).catch(() => setClaimHist([]))
+    fetch(`/api/flexi/claims?employee_id=${employeeId}`, { headers: essAuthHeaders() }).then(r => r.json()).then(r => setClaimHist(r.claims || [])).catch(() => setClaimHist([]))
     setStatus(ent.limits.length ? 'ready' : 'nopolicy')
   }, [employeeId])
   useEffect(() => { load() }, [load])
@@ -245,7 +246,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
     let ok = 0
     const fails: string[] = []
     for (const f of active) {
-      const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({
+      const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json', ...essAuthHeaders() }, body: JSON.stringify({
         action: 'SUBMIT', employee_id: employeeId, company_id: companyId,
         component_code: f.code, claim_amount: Number(f.amount), bill_date: f.billDate || null,
         bill_no: f.billNo || null, agency_name: f.vendor || null, vendor_desc: f.vendor || null,
@@ -268,7 +269,7 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
   async function sendLimitRequest() {
     if (!reqComp || !reqAmt || !reqReason.trim()) return showToast('All fields are required')
     const lim = limits.find(l => l.code === reqComp)
-    const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'REQUEST_LIMIT', employee_id: employeeId, company_id: companyId, fy: FY, component_code: reqComp, current_limit: lim?.annual_limit || 0, requested_limit: Number(reqAmt), reason: reqReason }) }).then(r => r.json())
+    const res = await fetch('/api/flexi/claims', { method: 'POST', headers: { 'Content-Type': 'application/json', ...essAuthHeaders() }, body: JSON.stringify({ action: 'REQUEST_LIMIT', employee_id: employeeId, company_id: companyId, fy: FY, component_code: reqComp, current_limit: lim?.annual_limit || 0, requested_limit: Number(reqAmt), reason: reqReason }) }).then(r => r.json())
     if (res.error) return showToast('⚠ ' + res.error)
     setReqComp(null); setReqAmt(''); setReqReason(''); showToast('Limit-increase request sent to Payroll')
   }

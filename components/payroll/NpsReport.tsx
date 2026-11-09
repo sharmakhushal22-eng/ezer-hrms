@@ -175,11 +175,11 @@ function NpsDialog({ rows, onClose, onDone }: {
   const results = terms.length < 2 ? [] : rows.filter(r =>
     r.emp_code.toLowerCase().includes(terms) || r.full_name.toLowerCase().includes(terms)).slice(0, 25)
 
-  const pick = (r: NpsRow) => {
+  const pick = async (r: NpsRow) => {
     setSel(r); setErr(''); setAck(false); setReason(''); setPran('')
     setMode(r.opted ? 'n' : 'y')   // land on the action that actually changes something
     setLoading(true); setInfo(null)
-    fetch(`/api/ess/nps?employee_id=${r.id}`).then(x => x.json())
+    fetch(`/api/ess/nps?employee_id=${r.id}`, { headers: await authHeaders() }).then(x => x.json())
       .then(d => { setInfo(d); setLoading(false) })
       .catch(() => { setErr('Could not load this employee’s salary figures.'); setLoading(false) })
   }
@@ -196,7 +196,7 @@ function NpsDialog({ rows, onClose, onDone }: {
     try {
       const res = mode === 'y'
         ? await fetch('/api/ess/nps', {
-            method: 'POST', headers: { 'Content-Type': 'application/json' },
+            method: 'POST', headers: await authHeaders(),
             body: JSON.stringify({
               employee_id: sel.id, has_existing_pran: hasPran,
               pran_number: hasPran ? pranClean : null, pran_holder_name: sel.full_name,
@@ -204,7 +204,7 @@ function NpsDialog({ rows, onClose, onDone }: {
             }),
           })
         : await fetch('/api/ess/nps', {
-            method: 'PATCH', headers: { 'Content-Type': 'application/json' },
+            method: 'PATCH', headers: await authHeaders(),
             body: JSON.stringify({
               employee_id: sel.id, action: 'STOP', stopped_reason: reason.trim(),
               source: 'HR', performed_by_name: 'Payroll / HR',

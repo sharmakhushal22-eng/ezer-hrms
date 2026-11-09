@@ -2,6 +2,7 @@
 // Entitlement source of truth = the company's flexi policy slab for the employee's
 // salary band (flexi_policy_slabs + flexi_slab_limits), with per-employee overrides.
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
 
 export const NO_INVOICE = ['MEAL', 'DEVICE']   // auto-claimed, no bill needed
 export const ACCEPTED_TYPES = '.zip,.png,.jpg,.jpeg,.pdf,.doc,.docx,.xls,.xlsx'
@@ -46,7 +47,7 @@ async function annualFixed(employeeId: string): Promise<number> {
 // so an admin screen (which does have a session) still works if the route is unavailable.
 async function loadClaimsForEmployee(employeeId: string): Promise<any[]> {
   try {
-    const r = await fetch(`/api/flexi/claims?employee_id=${encodeURIComponent(employeeId)}`)
+    const r = await fetch(`/api/flexi/claims?employee_id=${encodeURIComponent(employeeId)}`, { headers: await authHeaders() })
     if (r.ok) {
       const j = await r.json()
       if (Array.isArray(j?.claims)) return j.claims

@@ -2386,7 +2386,7 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
   const load = useCallback(() => {
     setLoading(true)
-    fetch(`/api/ess/vpf?employee_id=${emp.id}`).then(r => r.json()).then(d => {
+    fetch(`/api/ess/vpf?employee_id=${emp.id}`, { headers: essAuthHeaders() }).then(r => r.json()).then(d => {
       setData(d); if (d?.current_vpf) setPctInput(String(d.current_vpf.vpf_percent)); setLoading(false)
     }).catch(() => setLoading(false))
   }, [emp.id])
@@ -2409,13 +2409,13 @@ function VpfSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 
   const submit = async () => {
     setSaving(true)
-    const res = await fetch('/api/ess/vpf', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, vpf_percent: rawPct, effective_from_month: 4, acknowledged: true }) })
+    const res = await fetch('/api/ess/vpf', { method: 'POST', headers: { 'Content-Type': 'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, vpf_percent: rawPct, effective_from_month: 4, acknowledged: true }) })
     setSaving(false)
     if (res.ok) { notify('VPF request submitted ✓'); setAck(false); load() }
     else { const j = await res.json().catch(() => ({})); notify('Failed: ' + (j.error || ''), 'error') }
   }
   const stop = async () => {
-    const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
+    const res = await fetch('/api/ess/vpf', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, stopped_reason: 'Employee requested', stopped_from_month: 4 }) })
     if (res.ok) { notify('VPF stopped'); load() } else notify('Failed to stop', 'error')
   }
   void V
@@ -2520,7 +2520,7 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
   const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
   const load = useCallback(() => {
     setLoading(true)
-    fetch(`/api/ess/nps?employee_id=${emp.id}`).then(r => r.json()).then(d => {
+    fetch(`/api/ess/nps?employee_id=${emp.id}`, { headers: essAuthHeaders() }).then(r => r.json()).then(d => {
       setData(d); if (d?.employee) setPranName(d.employee.name); setLoading(false)
     }).catch(() => setLoading(false))
   }, [emp.id])
@@ -2538,19 +2538,19 @@ function NpsSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string, 
 
   const submit = async () => {
     setSaving(true)
-    const res = await fetch('/api/ess/nps', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, has_existing_pran: hasPran, pran_number: hasPran ? pranClean : null, pran_holder_name: pranName, tier_type: tier, acknowledged: true }) })
+    const res = await fetch('/api/ess/nps', { method: 'POST', headers: { 'Content-Type': 'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, has_existing_pran: hasPran, pran_number: hasPran ? pranClean : null, pran_holder_name: pranName, tier_type: tier, acknowledged: true }) })
     const d = await res.json().catch(() => ({}))
     setSaving(false)
     if (res.ok) { notify(d.pending_pran ? 'PRAN form emailed. Submit within 3 days' : 'NPS enrolment submitted ✓'); setAck(false); load() }
     else notify('Failed: ' + (d.error || ''), 'error')
   }
   const doSubmitPran = async () => {
-    const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'SUBMIT_PRAN', pran_number: submitPran }) })
+    const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, action: 'SUBMIT_PRAN', pran_number: submitPran }) })
     const d = await res.json().catch(() => ({}))
     if (res.ok) { notify('PRAN submitted. NPS active ✓'); setSubmitPran(''); load() } else notify('Failed: ' + (d.error || ''), 'error')
   }
   const stop = async () => {
-    const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ employee_id: emp.id, action: 'STOP', stopped_reason: 'Employee requested' }) })
+    const res = await fetch('/api/ess/nps', { method: 'PATCH', headers: { 'Content-Type': 'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, action: 'STOP', stopped_reason: 'Employee requested' }) })
     if (res.ok) { notify('NPS stopped'); load() } else notify('Failed to stop', 'error')
   }
 
@@ -2689,7 +2689,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
   const [saving, setSaving] = useState(false)
   useEffect(() => {
     setLoading(true)
-    fetch(`/api/ess/loans/agreement?request_id=${requestId}`).then(r => r.json()).then(d => {
+    fetch(`/api/ess/loans/agreement?request_id=${requestId}`, { headers: essAuthHeaders() }).then(r => r.json()).then(d => {
       setAgr(d?.agreement || null); setLoading(false)
     }).catch(() => setLoading(false))
   }, [requestId])
@@ -2703,11 +2703,22 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
     const body = mode === 'ESIGN'
       ? { agreement_id: agr.id, employee_id: employeeId, signature_type: 'ESIGN', esign_name: esignName.trim(), esign_image_url: 'data:text/plain,' + encodeURIComponent(esignName.trim()) }
       : { agreement_id: agr.id, employee_id: employeeId, signature_type: 'UPLOAD', signed_pdf_url: pdfUrl.trim() }
-    const res = await fetch('/api/ess/loans/agreement', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify(body) })
+    const res = await fetch('/api/ess/loans/agreement', { method:'POST', headers:{ 'Content-Type':'application/json', ...essAuthHeaders() }, body: JSON.stringify(body) })
     const d = await res.json().catch(() => ({}))
     setSaving(false)
     if (res.ok) { notify('Agreement submitted for review'); onDone() }
     else notify('Failed: ' + (d.error || ''), 'error')
+  }
+
+  // The printable agreement is an authenticated GET now, so a plain link would 401 — fetch
+  // it with the session and open the HTML as a blob in a new tab.
+  const viewPrint = async () => {
+    const r = await fetch(`/api/ess/loans/agreement?request_id=${requestId}&format=html`, { headers: essAuthHeaders() })
+    if (!r.ok) { notify('Could not open the agreement', 'error'); return }
+    const html = await r.text()
+    const url = URL.createObjectURL(new Blob([html], { type: 'text/html' }))
+    window.open(url, '_blank', 'noreferrer')
+    setTimeout(() => URL.revokeObjectURL(url), 60000)
   }
 
   if (loading) return <div className="ezp-panel"><div className="ezp-muted">Loading agreement…</div></div>
@@ -2723,7 +2734,7 @@ function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: 
       <div className="ezp-head">
         <h3>Sign agreement: {agr.agreement_number}</h3>
         <div style={{ display:'flex', gap:8, marginLeft:'auto' }}>
-          <a className="ezp-ghost" href={`/api/ess/loans/agreement?request_id=${requestId}&format=html`} target="_blank" rel="noreferrer" style={{ textDecoration:'none' }}>View / print</a>
+          <button className="ezp-ghost" onClick={viewPrint}>View / print</button>
           <button className="ezp-ghost" onClick={onClose}>Close</button>
         </div>
       </div>
@@ -2780,7 +2791,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   const [signingReq, setSigningReq] = useState<string | null>(null)
   const load = useCallback(() => {
     setLoading(true)
-    fetch(`/api/ess/loans?employee_id=${emp.id}`).then(r => r.json()).then(d => {
+    fetch(`/api/ess/loans?employee_id=${emp.id}`, { headers: essAuthHeaders() }).then(r => r.json()).then(d => {
       setData(d)
       if (d?.loan_types?.length && !typeId) setTypeId(d.loan_types[0].id)
       setLoading(false)
@@ -2807,7 +2818,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     if (amtNum <= 0) { notify('Enter an amount', 'error'); return }
     if (tenNum <= 0) { notify('Enter tenure in months', 'error'); return }
     setSaving(true)
-    const res = await fetch('/api/ess/loans', { method:'POST', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ employee_id: emp.id, loan_type_id: typeId, requested_amount: amtNum, requested_tenure_months: tenNum, reason }) })
+    const res = await fetch('/api/ess/loans', { method:'POST', headers:{ 'Content-Type':'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, loan_type_id: typeId, requested_amount: amtNum, requested_tenure_months: tenNum, reason }) })
     const d = await res.json().catch(() => ({}))
     setSaving(false)
     if (res.ok && d.success) { notify('Loan request submitted ✓'); setAmount(''); setTenure(''); setReason(''); load() }
@@ -2824,7 +2835,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     } else {
       if (!window.confirm(`Foreclose ${loan.loan_number}? Outstanding ${loanInr(loan.outstanding_principal)} will be recovered.`)) return
     }
-    const res = await fetch('/api/ess/loans', { method:'PATCH', headers:{ 'Content-Type':'application/json' }, body: JSON.stringify({ loan_id: loan.id, employee_id: emp.id, request_type, amount: amt }) })
+    const res = await fetch('/api/ess/loans', { method:'PATCH', headers:{ 'Content-Type':'application/json', ...essAuthHeaders() }, body: JSON.stringify({ loan_id: loan.id, employee_id: emp.id, request_type, amount: amt }) })
     const d = await res.json().catch(() => ({}))
     if (res.ok && d.success) { notify(request_type === 'CLOSURE' ? 'Foreclosure request submitted' : 'Part-payment request submitted'); load() }
     else notify(d.error || 'Failed', 'error')
