@@ -62,6 +62,14 @@ describe('HRMS → LMS hand-off code', () => {
     assert.equal(verifyHandoff(code), null)
     process.env.ESS_SESSION_SECRET = 'test-secret'
   })
+  it('uses the shared hand-off secret over the per-site ESS secret', () => {
+    process.env.LMS_HANDOFF_SECRET = 'shared'
+    const code = issueHandoff({ kind: 'ess', employeeId: 'emp-1' })
+    process.env.ESS_SESSION_SECRET = 'lms-site-own-secret'
+    assert.deepEqual(verifyHandoff(code), { kind: 'ess', employeeId: 'emp-1' })
+    delete process.env.LMS_HANDOFF_SECRET
+    process.env.ESS_SESSION_SECRET = 'test-secret'
+  })
   it('does not answer to empty input', () => {
     for (const v of [null, undefined, '', 'lmsh', 'lmsh..', 'garbage']) assert.equal(verifyHandoff(v as string), null)
   })

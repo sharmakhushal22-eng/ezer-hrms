@@ -15,8 +15,12 @@ import crypto from 'crypto'
 const PREFIX = 'lmsh'
 export const HANDOFF_TTL_MS = 60_000
 
+// The two Vercel projects sign their own ESS sessions with their own secrets; this is the one
+// secret they must share, since HRMS signs the code and the LMS checks it. Set it to the same
+// value on both. Unset (local dev, where both sites share one env) it falls back as the ESS
+// session does.
 function key(): string | null {
-  const s = process.env.ESS_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
+  const s = process.env.LMS_HANDOFF_SECRET || process.env.ESS_SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY
   return s ? crypto.createHmac('sha256', s).update('ezer-learn:hrms-handoff:v1').digest('base64url') : null
 }
 

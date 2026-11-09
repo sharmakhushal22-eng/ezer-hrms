@@ -11,6 +11,7 @@
 //                                  Unset, Learning stays inside HRMS at /learning, exactly as before,
 //                                  which is also how local dev and previews behave.
 //   NEXT_PUBLIC_HRMS_URL           set on the LMS project: where "Back to EZER HRMS" goes
+//   LMS_HANDOFF_SECRET             server-only, the SAME value on both projects (lib/lms/sso.ts)
 //
 // All three are inlined at build time, so a change needs a redeploy.
 
