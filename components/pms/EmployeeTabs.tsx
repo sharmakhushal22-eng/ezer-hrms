@@ -21,6 +21,8 @@ import { useState } from 'react'
 import './pms.css'
 import { checkKras, canAdd, canDelete, meter, suggestSplit,
          CATEGORIES, CATEGORY_LABEL, type Kra, type Category } from '@/lib/pms/kra'
+import { checkKpis, blankKpi, renumber, selfKey, shareOf, submitGate,
+         kraRating, ratedCount, canAddKpi, canRemoveKpi, type Kpi } from '@/lib/pms/kpi'
 import { logRows, ackState, waitingOn, canLockWeightage, canPublishResult,
          TYPE_LABEL, TYPE_PURPOSE, DISCUSSION_TYPES, MODES, MODE_LABEL,
          type Log, type DiscussionType, type Mode, type WeightageChange } from '@/lib/pms/oneToOne'
@@ -80,6 +82,16 @@ function Locked({ children }: { children: React.ReactNode }) {
 }
 
 const RATING_VALUES = [1, 2, 3, 4, 5]
+
+/**
+ * A KPI's share, for display.
+ *
+ * 10 stays "10"; 8.3333… becomes "8.33". A trailing ".00" on every whole
+ * number is noise on a line that repeats once per measure, and the exact
+ * value is never typed or stored — only the KRA's own weightage is, and
+ * shareOf() divides it afresh every render.
+ */
+const round2 = (n: number) => Number.isInteger(n) ? String(n) : n.toFixed(2)
 
 /** The 1-5 chip row from the mockup. A radiogroup, not five buttons — arrow
  *  keys are how somebody rates seven KRAs without reaching for the mouse. */
@@ -201,25 +213,50 @@ export function DashboardTab({ who, stages, current, kraCount, weightage, freque
   const band = bandFor(lastRating, bands)
   return (
     <>
-      <Card title={`${who.name} · ${who.code}`}
-            sub={[who.designation, who.department,
-                  who.rmL1 && `RM L1: ${who.rmL1}`, who.rmL2 && `RM L2: ${who.rmL2}`,
-                  who.hod && `HOD: ${who.hod}`].filter(Boolean).join(' · ')}>
-        <div className="stepper">
-          {STAGES.map((s, i) => {
-            const st = stages.find(x => x.key === s.key)
-            const cls = st?.state === 'done' ? 'step done'
-                      : s.key === current ? 'step now' : 'step'
-            return (
-              <div className={cls} key={s.key}>
-                <div className="dot">{i + 1}</div>
-                <div className="t">{s.label}</div>
-                <div className="d">{st?.detail ?? ''}</div>
+      {/* Who this is and who reviews them. The cycle track already sits in
+          the header above every tab, so it is not drawn a second time here;
+          this card says where the person stands in it in one line instead. */}
+      {(() => {
+        const done = stages.filter(x => x.state === 'done').length
+        const now = STAGES.find(x => x.key === current)
+        const line = [
+          who.rmL1 && { k: 'RM L1', v: who.rmL1 },
+          who.rmL2 && { k: 'RM L2', v: who.rmL2 },
+          who.hod  && { k: 'HOD',   v: who.hod },
+        ].filter(Boolean) as { k: string; v: string }[]
+        return (
+          <div className="card pms-profile">
+            <div className="pms-profile-main">
+              <div className="ava pms-profile-ava" aria-hidden="true">
+                {who.name.split(/\s+/).map(w => w[0]).filter(Boolean).slice(0, 2).join('').toUpperCase()}
               </div>
-            )
-          })}
-        </div>
-      </Card>
+              <div style={{ minWidth: 0 }}>
+                <div className="pms-profile-name">{who.name} <span>{who.code}</span></div>
+                <div className="k">{[who.designation, who.department].filter(Boolean).join(' · ')}</div>
+              </div>
+              <div className="pms-profile-now">
+                <div className="pms-profile-now-t">{now ? `Now: ${now.label}` : 'Cycle'}</div>
+                <div className="k">{done} of {STAGES.length} stages done</div>
+                <div className="bar green" aria-hidden="true">
+                  <span style={{ width: `${Math.round((done / STAGES.length) * 100)}%` }} />
+                </div>
+              </div>
+            </div>
+            {line.length > 0 && (
+              <div className="pms-profile-line">
+                <span className="pms-profile-line-k">Reviewed by</span>
+                <span className="pms-profile-chip pms-you">You</span>
+                {line.map(x => (
+                  <span key={x.k} className="pms-profile-step">
+                    <span className="pms-profile-sep" aria-hidden="true">›</span>
+                    <span className="pms-profile-chip"><b>{x.k}</b> {x.v}</span>
+                  </span>
+                ))}
+              </div>
+            )}
+          </div>
+        )
+      })()}
 
       <div className="grid g4" style={{ marginBottom: 16 }}>
         <Stat tone="accent" label="Owed from you" value={actionLabel} note={actionNote} />
@@ -253,8 +290,10 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   /** §3's merge: the employee rates each KRA as they write it, and the KRAs
    *  and the ratings go to the manager together. Optional, so a caller that
    *  has not wired rating still renders. */
-  self?: Record<number, KraSelf>
-  onSelfChange?: (seq: number, patch: Partial<KraSelf>) => void
+  /** 220: a rating belongs to a KPI. Keyed by selfKey(kraSeq, kpiSeq),
+   *  because a KPI being typed has no id yet. */
+  self?: Record<string, KraSelf>
+  onSelfChange?: (key: string, patch: Partial<KraSelf>) => void
   bands?: Band[]
   /** Once the one-to-one is acknowledged this submission IS the final one, so
    *  every KRA must carry a rating. Before that the employee is drafting and a
@@ -299,19 +338,77 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
   oneToOneAlready?: boolean
   saving?: boolean
 }) {
-  const check = checkKras(kras)
-  // How many KRAs still have no rating. Only a blocker once rateRequired —
-  // see the prop's note.
-  const unrated = rateRequired
-    ? kras.filter(k => (self?.[k.seq_no]?.rating ?? null) === null).length
-    : 0
-  const canGo = check.canSubmit && unrated === 0
-  const m = meter(check)
-  const add = canAdd(kras)
-  const del = canDelete(kras)
+  /**
+   * ALL FOUR TAKE `rules`, AND ALL FOUR WERE CALLED WITHOUT IT.
+   *
+   * checkKras, meter, canAdd and canDelete each default their second argument
+   * to DEFAULT_RULES. Omitting it compiles, runs, and silently holds the
+   * employee to the shipped 4/10/100/5 — so this screen's COPY honoured the
+   * policy (it reads `rules.minKra`) while its ENFORCEMENT did not. An admin
+   * setting a minimum of 6 saw the sentence change and the submit button go
+   * on accepting 4.
+   *
+   * That is the same bug lib/pms/__tests__/rules-from-policy.test.ts was
+   * written for, hiding in the one form the test cannot see: the default is
+   * inside kra.ts, so there is no `DEFAULT_RULES.minKra` here to find.
+   */
+  const check = checkKras(kras, rules)
+
+  /**
+   * ONE GATE, BECAUSE IT IS ONE QUESTION — 222.
+   *
+   * Requested: nothing can be submitted without the weightage at exactly 100,
+   * the minimum KRAs and KPIs written, and every KRA rated. Three rules that
+   * were enforced in three places and checked here by one of them:
+   * `check.canSubmit` comes from checkKras, which knows about weightage and
+   * nothing whatever about KPIs. A KRA with no measure under it sailed past.
+   *
+   * AND THE RATING COUNT WAS BROKEN. It read `self[k.seq_no]` — key `1` —
+   * while the draft ratings have been keyed `selfKey(kraSeq, kpiSeq)`, i.e.
+   * `"1.1"`, since the self rating moved onto the KPI. Every lookup missed,
+   * so with rateRequired on, every KRA counted as unrated and the button
+   * could never enable. selfKey is used on both sides here for that reason.
+   */
+  const tree = kras.map(k => ({ ...k, kpis: k.kpis ?? [] }))
+  const gate = submitGate(tree, rules, rateRequired
+    ? (kpi, kra) => self?.[selfKey(kra.seq_no, kpi.seq_no)]?.rating ?? null
+    : undefined)
+  const unrated = gate.of - gate.rated
+  const canGo = gate.ok
+  const m = meter(check, rules)
+  const add = canAdd(kras, rules)
+  const del = canDelete(kras, rules)
 
   const set = (i: number, patch: Partial<Kra>) =>
     onChange(kras.map((k, j) => j === i ? { ...k, ...patch } : k))
+
+  // ── editing the KPIs of one KRA ────────────────────────────────────────
+  // renumber() after every add or remove: 220 makes (goal_id, seq_no) unique,
+  // so a hole in the sequence is a write that fails.
+  const kpisOf = (k: Kra): Kpi[] => k.kpis ?? []
+  const setKpi = (i: number, j: number, patch: Partial<Kpi>) =>
+    set(i, { kpis: kpisOf(kras[i]).map((x, n) => n === j ? { ...x, ...patch } : x) })
+  // THE LIMIT IS CHECKED HERE AS WELL AS ON THE BUTTON. A disabled button is
+  // a hint, not a rule: this helper is also reachable by keyboard on a stale
+  // render, and the write it would make is one trg_pms_kpi_count refuses with
+  // a database error instead of a sentence.
+  const addKpi = (i: number) => {
+    if (!canAddKpi(kpisOf(kras[i]), rules).allowed) return
+    set(i, { kpis: renumber([...kpisOf(kras[i]), blankKpi(kpisOf(kras[i]).length + 1)]) })
+  }
+  const removeKpi = (i: number, j: number) => {
+    if (!canRemoveKpi(kpisOf(kras[i]), rules).allowed) return
+    set(i, { kpis: renumber(kpisOf(kras[i]).filter((_, n) => n !== j)) })
+  }
+  // Presentation: one shade of the brand per KRA, shared by its segment in
+  // the weightage bar and its number badge, so the two read as one object.
+  const shade = (i: number) => `color-mix(in oklab, var(--ez-brand) ${Math.max(30, 100 - i * 11)}%, var(--ez-brand-tint))`
+  // Counted over KPIs, because that is what carries a rating now. A KRA is
+  // "done" only when every measure under it has been rated.
+  const allKpis = kras.flatMap(k => (k.kpis ?? []).map(x => ({ k, x })))
+  const ratedByYou = onSelfChange
+    ? allKpis.filter(({ k, x }) => (self?.[selfKey(k.seq_no, x.seq_no)]?.rating ?? null) !== null).length
+    : 0
 
   return (
     <>
@@ -331,24 +428,44 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
         </div>
       )}
 
-      <div className="wmeter">
-        <div className={`big ${m.tone === 'good' ? 'ok' : m.tone === 'bad' ? 'bad' : ''}`}>
-          {check.total}
+      {/* THE WEIGHTAGE, AS THE SET'S SHAPE. One segment per KRA, sized by its
+          weightage, so "where the 100 went" is seen before it is read. Same
+          numbers, same progressbar semantics and the same Add button as the
+          meter it replaces. */}
+      <div className={`pms-kmeter ${m.tone === 'good' ? 'is-good' : m.tone === 'bad' ? 'is-bad' : 'is-warn'}`}>
+        <div className="pms-kmeter-total">
+          <div className="pms-kmeter-n">{check.total}<span>/{rules.totalWeightage}</span></div>
+          <div className="pms-kmeter-l">Weightage</div>
         </div>
-        <div style={{ flex: 1, minWidth: 200 }}>
-          <div className={`bar ${m.tone === 'good' ? 'green' : m.tone === 'bad' ? 'red' : 'amber'}`}
-               style={{ marginBottom: 6 }}
+        <div className="pms-kmeter-mid">
+          <div className="pms-kmeter-bar"
                role="progressbar" aria-valuenow={check.total} aria-valuemin={0}
                aria-valuemax={rules.totalWeightage} aria-label="Total weightage">
-            <span style={{ width: `${m.pct}%` }} />
+            {kras.map((k, i) => (k.weightage || 0) > 0 && (
+              <span key={i} title={`KRA ${i + 1}: ${k.weightage}`}
+                    style={{ flexGrow: k.weightage || 0,
+                             flexBasis: 0,
+                             maxWidth: `${Math.min(100, ((k.weightage || 0) / Math.max(rules.totalWeightage, check.total || 1)) * 100)}%`,
+                             background: shade(i) }}>
+                <i>{k.weightage}%</i>
+              </span>
+            ))}
+            {check.total < rules.totalWeightage && (
+              <span className="pms-kmeter-gap" style={{ flexGrow: rules.totalWeightage - check.total, flexBasis: 0 }} />
+            )}
           </div>
-          <div className="k">
-            {m.says} · {check.count} {check.count === 1 ? 'KRA' : 'KRAs'}{' '}
-            (minimum {rules.minKra}, maximum {rules.maxKra})
+          <div className="pms-kmeter-says">
+            <b>{m.says}</b>
+            <span>{check.count} {check.count === 1 ? 'KRA' : 'KRAs'} · minimum {rules.minKra}, maximum {rules.maxKra}</span>
+            {onSelfChange && kras.length > 0 && (
+              <span className={`pms-kmeter-rated${ratedByYou === allKpis.length ? ' is-done' : ''}`}>
+                {ratedByYou} of {allKpis.length} rated by you
+              </span>
+            )}
           </div>
         </div>
         {!locked && (
-          <button className="btn ghost sm" type="button" disabled={!add.allowed}
+          <button className="btn" type="button" disabled={!add.allowed}
                   title={add.reason}
                   onClick={() => onChange([...kras, {
                     seq_no: kras.length + 1, kra_title: '', kpi_metric: '',
@@ -373,112 +490,244 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                 </div>
               </div>
             )}
-        <div className="tblwrap">
-          <table>
-            <thead>
-              <tr>
-                <th style={{ width: 34 }}>#</th>
-                <th>KRA / objective</th><th>KPI metric</th><th>Target</th>
-                <th>Category</th><th style={{ width: 104 }} className="num">Weightage</th>
-                {onSelfChange && <><th>What you delivered</th><th>Your rating</th></>}
-                {!locked && <th style={{ width: 40 }}><span className="sr-only">Remove</span></th>}
-              </tr>
-            </thead>
-            <tbody>
-              {/* colSpan is counted, not guessed: 6 base columns, +1 for the
-                  remove button when unlocked, +2 when rating is shown. A wrong
-                  one leaves the empty state squeezed into a single cell. */}
-              {kras.length === 0 ? (
-                <tr><td colSpan={6 + (locked ? 0 : 1) + (onSelfChange ? 2 : 0)}
-                        style={{ textAlign: 'center', padding: '22px 14px' }}>
-                  <div style={{ fontWeight: 700, marginBottom: 4 }}>Nothing written yet</div>
-                  <div className="k">
-                    Add {rules.minKra} to {rules.maxKra} KRAs. They are what
-                    your rating will be measured against, so they are worth the time.
-                  </div>
-                </td></tr>
-              ) : kras.map((k, i) => {
-                const thin = check.thin.includes(k.seq_no)
-                return (
-                  <tr key={i}>
-                    <td className="num">{i + 1}</td>
-                    <td><input value={k.kra_title} readOnly={locked} aria-label={`KRA ${i + 1} title`}
-                               placeholder="What you are accountable for"
-                               onChange={e => set(i, { kra_title: e.target.value })} /></td>
-                    <td><input value={k.kpi_metric} readOnly={locked} aria-label={`KRA ${i + 1} metric`}
-                               placeholder="How it is measured"
-                               onChange={e => set(i, { kpi_metric: e.target.value })} /></td>
-                    <td><input value={k.target_value} readOnly={locked} aria-label={`KRA ${i + 1} target`}
-                               placeholder="The number to hit"
-                               onChange={e => set(i, { target_value: e.target.value })} /></td>
-                    <td>
-                      <select value={k.category} disabled={locked} aria-label={`KRA ${i + 1} category`}
-                              onChange={e => set(i, { category: e.target.value as Category })}>
-                        {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
-                      </select>
-                    </td>
-                    <td className="num">
-                      <input type="number" min={0} max={100} value={k.weightage} readOnly={locked}
-                             aria-label={`KRA ${i + 1} weightage`}
-                             aria-invalid={thin || undefined}
-                             style={thin ? { borderColor: 'var(--ez-critical)' } : undefined}
-                             onChange={e => set(i, { weightage: Number(e.target.value) || 0 })} />
-                    </td>
-                    {/* §3's merge: rated beside the KRA it belongs to, rather
-                        than on a separate screen found afterwards. */}
-                    {onSelfChange && (
-                      <>
-                        <td>
-                          <input value={self?.[k.seq_no]?.achievement ?? ''} readOnly={selfSubmitted}
-                                 aria-label={`Achievement for KRA ${i + 1}`}
-                                 placeholder="The number you actually hit"
-                                 onChange={e => onSelfChange(k.seq_no, { achievement: e.target.value })} />
-                          <input value={self?.[k.seq_no]?.comment ?? ''} readOnly={selfSubmitted}
-                                 aria-label={`Comment for KRA ${i + 1}`}
-                                 placeholder="Evidence a manager could check"
-                                 style={{ marginTop: 4 }}
-                                 onChange={e => onSelfChange(k.seq_no, { comment: e.target.value })} />
-                        </td>
-                        <td>
-                          <div className="btnrow" role="group"
-                               aria-label={`Your rating for KRA ${i + 1}`}>
-                            {bands.map(b => (
-                              <button key={b.value} type="button" disabled={selfSubmitted}
-                                      className={self?.[k.seq_no]?.rating === b.value ? 'btn sm' : 'btn ghost sm'}
-                                      title={`${b.value}: ${b.label}`}
-                                      onClick={() => onSelfChange(k.seq_no, { rating: b.value })}>
-                                {b.value}
-                              </button>
-                            ))}
-                          </div>
-                        </td>
-                      </>
-                    )}
-                    {!locked && (
-                      <td>
-                        <button className="btn ghost sm" type="button" disabled={!del.allowed}
-                                title={del.reason ?? 'Remove this KRA'}
-                                aria-label={`Remove KRA ${i + 1}`}
-                                onClick={() => onChange(kras.filter((_, j) => j !== i)
-                                  .map((x, j) => ({ ...x, seq_no: j + 1 })))}>×</button>
-                      </td>
-                    )}
-                  </tr>
-                )
-              })}
-            </tbody>
-          </table>
-        </div>
 
-        {check.faults.length > 0 && (
+        {/* One card per KRA instead of a nine-column table row. The title gets
+            the width it needs, the measure sits under it, and the self rating
+            — when this stage asks for it — is part of the same card. Every
+            input keeps its aria-label, value, readOnly and onChange. */}
+        {kras.length === 0 ? (
+          <div className="pms-kempty">
+            <div className="pms-kempty-t">Nothing written yet</div>
+            <div className="k">
+              Add {rules.minKra} to {rules.maxKra} KRAs. They are what
+              your rating will be measured against, so they are worth the time.
+            </div>
+          </div>
+        ) : (
+          <div className="pms-klist">
+            {kras.map((k, i) => {
+              const thin = check.thin.includes(k.seq_no)
+              const mine = self?.[k.seq_no]?.rating ?? null
+              const mineBand = bands.find(b => b.value === mine)
+              return (
+                <div key={i} className={`pms-kra${thin ? ' is-thin' : ''}${locked ? ' is-locked' : ''}${mine !== null ? ' is-rated' : ''}`}
+                     style={{ ['--kra-c' as string]: shade(i) }}>
+                  <div className="pms-kra-top">
+                    <span className="pms-kra-no" aria-hidden="true">{i + 1}</span>
+                    <div className="pms-kra-title">
+                      <label htmlFor={`kra-${i}-title`}>KRA / objective</label>
+                      <input id={`kra-${i}-title`} value={k.kra_title} readOnly={locked} aria-label={`KRA ${i + 1} title`}
+                             placeholder="What you are accountable for"
+                             onChange={e => set(i, { kra_title: e.target.value })} />
+                    </div>
+                    <div className="pms-kra-w">
+                      <label htmlFor={`kra-${i}-w`}>Weightage</label>
+                      <div className="pms-kra-wbox">
+                        <input id={`kra-${i}-w`} type="number" min={0} max={100} value={k.weightage} readOnly={locked}
+                               aria-label={`KRA ${i + 1} weightage`}
+                               aria-invalid={thin || undefined}
+                               style={thin ? { borderColor: 'var(--ez-critical)' } : undefined}
+                               onChange={e => set(i, { weightage: Number(e.target.value) || 0 })} />
+                        <span aria-hidden="true">%</span>
+                      </div>
+                    </div>
+                    {!locked && (
+                      <button className="pms-kra-x" type="button" disabled={!del.allowed}
+                              title={del.reason ?? 'Remove this KRA'}
+                              aria-label={`Remove KRA ${i + 1}`}
+                              onClick={() => onChange(kras.filter((_, j) => j !== i)
+                                .map((x, j) => ({ ...x, seq_no: j + 1 })))}>×</button>
+                    )}
+                  </div>
+
+                  <div className="pms-kra-cat">
+                    <label htmlFor={`kra-${i}-cat`}>Category</label>
+                    <select id={`kra-${i}-cat`} value={k.category} disabled={locked} aria-label={`KRA ${i + 1} category`}
+                            onChange={e => set(i, { category: e.target.value as Category })}>
+                      {CATEGORIES.map(c => <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>)}
+                    </select>
+                  </div>
+
+                  {/* ── THE KPIs (220) ───────────────────────────────────
+                      The KRA is the objective; these are how it is measured,
+                      and each is rated on its own by every rung. Their
+                      weightages total THIS KRA's weightage, not 100 — the
+                      balance line says which, because "15 of 30" is the only
+                      number that tells somebody what to type next. */}
+                  {(() => {
+                    const mine = { seq_no: k.seq_no, kra_title: k.kra_title,
+                                   weightage: k.weightage, kpis: kpisOf(k) }
+                    // `rules`, not the default: omitting it would hold every
+                    // KRA to 1-to-5 whatever the policy says.
+                    const faults = checkKpis(mine, rules)
+                    const setFault = faults.find(f => f.kpiSeq === null)
+                    const more = canAddKpi(kpisOf(k), rules)
+                    // 222: THE SHARE IS SHOWN, NOT TYPED. A KPI has no
+                    // weightage of its own — it takes an equal cut of its
+                    // KRA's. Saying so is worth a line, because "each 8.33%"
+                    // is the only thing that explains what adding a fourth
+                    // measure does to the three already there.
+                    const share = shareOf(k.weightage, kpisOf(k).length)
+                    return (
+                      <div className="pms-kpis">
+                        <div className="pms-kpis-h">
+                          <span className="pms-kpis-t">How it is measured</span>
+                          {kpisOf(k).length > 0 && (k.weightage || 0) > 0 && (
+                            <span className="pms-kpis-bal is-ok">
+                              {kpisOf(k).length === 1
+                                ? `carries all ${k.weightage}%`
+                                : `${k.weightage}% split ${kpisOf(k).length} ways · ${round2(share)}% each`}
+                            </span>
+                          )}
+                          {!locked && (
+                            <div className="btnrow">
+                              {/* DISABLED AT THE CEILING, NOT HIDDEN. A button
+                                  that disappears reads as a mis-click; one
+                                  that greys out with the reason in its title
+                                  says the limit exists and where to change it.
+                                  The count travels with it so "4 of 5" is
+                                  legible before the limit is reached, which is
+                                  when somebody is deciding how to split a KRA. */}
+                              <button type="button" className="btn ghost"
+                                      disabled={!more.allowed}
+                                      title={more.reason ?? 'Add another measure for this KRA'}
+                                      onClick={() => addKpi(i)}>
+                                + Add KPI
+                              </button>
+                              <span className="pms-kpis-n">
+                                {kpisOf(k).length} of {rules.maxKpi}
+                              </span>
+                            </div>
+                          )}
+                        </div>
+
+                        {kpisOf(k).map((x, j) => {
+                          const rowFault = faults.find(f => f.kpiSeq === x.seq_no)
+                          return (
+                            <div key={j} className={`pms-kpi${rowFault ? ' is-bad' : ''}`}>
+                              <span className="pms-kpi-no" aria-hidden="true">{j + 1}</span>
+                              <div className="pms-kpi-m">
+                                <label htmlFor={`kra-${i}-kpi-${j}-m`}>KPI</label>
+                                <input id={`kra-${i}-kpi-${j}-m`} value={x.kpi_metric} readOnly={locked}
+                                       aria-label={`KRA ${i + 1} KPI ${j + 1} measure`}
+                                       placeholder="How it is measured"
+                                       onChange={e => setKpi(i, j, { kpi_metric: e.target.value })} />
+                              </div>
+                              <div className="pms-kpi-t">
+                                <label htmlFor={`kra-${i}-kpi-${j}-t`}>Target</label>
+                                <input id={`kra-${i}-kpi-${j}-t`} value={x.target_value} readOnly={locked}
+                                       aria-label={`KRA ${i + 1} KPI ${j + 1} target`}
+                                       placeholder="The number to hit"
+                                       onChange={e => setKpi(i, j, { target_value: e.target.value })} />
+                              </div>
+                              {/* 222: no weightage input. A KPI has none —
+                                  it carries an equal share of its KRA's, and
+                                  the share is stated in the header above
+                                  rather than typed into every row. The column
+                                  is kept as a read-only share so the grid
+                                  still lines up and the number is where the
+                                  reader last saw it. */}
+                              <div className="pms-kpi-w">
+                                <span className="pms-kpi-share-l">Share</span>
+                                <span className="pms-kpi-share">{round2(share)}%</span>
+                              </div>
+                              {/* The KPI that would take the KRA under the
+                                  policy's floor cannot go. Usually that is the
+                                  last one — a KRA with no measure cannot be
+                                  rated — but a policy asking for three makes
+                                  it the third, and the hardcoded `<= 1` here
+                                  said "A KRA needs at least one KPI" while the
+                                  submit refused the set for having two.
+                                  canRemoveKpi owns both the test and the
+                                  sentence so they cannot drift apart. */}
+                              {!locked && (() => {
+                                const fewer = canRemoveKpi(kpisOf(k), rules)
+                                return (
+                                <button className="pms-kpi-x" type="button"
+                                        disabled={!fewer.allowed}
+                                        title={!fewer.allowed
+                                          ? fewer.reason
+                                          : 'Remove this KPI'}
+                                        aria-label={`Remove KRA ${i + 1} KPI ${j + 1}`}
+                                        onClick={() => removeKpi(i, j)}>×</button>
+                                )
+                              })()}
+
+                              {/* §3's merge, now per measure: you rate the
+                                  thing that is measured, beside its target,
+                                  rather than one rating covering three
+                                  different measures of one objective. */}
+                              {onSelfChange && (() => {
+                                const key = selfKey(k.seq_no, x.seq_no)
+                                const got = self?.[key]?.rating ?? null
+                                const band = bands.find(b => b.value === got)
+                                return (
+                                  <div className={`pms-kpi-self${got !== null ? ' is-rated' : ''}`}>
+                                    <div>
+                                      <label htmlFor={`kra-${i}-kpi-${j}-ach`}>What you delivered</label>
+                                      <input id={`kra-${i}-kpi-${j}-ach`}
+                                             value={self?.[key]?.achievement ?? ''} readOnly={selfSubmitted}
+                                             aria-label={`Achievement for KRA ${i + 1} KPI ${j + 1}`}
+                                             placeholder="The number you actually hit"
+                                             onChange={e => onSelfChange(key, { achievement: e.target.value })} />
+                                    </div>
+                                    <div>
+                                      <label htmlFor={`kra-${i}-kpi-${j}-ev`}>Evidence</label>
+                                      <textarea id={`kra-${i}-kpi-${j}-ev`} rows={1}
+                                                value={self?.[key]?.comment ?? ''} readOnly={selfSubmitted}
+                                                aria-label={`Comment for KRA ${i + 1} KPI ${j + 1}`}
+                                                placeholder="Evidence a manager could check"
+                                                onChange={e => onSelfChange(key, { comment: e.target.value })} />
+                                    </div>
+                                    <div>
+                                      <span className="pms-kra-flabel">Your rating</span>
+                                      <div className="pms-kra-rate" role="group"
+                                           aria-label={`Your rating for KRA ${i + 1} KPI ${j + 1}`}>
+                                        {bands.map(b => (
+                                          <button key={b.value} type="button" disabled={selfSubmitted}
+                                                  className={got === b.value ? 'btn sm' : 'btn ghost sm'}
+                                                  title={`${b.value}: ${b.label}`}
+                                                  onClick={() => onSelfChange(key, { rating: b.value })}>
+                                            {b.value}
+                                          </button>
+                                        ))}
+                                      </div>
+                                      {band && <span className="pms-kpi-band">{band.value} · {band.label}</span>}
+                                    </div>
+                                  </div>
+                                )
+                              })()}
+                            </div>
+                          )
+                        })}
+
+                        {setFault && !locked && (
+                          <p className="pms-kpis-f">{setFault.says}</p>
+                        )}
+                      </div>
+                    )
+                  })()}
+
+                </div>
+              )
+            })}
+          </div>
+        )}
+
+        {/* EVERY REASON THE BUTTON IS OFF, not just the KRA-level ones.
+            This listed check.faults while the button increasingly refused for
+            reasons checkKras cannot see — a KRA with no KPI, a measure with
+            no name, a rating not given. A disabled button whose explanation
+            omits the actual blocker is worse than no explanation: the reader
+            fixes what is listed and it stays disabled. gate.faults is the
+            same list the button counts. */}
+        {gate.faults.length > 0 && (
           <div className="banner b-red" style={{ marginTop: 14, marginBottom: 0 }}>
             <span aria-hidden="true">!</span>
             <div>
               <b>Before this can be sent:</b>
               <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
-                {check.faults.map((f, i) => (
-                  <li key={i}>{f.seq !== null && <b>KRA {f.seq}: </b>}{f.says}</li>
-                ))}
+                {gate.faults.map((f, i) => <li key={i}>{f}</li>)}
               </ul>
             </div>
           </div>
@@ -532,11 +781,14 @@ export function KraTab({ kras, onChange, locked, lockGate, onSubmit, saving, rul
                 // and the KRA validation no longer has anything to say.
                 : locked
                   ? (unrated > 0
-                      ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                      ? `Rate the last ${unrated} ${unrated === 1 ? 'measure' : 'measures'} first`
                       : 'Send my ratings to my manager')
-                : !check.canSubmit ? `Cannot send yet: ${check.faults.length} to fix`
-                : unrated > 0
-                  ? `Rate the last ${unrated} ${unrated === 1 ? 'KRA' : 'KRAs'} first`
+                // 222: the count comes from the gate, so the label cannot
+                // disagree with what the button does. It counted check.faults
+                // alone before, which left out every KPI fault — the button
+                // said "2 to fix" while refusing for a third reason it never
+                // named.
+                : !gate.ok ? `Cannot send yet: ${gate.faults.length} to fix`
                   : rateRequired ? 'Send KRAs and my ratings to my manager'
                   : 'Send to my manager'}
             </button>
@@ -815,7 +1067,17 @@ export function OneToOneTab({ logs, managerName, onLog, onAcknowledge, saving, k
 export interface KraSelf { achievement: string; rating: number | null; comment: string }
 
 export interface SelfRow {
-  goalId: string; title: string; weightage: number; category: Category
+  /** The KRA this measure belongs to. Still written to pms_reviews.goal_id. */
+  goalId: string
+  /** 220: what the rating actually belongs to. */
+  kpiId: string
+  /** "KRA · KPI", so a flat list still says which objective a row is under —
+   *  the same shape lines() builds for scoring. */
+  title: string
+  /** THE KPI's weightage, not the KRA's. One row per measure now, and the
+   *  weighted mean is over those. */
+  weightage: number
+  category: Category
   achievement: string; rating: number | null; comment: string
 }
 
@@ -886,7 +1148,11 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, win
                   <div className="k">Your KRA set has to be locked before self rating opens.</div>
                 </td></tr>
               ) : rows.map((r, i) => (
-                <tr key={r.goalId}>
+                // Keyed by the KPI, not the KRA: since 220 a KRA produces one
+                // row per measure, so goalId repeats. React warned about
+                // duplicate keys, which means it can reuse the wrong row's
+                // DOM and carry a half-typed value across.
+                <tr key={r.kpiId || r.goalId}>
                   <td style={{ fontWeight: 600 }}>{r.title}</td>
                   <td className="num">{r.weightage}</td>
                   <td><input value={r.achievement} readOnly={submitted}

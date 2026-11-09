@@ -16,6 +16,7 @@
 import { flagFor, queuePriority, daysToLwd, FLAG_LABEL,
          type Flag, type Employment, type FlagRules } from './employment.ts'
 import { canFinalise, blockedByRmL2, type Role, type Chain, type Finaliser } from './hierarchy.ts'
+import { rungFor, type Stage } from './chain.ts'
 
 export interface TeamMember extends Employment {
   /**
@@ -152,13 +153,18 @@ function toneFor(f: Flag): RowTone {
  * reshuffle between renders for no reason.
  */
 export function teamQueue<T extends TeamMember>(
-  members: T[], today: string, rules?: FlagRules, chain?: Chain,
+  members: T[], today: string, rules?: FlagRules,
+  chain?: Chain | readonly Stage[],
+  /** WHO IS LOOKING. Optional, and omitting it is safe: `next` then names the
+   *  rung that owes the rating instead of claiming it is the reader's. */
+  viewerId?: string,
 ): QueueRow<T>[] {
   return members
     .map(m => {
       const flag = m.flagOverride ?? flagFor(m, today, rules)
       const dl = daysToLwd(m, today)
-      const next = nextForRm(m, flag, chain)
+      const next = nextForRm(m, flag, chain,
+                             viewerId ? rungFor(m, viewerId) : null)
       return {
         member: m, flag, tone: toneFor(flag), daysLeft: dl,
         actionable: next !== null,
@@ -198,20 +204,44 @@ export function teamQueue<T extends TeamMember>(
  * available — with no chain either, there is nothing to claim is pending.
  * The only production loader (useRoster) always selects it.
  */
-export function hasRmL2(m: TeamMember, chain?: Chain): boolean {
+export function hasRmL2(m: TeamMember, chain?: Chain | readonly Stage[]): boolean {
   if (m.rmL2Id !== undefined) return m.rmL2Id !== null
   return chain ? blockedByRmL2(chain, false) : false
 }
 
-/** The one thing an RM owes on this person, or null when nothing is. */
-function nextForRm(m: TeamMember, flag: Flag, chain?: Chain): string | null {
+/**
+ * The one thing is owed on this person next, or null when nothing is.
+ *
+ * `myRung` IS WHO IS ASKING, and it exists because this sentence used to be
+ * written from one seat and shown to every seat.
+ *
+ * "Your rating is owed." was returned on `rmL1Score === null` alone. Every
+ * viewer got it — so an HOD looking at a reportee whose RM L1 had not rated
+ * them yet was told the rating was THEIRS to give, on a row where they could
+ * do nothing at all.
+ *
+ * MEASURED: SRS9043's RM L1 is SRS9016 and their HOD is SRS9010. Signed in as
+ * SRS9010 the Team Dashboard said "Your rating is owed." That sentence sent
+ * me looking for a missing approval screen for an hour; the screen was right
+ * and the sentence was wrong.
+ *
+ * Unknown viewer falls back to naming the rung, which is true from every
+ * seat. A default that is merely impersonal is the right kind of wrong.
+ */
+function nextForRm(m: TeamMember, flag: Flag,
+                   chain?: Chain | readonly Stage[],
+                   myRung?: 'RM_L1' | 'RM_L2' | 'HOD' | null): string | null {
   if (m.finalised) return null
   if (flag === 'NEW_JOINER') return null
   if (m.kraCount === 0) return 'No KRAs written yet. They cannot be rated at all until there are.'
   if (m.totalWeightage !== 100) return `Their weightages total ${m.totalWeightage}, not 100. Send it back before the one-to-one.`
   if (!m.oneToOneDone) return 'Hold the KRA one-to-one and acknowledge it, so the weightage can lock.'
   if (!m.selfSubmitted) return 'Waiting on their self rating. You cannot rate first.'
-  if (m.rmL1Score === null) return 'Your rating is owed.'
+  if (m.rmL1Score === null) {
+    return myRung === 'RM_L1'
+      ? 'Your rating is owed.'
+      : 'Waiting on RM L1’s rating.'
+  }
   // ONLY WHEN THERE IS AN RM L2 TO WAIT FOR — see hasRmL2. This used to say
   // "With RM L2 now" on the strength of rmL2Score being null, which is also
   // true when the chain has no second rung at all, so the row parked there for
@@ -272,7 +302,8 @@ export interface FinaliseRow<T extends TeamMember = TeamMember> extends QueueRow
 export function finaliseQueue<T extends TeamMember>(
   members: T[], today: string,
   { role, chain, whoCanFinalise, rules, finalReviewRequired = false }: {
-    role: Role; chain: Chain; whoCanFinalise: Finaliser; rules?: FlagRules
+    role: Role; chain: Chain | readonly Stage[]; whoCanFinalise: Finaliser
+    rules?: FlagRules
     /** pms_policies.final_review_one_to_one. Defaults false so existing
      *  callers keep their behaviour; the live screen passes the real value. */
     finalReviewRequired?: boolean

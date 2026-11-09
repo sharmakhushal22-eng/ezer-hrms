@@ -18,8 +18,12 @@
 import { useState, useEffect, useCallback, useMemo } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { companyFilter, canSeeScreen } from '@/lib/rms/resolve'
-import { C as TK, F, W, S, R, E, numeric } from '@/lib/ui'
+import { companyFilter, canSeeScreen, canManage } from '@/lib/rms/resolve'
+import { C as TK, F, W, S, R, E, numeric,
+         IconPerformance, IconHome, IconSliders, IconAdmin, IconPolicies,
+         IconEmployees, IconAward, IconReports, IconUpload, IconAlert,
+         IconDownload, IconOrgChart, IconCalendar, IconBell,
+         type IconProps } from '@/lib/ui'
 import { ReadinessBanner, FillDistribution, DepartmentTable } from '@/components/pms/AdminOverview'
 import { rollUp, byDepartment, type FillRow, type Rollup, type DeptRollup } from '@/lib/pms/rollup'
 import { PERIOD_OPEN } from '@/lib/pms/status'
@@ -31,12 +35,17 @@ import { mayWritePostFinal, postFinalNote, pmsRoleOf,
          type PostFinalOwner } from '@/lib/pms/postFinal'
 import AdminEditor from '@/components/pms/AdminEditor'
 import '@/components/pms/pms.css'
-import { type Frequency, type Policy } from '@/lib/pms/policy'
+import { withoutFreshCols, type Frequency, type Policy } from '@/lib/pms/policy'
 import { localToday } from '@/components/pms/CycleHeader'
 import { chainAsksByEmployee, type ChainAsks,
          type RecRowDb } from '@/lib/pms/hrQueue'
 import { pipFromRow, type PipRowDb } from '@/lib/pms/pip'
 import { type HrStatus } from '@/lib/pms/training'
+import { canSettleFinal, finalPatch, checkFinal,
+         type FinalIntent } from '@/lib/pms/hrFinal'
+import { canActDirect, checkDirect, directStamp, whyNotDirect,
+         suggestedFinal, type DirectIntent } from '@/lib/pms/hrDirect'
+import { publishFaults } from '@/lib/pms/publishGate'
 
 // Spec §6 names six tabs. 'overview' and 'chain' are kept alongside them:
 // the roll-up is what an admin opens first, and routing coverage is the thing
@@ -110,8 +119,118 @@ interface Coverage {
  * they do not have a row for — a privilege removal disguised as a grant,
  * which is the trap migration 142 documents.
  */
+/**
+ * EVERY COLUMN toConfig READS, in one place so the 211 retry can drop one
+ * from it rather than restate the list and drift.
+ */
+/**
+ * The embedded chain row, whichever shape PostgREST sent it in.
+ *
+ * A to-one embed arrives as an object or as a one-element array depending on
+ * how the relationship is inferred. Reading one shape only is how a composed
+ * chain silently shows as the preset — see effectiveChain, which handles the
+ * same two shapes for the same reason.
+ */
+function chainRowOf(p: Record<string, unknown>):
+    { name?: string; rungs?: string[] } | null {
+  const e = p.pms_chain as
+    { name?: string; rungs?: string[] } | { name?: string; rungs?: string[] }[] | null | undefined
+  const row = Array.isArray(e) ? e[0] : e
+  return row ?? null
+}
+
+const POLICY_SELECT =
+  'id, company_id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
+  + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
+  + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
+  + ' final_review_one_to_one, approval_chain, rating_scale_type,'
+  // 218: the composed chain this policy points at, with the chain itself.
+  // Without it the Config panel shows the PRESET to a company running a
+  // composed chain — the configuration screen disagreeing with the cycle.
+  + ' chain_id, pms_chain(name, rungs),'
+  + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
+  + ' publish_scope, hr_head_final_rating,'
+  // 221: how many KPIs one KRA may hold. The Config tab has to show the same
+  // numbers the KRA form enforces, or the two screens disagree about the rule.
+  + ' min_kpi_per_kra, max_kpi_per_kra,'
+  + ' include_notice_period, include_exited'
+
+
 const SCREEN_KEY: Partial<Record<Tab, string>> = {}
 const screenKeyOf = (t: Tab) => SCREEN_KEY[t] ?? 'pms.' + t
+
+/**
+ * TABS THAT CONFIGURE THE MODULE, which HR does not do.
+ *
+ * Setup & Controls is the write surface for the policy, the KRA library, the
+ * rating scale and the period calendar. Every one of its saves goes through
+ * /api/pms/admin, which requires canManage('Performance') — so for anyone
+ * else the tab could only ever render a refusal.
+ *
+ * It is HIDDEN rather than left to refuse because the screen permission that
+ * governs it is default-visible: HR roles have no PMS screen rows at all, so
+ * canSeeScreen says yes to a tab whose every action says no.
+ *
+ * NOT the final rating upload. That looks like an admin screen and is not:
+ * bulk_upload_ratings is HR's under §2, and the route now gates it on being
+ * HR rather than on managing the module.
+ *
+ * This reads the SAME canManage the API enforces, so the navigation and the
+ * server cannot disagree. Nothing is written to the roles module to achieve
+ * it — adding rows for a role there would start hiding every tab it has no
+ * row for, which is the privilege removal migration 142 warns about.
+ */
+const CONFIGURES_THE_MODULE = new Set<Tab>(['setup'])
+
+/**
+ * HOW THE RAIL IS DRAWN — presentation only.
+ *
+ * Which tabs a person may open is decided below exactly as before, by the
+ * same canSeeScreen / canManage pair the API enforces. This only says which
+ * group a visible tab is drawn in and which icon it wears, so eleven tabs
+ * read as five errands rather than eleven competing words. A tab missing
+ * from this map is still drawn, in the last group — a new tab can never
+ * vanish because nobody gave it an icon.
+ */
+/**
+ * THE GROUP ORDER REPRODUCES THE ORIGINAL TAB ORDER EXACTLY.
+ *
+ * The tabs were, and still are:
+ *   This cycle · PMS Configuration · Setup & Controls · Policy Builder ·
+ *   Fill Status Tracker · Publish Results · Ratings Summary ·
+ *   Final Rating Upload · PIP Management · Reports & Export · Flow & Hierarchy
+ *
+ * Grouping them is a drawing decision and must not become a reordering one:
+ * people navigate by position, and a tab that moves is a tab somebody hunts
+ * for. PIP sits between Final Rating Upload and Reports, so it gets its own
+ * group rather than being folded in beside Fill Status Tracker — which would
+ * have moved it from ninth to sixth.
+ *
+ * "Improvement" is also the honester label for it: a PIP is not something you
+ * run the cycle with, it is what follows a result.
+ */
+type NavGroup = 'cycle' | 'setup' | 'run' | 'results' | 'improvement' | 'insight'
+const NAV_GROUPS: { key: NavGroup; label: string }[] = [
+  { key: 'cycle',       label: 'Cycle' },
+  { key: 'setup',       label: 'Set up' },
+  { key: 'run',         label: 'Run' },
+  { key: 'results',     label: 'Results' },
+  { key: 'improvement', label: 'Improvement' },
+  { key: 'insight',     label: 'Insight' },
+]
+const NAV: Partial<Record<Tab, { group: NavGroup; icon: (p: IconProps) => React.ReactNode }>> = {
+  overview: { group: 'cycle',   icon: IconHome },
+  config:   { group: 'setup',   icon: IconSliders },
+  setup:    { group: 'setup',   icon: IconAdmin },
+  policies: { group: 'setup',   icon: IconPolicies },
+  fill:     { group: 'run',     icon: IconEmployees },
+  publish:  { group: 'results', icon: IconAward },
+  summary:  { group: 'results', icon: IconReports },
+  upload:   { group: 'results', icon: IconUpload },
+  pip:      { group: 'improvement', icon: IconAlert },
+  reports:  { group: 'insight', icon: IconDownload },
+  chain:    { group: 'insight', icon: IconOrgChart },
+}
 
 
 /**
@@ -193,7 +312,10 @@ export default function PmsPage() {
   const { grant, loading: grantLoading } = useGrant()
   const [tab, setTab] = useState<Tab>('overview')
   useEffect(() => {
-    const vis = (['overview','config','setup','policies','fill','publish','summary','upload','pip','reports','chain'] as Tab[]).filter(k => canSeeScreen(grant, screenKeyOf(k)))
+    const mayConfigure = canManage(grant, 'Performance')
+    const canOpen = (k: Tab) => canSeeScreen(grant, screenKeyOf(k))
+      && (mayConfigure || !CONFIGURES_THE_MODULE.has(k))
+    const vis = (['overview','config','setup','policies','fill','publish','summary','upload','pip','reports','chain'] as Tab[]).filter(canOpen)
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
   }, [grant, tab])
   const [ready, setReady] = useState<boolean | null>(null)   // null = still checking
@@ -204,6 +326,7 @@ export default function PmsPage() {
   /** What has reached HR's rung — see the loader. */
   const [pubRows, setPubRows] = useState<PublishRow[] | null>(null)
   const [asks, setAsks] = useState<Record<string, ChainAsks>>({})
+  const [settling, setSettling] = useState<string | null>(null)
   const [pipQueue, setPipQueue] = useState<PipRow[]>([])
   const [publishing, setPublishing] = useState<string | null>(null)
   /**
@@ -371,20 +494,36 @@ export default function PmsPage() {
         // workspace had no company to narrow to, and it filtered out every
         // row and said "Nothing is waiting" while two finalised ratings sat
         // in it. MEASURED: 5 settled rows for this company, 0 shown.
-        .select('id, company_id, policy_name, frequency, is_active, min_kra_count, max_kra_count,'
-              + ' total_weightage, min_weightage_per_kra, who_can_finalise,'
-              + ' kra_created_by, one_to_one_mandatory, mid_period_checkin,'
-              + ' final_review_one_to_one, approval_chain, rating_scale_type,'
-              + ' self_rating_mandatory, new_joiner_cutoff_days, post_final_owner,'
-              + ' publish_scope,'
-              + ' include_notice_period, include_exited')
+        .select(POLICY_SELECT)
       if (co) polQ = polQ.eq('company_id', co)
       // ORDER BY, because "the first policy" was meaningless without one.
       // Postgres makes no promise about unordered row order, and an UPDATE
       // physically moves a row — so saving a policy could change which one
       // this screen called first. Ordered by company then name, which is also
       // the order the selector lists them in.
-      const pol = await polQ.order('company_id').order('policy_name').limit(50)
+      const ordered = () => polQ.order('company_id').order('policy_name').limit(50)
+      let pol = await ordered()
+      /**
+       * TOLERANT OF A MIGRATION NOT HAVING RUN — see FRESH_POLICY_COLS.
+       *
+       * Every young column is dropped together rather than one at a time.
+       * Probing them individually would mean one round trip per column and,
+       * worse, would stop at the first that succeeded: a database missing
+       * both 211 and 221 would retry without hr_head_final_rating, fail
+       * again on min_kpi_per_kra, and give up with the error it started with.
+       *
+       * toConfig defaults each stripped field to the SAFE reading — the gate
+       * is on, the limits are the shipped 1 and 5 — because a policy read
+       * before its migration must not read as "no rule applies".
+       */
+      if (pol.error) {
+        const narrowed = withoutFreshCols(POLICY_SELECT)
+        if (narrowed !== POLICY_SELECT) {
+          polQ = supabase.from('pms_policies').select(narrowed)
+          if (co) polQ = polQ.eq('company_id', co)
+          pol = await ordered()
+        }
+      }
       if (!pol.error) {
         setPolicies(((pol.data ?? []) as unknown as Record<string, unknown>[]).map(r => ({
           id: String(r.id), name: String(r.policy_name ?? 'Policy'),
@@ -429,11 +568,19 @@ export default function PmsPage() {
           maxKra: Number(p.max_kra_count) || 10,
           totalWeightage: Number(p.total_weightage) || 100,
           minWeightagePerKra: Number(p.min_weightage_per_kra) || 5,
+          // 221. `||` not `??`: a 0 in either column is not a KPI rule, it is
+          // a column the retry above stripped or a policy written before the
+          // migration, and the shipped default is the honest answer.
+          minKpi: Number(p.min_kpi_per_kra) || 1,
+          maxKpi: Number(p.max_kpi_per_kra) || 5,
           kraCreatedBy: (p.kra_created_by as string) ?? null,
           oneToOneMandatory: p.one_to_one_mandatory as boolean ?? null,
           midPeriodCheckin: p.mid_period_checkin as boolean ?? null,
           finalReviewOneToOne: p.final_review_one_to_one as boolean ?? null,
           approvalChain: (p.approval_chain as string) ?? null,
+          chainId: (p.chain_id as string) ?? null,
+          chainName: chainRowOf(p)?.name ?? null,
+          chainRungs: chainRowOf(p)?.rungs ?? null,
           whoCanFinalise: (p.who_can_finalise as string) ?? null,
           ratingScaleType: (p.rating_scale_type as string) ?? null,
           selfRatingMandatory: p.self_rating_mandatory as boolean ?? null,
@@ -443,6 +590,11 @@ export default function PmsPage() {
           includeExited: p.include_exited as boolean ?? null,
           postFinalOwner: (p.post_final_owner as string) ?? 'HR',
           publishScope: (p.publish_scope as string) ?? 'COMPANY',
+          // 211. DEFAULTS TRUE, matching the column and the trigger: a
+          // policy read before the migration runs must not read as "the
+          // gate is off", which would let a result out unsettled.
+          hrHeadFinalRating: p.hr_head_final_rating === undefined
+            ? true : p.hr_head_final_rating as boolean,
         })
         setConfigs(polRows.map(toConfig))
 
@@ -530,11 +682,22 @@ export default function PmsPage() {
       // the ones still in the chain, shown as such. Fetching twice would be
       // two queries disagreeing about the same period.
       const periodIds = openPeriods.map(x => x.id)
-      const pub = await supabase.from('pms_overall_rating')
-        .select('employee_id, period_id, company_id, final_rating, final_rating_code,'
-              + 'finalised_by_role, finalised_at, chain_stage, workflow_status, employee_ack')
-        .in('period_id', periodIds)
-        .limit(4000)
+      /**
+       * TOLERANT OF 211 NOT HAVING RUN, for the reason the policy select is:
+       * one unknown column fails the WHOLE request, and this one feeds both
+       * the publish workspace and the ratings summary. Without the retry,
+       * adding the gate would have emptied two tabs on any database where
+       * the migration had not been applied yet.
+       */
+      const PUB_HR = ', hr_final_confirmed_at, hr_final_confirmed_by,'
+                   + ' hr_management_discussed, hr_final_reason, chain_final_rating,'
+                   + ' hr_direct, hr_direct_reason'
+      const PUB_BASE = 'employee_id, period_id, company_id, final_rating, final_rating_code,'
+                     + 'finalised_by_role, finalised_at, chain_stage, workflow_status, employee_ack'
+      const askPub = (sel: string) => supabase.from('pms_overall_rating')
+        .select(sel).in('period_id', periodIds).limit(4000)
+      let pub = await askPub(PUB_BASE + PUB_HR)
+      if (pub.error) pub = await askPub(PUB_BASE)
       if (pub.error) {
         // Before 197 is applied there is no chain_stage column at all, and
         // that is a waiting state rather than a fault: every other tab works.
@@ -557,6 +720,26 @@ export default function PmsPage() {
         const periodLabelOf = new Map(openPeriods.map(x =>
           [String(x.id), String(x.period_code ?? x.period_name ?? '')]))
         const companyOf = new Map(Object.entries(coNames))
+        /**
+         * WHETHER A ROW'S POLICY REQUIRES THE HR HEAD'S SETTLEMENT (211).
+         *
+         * Defaults TRUE on every miss — an unknown period, an unknown
+         * policy, a policy read before the migration. The gate must fail
+         * CLOSED: reading "not required" when the database thinks otherwise
+         * would show an enabled publish button that the trigger then throws
+         * on, and the one time it did not throw, a result would go out
+         * unsettled.
+         */
+        const gateOfPolicy = new Map(configs.map(c =>
+          [String(c.policyId), c.hrHeadFinalRating !== false]))
+        const policyOfPeriod = new Map(openPeriods.map(x =>
+          [String(x.id), String((x as { policy_id?: string }).policy_id ?? '')]))
+        const hrGateOf = (periodId: string) => {
+          const pid = policyOfPeriod.get(periodId)
+          if (!pid) return true
+          const g = gateOfPolicy.get(pid)
+          return g === undefined ? true : g
+        }
 
         const pubData = (pub.data ?? []) as unknown as {
           employee_id: string
@@ -577,7 +760,11 @@ export default function PmsPage() {
         // the summary both need all of it, and a per-row query would be
         // 390 x 5 against tables already keyed on (period, employee).
         const [emps, fbs, bens, frs] = ids.length ? await Promise.all([
-          supabase.from('employees').select('id, emp_code, full_name, department_id').in('id', ids),
+          // location_id joins the select for the bulk-publish branch filter.
+          // "Branch" in the request is the locations table: ten of them,
+          // typed Factory, Branch, Head Office and Corporate Office.
+          supabase.from('employees')
+            .select('id, emp_code, full_name, department_id, location_id').in('id', ids),
           supabase.from('pms_feedback')
             .select('employee_id, period_id, appreciation_remark, improvement_feedback')
             .in('period_id', periodIds).in('employee_id', ids),
@@ -630,9 +817,29 @@ export default function PmsPage() {
           .map(x => { const r = x as { employee_id: string; period_id: string }
                       return K(r.period_id, r.employee_id) }))
         const byId = new Map((emps.data ?? []).map(e => {
-          const r = e as { id: string; emp_code?: string; full_name?: string; department_id?: string }
+          const r = e as { id: string; emp_code?: string; full_name?: string
+                           department_id?: string; location_id?: string }
           return [r.id, r]
         }))
+        /**
+         * BRANCH NAMES, for the bulk filter.
+         *
+         * Read for the locations actually in play rather than the whole
+         * table, and tolerant of the read failing: a filter that cannot be
+         * labelled is worth losing, the publish workspace is not.
+         */
+        const locIds = [...new Set((emps.data ?? [])
+          .map(e => (e as { location_id?: string }).location_id)
+          .filter((x): x is string => !!x))]
+        const locNames: Record<string, string> = {}
+        if (locIds.length) {
+          const lo = await supabase.from('locations')
+            .select('id, location_name').in('id', locIds)
+          for (const l of lo.data ?? []) {
+            const r = l as { id: string; location_name?: string }
+            if (r.location_name) locNames[r.id] = r.location_name
+          }
+        }
         setPubRows(pubData.map(r => {
           const e = byId.get(String(r.employee_id))
           return {
@@ -654,6 +861,24 @@ export default function PmsPage() {
             improvement: fbBy.get(K(r.period_id, r.employee_id))?.improvement_feedback ?? null,
             benefits: benBy.get(K(r.period_id, r.employee_id)) ?? [],
             signedOff: signed.has(K(r.period_id, r.employee_id)),
+            // 211. The row's own HR-final columns, and whether this row's
+            // POLICY requires them — read per period, because HR Head spans
+            // companies and each runs its own policy.
+            hrFinal: {
+              final_rating: r.final_rating == null ? null : Number(r.final_rating),
+              chain_final_rating: (r as { chain_final_rating?: number | null }).chain_final_rating ?? null,
+              hr_final_confirmed_at: (r as { hr_final_confirmed_at?: string | null }).hr_final_confirmed_at ?? null,
+              hr_final_confirmed_by: (r as { hr_final_confirmed_by?: string | null }).hr_final_confirmed_by ?? null,
+              hr_management_discussed: (r as { hr_management_discussed?: boolean | null }).hr_management_discussed ?? false,
+              hr_final_reason: (r as { hr_final_reason?: string | null }).hr_final_reason ?? null,
+            },
+            hrFinalRequired: hrGateOf(String(r.period_id)),
+            // 212. Carried so the screen can waive the sign-off fault
+            // exactly where the database waives the rule.
+            hrDirect: (r as { hr_direct?: boolean }).hr_direct === true,
+            hrDirectReason: (r as { hr_direct_reason?: string | null }).hr_direct_reason ?? null,
+            locationId: e?.location_id ?? null,
+            locationName: e?.location_id ? (locNames[e.location_id] ?? null) : null,
             acknowledged: r.employee_ack === true,
             // Either marker counts. The stage is what this screen moves, the
             // status is what the employee's screen reads, and a row that has
@@ -921,6 +1146,209 @@ export default function PmsPage() {
     setPipQueue(chain.queue)
   }, [grant.employeeId, pubRows])
 
+  /**
+   * THE HR HEAD SETTLING THE FINAL RATING (211).
+   *
+   * Re-checked HERE, not only in the component. The button is disabled
+   * while checkFinal reports a fault, but a disabled button is a courtesy,
+   * not a control — this is the write, and it is the last place in the
+   * application that can refuse. The database refuses too, on the publish
+   * rather than on this update, so all three have to agree.
+   */
+  const settleFinal = useCallback(async (employeeId: string, intent: FinalIntent) => {
+    if (!canSettleFinal(myHrRole)) {
+      setCommitNote('Only the HR Head can settle a final rating.')
+      return
+    }
+    const row = pubRows?.find(r => r.employeeId === employeeId)
+    const periodId = row?.periodId
+    if (!periodId) return
+    // The band the chain settled: what stands now, unless it has already
+    // been replaced once, in which case the chain's own number is the one
+    // kept aside.
+    const chainRating = row?.hrFinal?.chain_final_rating ?? row?.finalRating ?? null
+    const check = checkFinal(intent, chainRating, bandList.map(b => b.value))
+    if (!check.ok) { setCommitNote(check.faults[0]); return }
+
+    setSettling(employeeId); setCommitNote(null)
+    const { error } = await supabase.from('pms_overall_rating')
+      .update(finalPatch(intent, chainRating, grant.employeeId ?? null))
+      .eq('employee_id', employeeId).eq('period_id', periodId)
+    setSettling(null)
+    if (error) { setCommitNote(`That could not be saved: ${error.message}`); return }
+
+    /**
+     * ONE ROW REFETCHED, NOT THE WHOLE PAGE.
+     *
+     * load() flips `loading` and the tab block sits behind `!loading`, so a
+     * full reload unmounts the publish workspace — closing the open card
+     * and throwing away an appreciation remark typed before settling.
+     * Observed: text entered, rating settled, text gone.
+     *
+     * Refetched rather than patched from `intent`, because the database is
+     * what decided the result: the trigger could have refused, and
+     * chain_final_rating is only populated on an override. Reading the row
+     * back is the only way the screen and the row agree.
+     */
+    const fresh = await supabase.from('pms_overall_rating')
+      .select('final_rating, final_rating_code, chain_final_rating, hr_direct,'
+            + ' hr_final_confirmed_at, hr_final_confirmed_by,'
+            + ' hr_management_discussed, hr_final_reason, workflow_status')
+      .eq('employee_id', employeeId).eq('period_id', periodId).limit(1)
+    // The same `as unknown as` the other PMS selects use: columns added by
+    // 211 and 212 are not in the generated types, so the row collapses to
+    // GenericStringError without it.
+    const got = ((fresh.data ?? []) as unknown as Record<string, unknown>[])[0]
+    if (!got) { load(); return }
+    setPubRows(rows => (rows ?? []).map(r =>
+      r.employeeId === employeeId && r.periodId === periodId
+        ? { ...r,
+            finalRating: got.final_rating == null ? null : Number(got.final_rating),
+            finalRatingCode: (got.final_rating_code as string) ?? r.finalRatingCode,
+            hrDirect: got.hr_direct === true,
+            hrFinal: {
+              final_rating: got.final_rating == null ? null : Number(got.final_rating),
+              chain_final_rating: got.chain_final_rating == null
+                ? null : Number(got.chain_final_rating),
+              hr_final_confirmed_at: (got.hr_final_confirmed_at as string) ?? null,
+              hr_final_confirmed_by: (got.hr_final_confirmed_by as string) ?? null,
+              hr_management_discussed: got.hr_management_discussed === true,
+              hr_final_reason: (got.hr_final_reason as string) ?? null,
+            } }
+        : r))
+  }, [myHrRole, pubRows, bandList, grant.employeeId, load])
+
+  /**
+   * WRITING AN APPRAISAL THE CHAIN NEVER PICKED UP (212).
+   *
+   * FOUR WRITES, AND THE ORDER IS LOAD-BEARING. 212's guard refuses the
+   * stamp on a row that already has KRAs or a rating, so the stamp has to
+   * go on FIRST, while the row is still untouched; everything after it is
+   * the HR Head's own work on a row that is now marked as theirs. Writing
+   * the goals first would make the guard refuse the very appraisal this
+   * exists to create.
+   *
+   * It stops at the first failure rather than carrying on. A half-built
+   * appraisal — stamped with no KRAs, or KRAs with no ratings — is worse
+   * than none, because it looks finished on the publish queue. What it
+   * cannot do is undo the steps that already succeeded: there is no
+   * transaction across four PostgREST calls, so the sentence returned says
+   * which step failed and the row is left where a second attempt can see
+   * it. The guard then refuses a re-stamp, which is the honest outcome: the
+   * record needs a look, not another blind write.
+   */
+  const saveDirect = useCallback(async (
+    employeeCode: string, intent: DirectIntent,
+  ): Promise<string | null> => {
+    if (!canActDirect(myHrRole)) return 'Only the HR Head can do this.'
+    const row = (fill ?? []).find(f => String(f.employee_code) === employeeCode)
+    if (!row) return 'That employee is not in this period.'
+    const why = whyNotDirect({
+      final_rating: row.final_rating, workflow_status: row.workflow_status,
+      kra_count: row.kra_count, self_score: row.self_score,
+    })
+    if (why) return why
+    const check = checkDirect(intent, bandList.map(b => b.value))
+    if (!check.ok) return check.faults[0]
+
+    const emp = await supabase.from('employees')
+      .select('id, company_id').eq('emp_code', employeeCode).limit(1)
+    const e = (emp.data ?? [])[0] as { id?: string; company_id?: string } | undefined
+    if (!e?.id || !periodId) return 'Could not resolve that employee.'
+    const co = e.company_id ?? companyFilter(grant, grant.companyId)
+
+    // 1. The stamp, while the row is still clean.
+    const stamp = await supabase.from('pms_overall_rating')
+      .update(directStamp(intent.reason ?? '', grant.employeeId ?? null))
+      .eq('employee_id', e.id).eq('period_id', periodId)
+    if (stamp.error) return `The appraisal could not be marked as direct: ${stamp.error.message}`
+
+    // 2. The KRAs.
+    const goals = await supabase.from('pms_employee_goals').insert(
+      intent.kras.map(k => ({
+        company_id: co, period_id: periodId, employee_id: e.id,
+        seq_no: k.seq_no, kra_title: k.kra_title, kpi_metric: k.kpi_metric,
+        target_value: k.target_value, category: k.category,
+        weightage: k.weightage, source: 'MANUAL', status: 'LOCKED',
+        locked_at: new Date().toISOString(), locked_by: grant.employeeId ?? null,
+      }))).select('id, seq_no')
+    if (goals.error) return `The KRAs could not be saved: ${goals.error.message}`
+
+    const bySeq = new Map((goals.data ?? []).map(g => {
+      const r = g as { id: string; seq_no: number }
+      return [Number(r.seq_no), String(r.id)]
+    }))
+
+    // 3. ONE KPI PER KRA, carrying the KRA's whole weightage.
+    //
+    // 220 made a rating name its KPI rather than its KRA, and kpi_id is NOT
+    // NULL — so without this the insert below is refused outright and the
+    // HR Head cannot record a direct appraisal at all. The shape is 220's own
+    // backfill: a KRA the Head typed in one box is one measure, and giving it
+    // the full weightage keeps pms_validate_kpis balanced.
+    const kpis = await supabase.from('pms_goal_kpi').insert(
+      intent.kras.map(k => ({
+        company_id: co, period_id: periodId, employee_id: e.id,
+        goal_id: bySeq.get(k.seq_no), seq_no: 1,
+        kpi_metric: k.kpi_metric || k.kra_title,
+        target_value: k.target_value, weightage: k.weightage,
+      }))).select('id, goal_id')
+    if (kpis.error) return `The KPIs could not be saved: ${kpis.error.message}`
+    const kpiByGoal = new Map((kpis.data ?? []).map(x => {
+      const r = x as { id: string; goal_id: string }
+      return [String(r.goal_id), String(r.id)]
+    }))
+
+    // 4. A rating against each, attributed to the HR Head.
+    const reviews = await supabase.from('pms_reviews').insert(
+      intent.kras.map(k => {
+        const goalId = bySeq.get(k.seq_no)
+        return {
+          company_id: co, period_id: periodId, employee_id: e.id,
+          goal_id: goalId, kpi_id: goalId ? kpiByGoal.get(goalId) : undefined,
+          rater_id: grant.employeeId ?? null,
+          rater_role: 'HR_HEAD', rating: intent.scores[k.seq_no] ?? null,
+          submitted: true, submitted_at: new Date().toISOString(),
+        }
+      }))
+    if (reviews.error) return `The ratings could not be saved: ${reviews.error.message}`
+
+    // 5. The settled record. FINALISED, not PUBLISHED: it joins the publish
+    // queue, where 211 asks the HR Head the attestation like everybody else.
+    const fin = await supabase.from('pms_overall_rating').update({
+      final_rating: Number(intent.finalRating),
+      final_score: suggestedFinal(intent),
+      workflow_status: 'FINALISED',
+      chain_stage: 'HR',
+      finalised_by: grant.employeeId ?? null,
+      finalised_by_role: 'HR_HEAD',
+      finalised_at: new Date().toISOString(),
+      rating_source: 'HR_OVERRIDE',
+      kra_count: intent.kras.length,
+      total_weightage: intent.kras.reduce((t, k) => t + (Number(k.weightage) || 0), 0),
+    }).eq('employee_id', e.id).eq('period_id', periodId)
+    if (fin.error) return `The final rating could not be saved: ${fin.error.message}`
+
+    /**
+     * THE MESSAGE IS HELD BY THE PAGE, NOT BY THE FORM.
+     *
+     * load() flips `loading`, and the whole tab block sits behind
+     * `!loading` — so the form unmounts and any banner it set disappears in
+     * the same tick. Observed: the appraisal saved correctly and the screen
+     * said nothing at all, which leaves the HR Head unable to tell a
+     * success from a silent failure on the one action that creates a
+     * result out of nothing.
+     *
+     * UploadTab already documents this trap on its onCommitted prop. Same
+     * answer: whoever survives the reload holds the sentence.
+     */
+    setCommitNote(`${row.employee_name ?? 'That employee'} now has a full `
+      + 'appraisal on record. It is waiting on Publish Results, where you '
+      + 'confirm the final rating and release it.')
+    load()
+    return null
+  }, [myHrRole, fill, bandList, periodId, grant, load])
+
   const saveFeedback = useCallback(async (employeeId: string, patch: {
     appreciation: string; improvement: string
     benefits: { type: string; note: string }[]
@@ -973,6 +1401,96 @@ export default function PmsPage() {
     load()
   }, [pubRows, grant, load, inPublishScope])
 
+  /**
+   * RELEASING A BATCH.
+   *
+   * ONE ROW AT A TIME, NOT ONE STATEMENT. A single UPDATE with `in` would
+   * be fewer round trips and the wrong shape: the publish triggers RAISE,
+   * so one unexpected refusal anywhere in the set would abort the whole
+   * statement and release nobody. Per-row, a refusal costs that one person
+   * and the other hundred still go out — which is what the owner chose
+   * when they picked "publish the ready ones, list the rest".
+   *
+   * Each row is re-checked against the SAME gate the screen used, because
+   * the list was built when the screen rendered and something may have
+   * settled or unsettled since. The database is the final authority either
+   * way; this just means the reported reason is a sentence rather than a
+   * constraint name.
+   *
+   * It does NOT stop at the first failure, unlike the direct appraisal.
+   * There the four writes build one record and half of it is worse than
+   * none; here each publish is independent and stopping would strand the
+   * rest for no reason.
+   */
+  const publishMany = useCallback(async (
+    ids: string[], onDone: (n: number) => void,
+  ): Promise<{ published: string[]; failed: { code: string; name: string; message: string }[] }> => {
+    const published: string[] = []
+    const failed: { code: string; name: string; message: string }[] = []
+    let n = 0
+
+    for (const employeeId of ids) {
+      const row = pubRows?.find(r => r.employeeId === employeeId)
+      const named = { code: row?.code ?? employeeId, name: row?.name ?? 'Unknown' }
+      if (!row?.periodId) {
+        failed.push({ ...named, message: 'No open period for this appraisal.' })
+        onDone(++n); continue
+      }
+      if (!inPublishScope(employeeId)) {
+        // 203 again: the company narrowing is not advisory.
+        failed.push({ ...named, message: 'Not in the company you are working on.' })
+        onDone(++n); continue
+      }
+      const faults = publishFaults({
+        finalRating: row.finalRating, appreciation: row.appreciation,
+        improvement: row.improvement,
+        improvementRequired: !!bandList.find(b => b.value === row.finalRating)?.improvementMandatory,
+        signedOff: row.signedOff, hrDirect: row.hrDirect,
+        hrFinal: row.hrFinal, hrFinalRequired: row.hrFinalRequired,
+      })
+      if (faults.length) { failed.push({ ...named, message: faults[0] }); onDone(++n); continue }
+
+      // Same two writes as publishOne, in the same order: the feedback is
+      // opened first, so a failure there cannot leave a rating visible with
+      // its words still hidden.
+      const fb = await supabase.from('pms_feedback')
+        .update({ visible_to_employee: true })
+        .eq('period_id', row.periodId).eq('employee_id', employeeId)
+      if (fb.error) console.error('[pms] bulk: feedback visibility failed', employeeId, fb.error)
+
+      const st = await supabase.from('pms_overall_rating')
+        .update({ workflow_status: 'PUBLISHED',
+                  published_at: new Date().toISOString(),
+                  chain_stage: 'DONE' })
+        .eq('period_id', row.periodId).eq('employee_id', employeeId)
+      if (st.error) failed.push({ ...named, message: st.error.message })
+      else published.push(employeeId)
+      onDone(++n)
+    }
+
+    /**
+     * THE ROWS ARE UPDATED IN PLACE, NOT RELOADED.
+     *
+     * THIRD TIME THIS SESSION. load() flips `loading` and the tab block
+     * sits behind `!loading`, so a reload unmounts the bulk screen — and
+     * with it the outcome panel listing exactly who went out and who was
+     * refused. Observed: a batch published correctly and the screen showed
+     * nothing, which on a bulk irreversible action is the worst moment to
+     * say nothing at all.
+     *
+     * Patched rather than refetched, and that is safe HERE where it was
+     * not for the settlement: what changed is known exactly — these ids
+     * are published — rather than decided by a trigger that might have
+     * adjusted something. Anything refused is already in `failed`.
+     */
+    if (published.length) {
+      const done = new Set(published)
+      setPubRows(rows => (rows ?? []).map(r =>
+        done.has(r.employeeId) ? { ...r, published: true } : r))
+    }
+    return { published, failed }
+  }, [pubRows, bandList, inPublishScope])
+
   const publishOne = useCallback(async (employeeId: string) => {
     // 203: a result released to the wrong person cannot be unreleased.
     if (!inPublishScope(employeeId)) {
@@ -1022,6 +1540,27 @@ export default function PmsPage() {
       hint: 'the twelve steps, the reporting line, and who may do what' },
   ]
 
+  // The rail. WHO MAY SEE WHICH TAB is the same two checks as before — the
+  // screen permission and, for the configuring tab, canManage — and only the
+  // tabs that pass are then grouped for drawing.
+  const visibleTabs = TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))
+                        && (canManage(grant, 'Performance')
+                            || !CONFIGURES_THE_MODULE.has(t.k)))
+  const lastGroup = NAV_GROUPS[NAV_GROUPS.length - 1].key
+  const navGroups = NAV_GROUPS
+    .map(g => ({ ...g, tabs: visibleTabs.filter(t => (NAV[t.k]?.group ?? lastGroup) === g.key) }))
+    .filter(g => g.tabs.length)
+
+  // The hero's four numbers are the roll-up the overview already computes —
+  // nothing new is fetched for them.
+  const heroKpis = roll && roll.total > 0 ? [
+    { l: 'In this cycle',  v: roll.total, share: 1 },
+    { l: 'Not started',    v: roll.notStarted, share: roll.notStarted / roll.total },
+    { l: 'With the chain', v: roll.counts.SUBMITTED + roll.counts.IN_REVIEW,
+      share: (roll.counts.SUBMITTED + roll.counts.IN_REVIEW) / roll.total },
+    { l: 'Finalised',      v: roll.counts.FINALISED, share: roll.done },
+  ] : null
+
   // Every rule in pms.css is scoped under .pms so its very generic class names
   // (.card, .stat, .pill, .btn) cannot leak into another module. That scoping
   // means the class below is not decoration — without it the whole stylesheet
@@ -1031,64 +1570,96 @@ export default function PmsPage() {
   return (
     <div className="pms" style={{ padding: `${S.lg}px ${S.xl}px ${S.huge}px`, maxWidth: 1440, margin: '0 auto' }}>
 
-      <div className="ez-page-head" style={{ display: 'flex', alignItems: 'center', gap: 16, flexWrap: 'wrap' }}>
-        <div style={{ minWidth: 0, flex: 1 }}>
-          <h1 style={{ margin: 0, fontSize: F.page, fontWeight: W.bold, color: TK.ink, letterSpacing: '-.02em' }}>
-            Performance
-          </h1>
-          <div style={{ marginTop: 3, fontSize: F.small, color: TK.muted }}>
+      <header className="pms-hero">
+        <div className="pms-hero-main">
+          <div className="pms-hero-eyebrow">
+            <span className="pms-hero-ico" aria-hidden="true"><IconPerformance size={15} /></span>
+            Performance management
+          </div>
+          <h1>Performance</h1>
+          <div className="pms-hero-sub">
             {naming
-              ? <>Running now: <strong style={{ color: TK.ink }}>{naming.title}</strong> · {naming.sub}</>
+              ? <>Running now: <strong>{naming.title}</strong> · {naming.sub}</>
               : <>KRAs, the appraisal cycle and ratings. You are not a step in the chain:
                  it runs Employee → manager → second manager → HOD, and you keep it moving.</>}
           </div>
+          <div className="pms-hero-chips">
+            {ready === true && <span className="pms-hero-chip pms-live">Module live</span>}
+            <span className="pms-hero-chip"><IconCalendar size={13} /> FY {fyLabel}</span>
+            {naming?.code && <span className="pms-hero-chip">{naming.code}</span>}
+          </div>
         </div>
-        {ready === true && (
-          <span style={{ fontSize: F.micro, fontWeight: W.semi, padding: '5px 11px', borderRadius: 999,
-                         background: TK.positiveTint, color: TK.positive }}>Module live</span>
+        {heroKpis && (
+          <div className="pms-hero-kpis" aria-label="This cycle at a glance">
+            {heroKpis.map(k => (
+              <div key={k.l} className="pms-hero-kpi">
+                <div className="pms-hk-v">{k.v}</div>
+                <div className="pms-hk-l">{k.l}</div>
+                <div className="pms-hk-bar" aria-hidden="true">
+                  <span style={{ width: `${Math.round(Math.max(0, Math.min(1, k.share)) * 100)}%` }} />
+                </div>
+              </div>
+            ))}
+          </div>
         )}
-      </div>
+      </header>
 
-      {/* The mockup's tab strip: an underline, not a row of filled pills. With
-          eight tabs, eight filled chips read as eight competing buttons; an
-          underline puts the weight on the one you are in. */}
-      <div className="tabs">
-        {TABS.filter(t => canSeeScreen(grant, screenKeyOf(t.k))).map(t => (
-          <button key={t.k} type="button" onClick={() => setTab(t.k)}
-                  className={tab === t.k ? 'on' : undefined}
-                  aria-current={tab === t.k ? 'page' : undefined}>
-            {t.label}
-          </button>
+      {/* The rail: icon pills, grouped by errand. Still one <button> per tab,
+          with aria-current on the open one — choosing a tab works exactly as
+          it did. */}
+      <nav className="pms-nav" aria-label="Performance sections">
+        {navGroups.map(g => (
+          <div key={g.key} className="pms-nav-group" role="group" aria-label={g.label}>
+            <span className="pms-nav-label" aria-hidden="true">{g.label}</span>
+            {g.tabs.map(t => {
+              const Ico = NAV[t.k]?.icon
+              return (
+                <button key={t.k} type="button" onClick={() => setTab(t.k)}
+                        className={tab === t.k ? 'on' : undefined}
+                        aria-current={tab === t.k ? 'page' : undefined}>
+                  {Ico && <Ico size={15} />}
+                  {t.label}
+                </button>
+              )
+            })}
+          </div>
         ))}
-      </div>
+      </nav>
       {/* The hint belongs on the page, not in a tooltip: a title attribute is
           invisible to touch and to anyone not hovering. */}
-      <div style={{ fontSize: F.micro, color: TK.faint, marginTop: -10, marginBottom: 16 }}>
-        {TABS.find(t => t.k === tab)?.hint}
-      </div>
-
-      {commitNote && (
-        <Card>
-          <div style={{ display: 'flex', gap: 8, alignItems: 'flex-start' }}>
-            <span aria-hidden="true">✓</span>
-            <div style={{ fontSize: F.small, lineHeight: 1.6 }}>
-              {commitNote}
-              <button type="button" onClick={() => setCommitNote(null)}
-                      style={{ marginLeft: 10, background: 'none', border: 'none',
-                               color: TK.muted, cursor: 'pointer', fontSize: F.small,
-                               textDecoration: 'underline', padding: 0 }}>
-                dismiss
-              </button>
+      {(() => {
+        const cur = TABS.find(t => t.k === tab)
+        const Ico = NAV[tab]?.icon
+        return (
+          <div className="pms-pagehead">
+            {Ico && <span className="pms-pagehead-ico" aria-hidden="true"><Ico size={20} /></span>}
+            <div style={{ minWidth: 0 }}>
+              <h2 className="pms-pagehead-t">{cur?.label}</h2>
+              <div className="pms-pagehead-d">{cur?.hint}</div>
             </div>
           </div>
-        </Card>
+        )
+      })()}
+
+      {commitNote && (
+        <div className="pms-toast" role="status">
+          <span className="pms-toast-ico" aria-hidden="true"><IconBell size={15} /></span>
+          <div className="pms-toast-body">{commitNote}</div>
+          <button type="button" className="pms-toast-x" onClick={() => setCommitNote(null)}>
+            Dismiss
+          </button>
+        </div>
       )}
-      {loading && <Card><div style={{ color: TK.muted, fontSize: F.small }}>Loading…</div></Card>}
+      {loading && (
+        <div className="pms-skel" aria-busy="true" aria-label="Loading">
+          <i /><i /><i />
+        </div>
+      )}
 
       {!loading && err && (
-        <Card tone="critical">
-          <strong style={{ color: TK.critical }}>Could not read the performance module.</strong>
-          <div style={{ fontSize: F.small, color: TK.muted, marginTop: 6 }}>{err}</div>
+        <Card tone="critical" icon={<IconAlert size={18} />}
+              title="Could not read the performance module.">
+          {err}
         </Card>
       )}
 
@@ -1116,7 +1687,10 @@ export default function PmsPage() {
                                note={postFinalNote(postFinalOwner, myHrRole)}
                                company={pubCompany} onCompany={setPubCompany}
                                companies={pubCompanies} allowAll={pubAllowAll}
-                               asks={asks} onDecideAsk={canRunPostFinal ? decideAsk : undefined} />}
+                               asks={asks} onDecideAsk={canRunPostFinal ? decideAsk : undefined}
+                               canSettleFinal={canSettleFinal(myHrRole)}
+                               onSettleFinal={settleFinal} settling={settling}
+                               onPublishMany={publishMany} deptNames={deptNames} />}
           {tab === 'summary'  && <SummaryTab rows={pubRows} loading={loading}
                                deptNames={deptNames} bands={bandList}
                                periodLabel={naming?.title} />}
@@ -1129,6 +1703,8 @@ export default function PmsPage() {
           {tab === 'upload'   && <UploadTab rows={fill} scale={scale}
                                improvementAtOrBelow={improvementAtOrBelow}
                                periodId={periodId} periodLabel={naming?.title}
+                               canBuildDirect={canActDirect(myHrRole)}
+                               onDirect={saveDirect}
                                onCommitted={m => { setCommitNote(m); load() }} />}
           {tab === 'pip'      && <PipTab queue={pipQueue} />}
           {tab === 'reports'  && <ReportsTab />}
@@ -1144,32 +1720,35 @@ export default function PmsPage() {
   )
 }
 
-function Card({ children, tone }: { children: React.ReactNode; tone?: 'critical' | 'warning' }) {
-  const edge = tone === 'critical' ? TK.critical : tone === 'warning' ? TK.warning : TK.line
-  const fill = tone === 'critical' ? TK.criticalTint : tone === 'warning' ? TK.warningTint : TK.surface
+/**
+ * The shell's own notice card — module pending, no period, coverage, errors.
+ * An icon tile and a title on the left, the explanation beside it; the tone
+ * tints the edge and the tile and nothing else.
+ */
+function Card({ children, tone, icon, title }: {
+  children?: React.ReactNode; tone?: 'critical' | 'warning'
+  icon?: React.ReactNode; title?: React.ReactNode
+}) {
+  const cls = tone === 'critical' ? 'pms-note pms-crit' : tone === 'warning' ? 'pms-note pms-warn' : 'pms-note'
   return (
-    <div style={{ background: fill, border: `1px solid ${edge}`, borderRadius: 14,
-                  padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
-      {children}
+    <div className={cls}>
+      {icon && <span className="pms-note-ico" aria-hidden="true">{icon}</span>}
+      <div style={{ minWidth: 0, flex: 1 }}>
+        {title && <div className="pms-note-t">{title}</div>}
+        {children != null && <div className="pms-note-d">{children}</div>}
+      </div>
     </div>
   )
 }
 
 function MigrationPending() {
   return (
-    <Card tone="warning">
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>
-        Waiting on migration 066
-      </div>
-      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 8, lineHeight: 1.6, maxWidth: 720 }}>
-        The performance module's tables do not exist in the database yet. The screens and the
-        approval flow are built; they have nothing to read until{' '}
-        <code style={{ background: TK.sunken, padding: '1px 6px', borderRadius: 6, fontSize: F.micro }}>
-          supabase/migrations/066_pms_module.sql
-        </code>{' '}
-        is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
-      </div>
-      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 10, lineHeight: 1.6, maxWidth: 720 }}>
+    <Card tone="warning" icon={<IconAlert size={18} />} title="Waiting on migration 066">
+      The performance module's tables do not exist in the database yet. The screens and the
+      approval flow are built; they have nothing to read until{' '}
+      <code>supabase/migrations/066_pms_module.sql</code>{' '}
+      is applied. That file creates 15 tables, 9 functions, 10 views and 2 triggers.
+      <div style={{ marginTop: 10 }}>
         It is handed to Nayan rather than run from here. This project does not apply schema
         changes itself. Nothing on this page is broken; it is waiting.
       </div>
@@ -1179,15 +1758,10 @@ function MigrationPending() {
 
 function Overview({ cov }: { cov: Coverage | null }) {
   return (
-    <Card>
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink, marginBottom: 4 }}>
-        Cycle overview
-      </div>
-      <div style={{ fontSize: F.small, color: TK.muted, lineHeight: 1.6 }}>
-        No active period yet. Create a policy in Setup and periods generate from its frequency:
-        monthly, quarterly, half-yearly or annual.
-        {cov && cov.hodResolved === 0 && ' Note the HOD warning below: the finalise step has nobody to route to yet.'}
-      </div>
+    <Card icon={<IconCalendar size={18} />} title="Cycle overview">
+      No active period yet. Create a policy in Setup and periods generate from its frequency:
+      monthly, quarterly, half-yearly or annual.
+      {cov && cov.hodResolved === 0 && ' Note the HOD warning below: the finalise step has nobody to route to yet.'}
     </Card>
   )
 }
@@ -1213,26 +1787,24 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
   ]
   const blocked = cov.total - cov.hodResolved
   return (
-    <Card tone={cov.hodResolved < cov.total ? 'warning' : undefined}>
-      <div style={{ fontSize: F.body, fontWeight: W.bold, color: TK.ink }}>Approval chain coverage</div>
-      <div style={{ fontSize: F.small, color: TK.muted, marginTop: 4, marginBottom: 12 }}>
-        An appraisal can only move to a stage that has somebody mapped to it.
-      </div>
-      <div style={{ display: 'grid', gap: 8 }}>
+    <Card tone={cov.hodResolved < cov.total ? 'warning' : undefined}
+          icon={<IconOrgChart size={18} />} title="Approval chain coverage">
+      An appraisal can only move to a stage that has somebody mapped to it.
+      <div className="pms-cov">
         {rows.map(r => {
           const pct = cov.total ? Math.round((r.n / cov.total) * 100) : 0
           const bad = r.n === 0
           return (
-            <div key={r.label} style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
-              <div style={{ width: 60, fontSize: F.small, fontWeight: W.semi, color: TK.ink }}>{r.label}</div>
-              <div style={{ flex: 1, minWidth: 160, height: 8, borderRadius: 999, background: TK.sunken, overflow: 'hidden' }}>
-                <div style={{ width: `${pct}%`, height: '100%',
-                              background: bad ? TK.critical : pct === 100 ? TK.positive : TK.warning }} />
+            <div key={r.label} className="pms-cov-row">
+              <div className="pms-cov-k">{r.label}</div>
+              <div className="pms-cov-bar">
+                <span style={{ width: `${pct}%`,
+                               background: bad ? TK.critical : pct === 100 ? TK.positive : TK.warning }} />
               </div>
-              <div style={{ ...numeric, width: 96, fontSize: F.small, color: bad ? TK.critical : TK.ink, fontWeight: W.semi }}>
+              <div className="pms-cov-n" style={{ ...numeric, color: bad ? TK.critical : TK.ink }}>
                 {r.n} / {cov.total}
               </div>
-              <div style={{ fontSize: F.micro, color: TK.faint, minWidth: 180 }}>
+              <div className="pms-cov-m">
                 <code>{r.col}</code> · {r.note}
               </div>
             </div>
@@ -1241,12 +1813,13 @@ function ChainCoverage({ cov }: { cov: Coverage }) {
       </div>
       {/* How the HOD number above was arrived at. Shown because "0 mapped" on
           its own does not tell anyone which of the two sources to go and fill. */}
-      <div style={{ marginTop: 14, paddingTop: 12, borderTop: `1px solid ${TK.line}` }}>
-        <div style={{ fontSize: F.micro, fontWeight: W.semi, letterSpacing: '.05em',
-                      textTransform: 'uppercase', color: TK.faint, marginBottom: 8 }}>
+      <div style={{ marginTop: 16, paddingTop: 14, borderTop: `1px solid ${TK.line}` }}>
+        <div style={{ fontSize: F.micro, fontWeight: W.bold, letterSpacing: 0,
+                       color: TK.faint, marginBottom: 8 }}>
           How HOD resolves
         </div>
-        <ol style={{ margin: 0, paddingLeft: 18, fontSize: F.small, color: TK.muted, lineHeight: 1.8 }}>
+        <ol style={{ margin: 0, paddingLeft: 20, fontSize: F.small, color: TK.muted, lineHeight: 1.8,
+                     listStyle: 'decimal' }}>
           <li>
             <code>employees.hod_id</code>: explicit override for matrix and dotted-line cases
             {' · '}<strong style={{ color: TK.ink }}>{cov.hodOverride}</strong> set

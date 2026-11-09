@@ -51,17 +51,29 @@ import { PERIODS_PER_YEAR, previewPeriods, windowsFor, periodState, conflicts,
          type Frequency, type Policy, type Person } from '@/lib/pms/policy'
 import { FLAG_LABEL, FLAG_MEANING, type Flag } from '@/lib/pms/employment'
 import { TEMPLATE_COLUMNS, ERROR_TEXT, checkUpload, summarise,
+         searchEnrolled, oneRow, finalisedQueue, QUEUE_STATUS_LABEL,
+         type Candidate, type Known, type QueueRow,
          type UploadRow } from '@/lib/pms/upload'
 import { STATUS_LABEL, whatNext, type Pip } from '@/lib/pms/pip'
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL, FLOW, FLOW_ENDS,
          ROLES, ROLE_LABEL, ACTIONS, ACTION_LABEL, may, SCOPE_NOTE,
          REPORTING_LINE, type Role } from '@/lib/pms/hierarchy'
 import { DEFAULT_RULES } from '@/lib/pms/cycle'
+import { chainLabel, type Stage } from '@/lib/pms/chain'
 import { FILL_ORDER, FILL_LABEL, type FillStatus } from '@/lib/pms/status'
 import { rollUp, type FillRow } from '@/lib/pms/rollup'
 import { csvText, parseCsv } from '@/lib/pms/csv'
 import { pmsAdmin } from '@/lib/pms/adminClient'
 import { humanDate } from '@/lib/pms/cycle'
+import { canActDirect, whyNotDirect, checkDirect, suggestedFinal,
+         type DirectIntent } from '@/lib/pms/hrDirect'
+import { CATEGORIES, CATEGORY_LABEL, type Kra } from '@/lib/pms/kra'
+import { publishFaults } from '@/lib/pms/publishGate'
+import { selectRows, split as bulkSplit, blockedSummary, choices as bulkChoices,
+         outcomeText, type BulkRow, type BulkFilter,
+         type BulkOutcome } from '@/lib/pms/bulkPublish'
+import { checkFinal, hrFinalState,
+         HR_FINAL_PROMPT, type FinalIntent, type HrFinalRow } from '@/lib/pms/hrFinal'
 import { type ChainAsks, type ChainAsk, publishWarnings, asksBadge, pipLine } from '@/lib/pms/hrQueue'
 import { HR_STATUS_LABEL, TRAINING_CATEGORY_LABEL, type HrStatus,
          type TrainingCategory } from '@/lib/pms/training'
@@ -85,11 +97,22 @@ export interface PolicyConfig {
   maxKra: number
   totalWeightage: number
   minWeightagePerKra: number
+  /** 221. How many KPIs one KRA may hold. Shown here because this tab is
+   *  where somebody checks what the rule IS, and a config screen that omits
+   *  a live limit is how "my configuration is not reflected" gets reported. */
+  minKpi?: number
+  maxKpi?: number
   kraCreatedBy?: string | null
   oneToOneMandatory?: boolean | null
   midPeriodCheckin?: boolean | null
   finalReviewOneToOne?: boolean | null
   approvalChain?: string | null
+  /** 218. The composed chain this policy points at, if any. When chainRungs
+   *  is present it is what runs and approvalChain is only the fallback — so
+   *  the panel must show this one, not that one. */
+  chainId?: string | null
+  chainName?: string | null
+  chainRungs?: string[] | null
   whoCanFinalise?: string | null
   ratingScaleType?: string | null
   selfRatingMandatory?: boolean | null
@@ -100,6 +123,8 @@ export interface PolicyConfig {
   postFinalOwner?: string | null
   /** 203: may this company's employees be published from a combined list. */
   publishScope?: string | null
+  /** 211: whether the HR Head must settle the final rating before publishing. */
+  hrHeadFinalRating?: boolean | null
 }
 
 export type AdminTab =
@@ -384,6 +409,9 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy,
                  hint="Exactly, not at least" />
           <Fixed label="Minimum weightage per KRA" value={String(policy?.minWeightagePerKra ?? DEFAULT_RULES.minWeightagePerKra)}
                  hint="Stops a token KRA carrying 1%" />
+          <Fixed label="KPIs per KRA"
+                 value={`${policy?.minKpi ?? DEFAULT_RULES.minKpi} to ${policy?.maxKpi ?? DEFAULT_RULES.maxKpi}`}
+                 hint="Each KPI is rated on its own and takes a share of the KRA's weightage" />
           <Fixed label="Who creates KRAs" value={
             policy?.kraCreatedBy === 'MANAGER' ? 'Their manager'
             : policy?.kraCreatedBy === 'BOTH' ? 'Either may write them'
@@ -399,14 +427,22 @@ export function ConfigTab({ freq, onFreq, fyStart, fyLabel, today, policy,
         <div className="divider" />
         <Section>Workflow &amp; rating</Section>
         <div className="grid g4">
+          {/* 218: THE COMPOSED CHAIN IS WHAT RUNS when one is selected, so
+              it is what this shows. Reading approvalChain unconditionally
+              would have this panel — the one an admin opens to confirm the
+              configuration — state the preset while the cycle travels
+              somewhere else. */}
           <Fixed label="Approval chain" value={
-            policy?.approvalChain
-              ? ((CHAIN_LABEL as Record<string, string>)[policy.approvalChain]
-                 // A chain the schema allows but lib/pms/hierarchy does not
-                 // model — SELF_RM1_RM2_HOD_MD — has no label. Show the raw
-                 // value and say so, rather than rendering "undefined".
-                 ?? `${policy.approvalChain} (not supported yet)`)
-              : '—'} />
+            policy?.chainRungs?.length
+              ? `${policy.chainName ?? 'A built chain'}: `
+                + chainLabel(policy.chainRungs as Stage[], CHAIN_LABEL)
+              : policy?.approvalChain
+                ? ((CHAIN_LABEL as Record<string, string>)[policy.approvalChain]
+                   // A chain the schema allows but lib/pms/hierarchy does not
+                   // model — SELF_RM1_RM2_HOD_MD — has no label. Show the raw
+                   // value and say so, rather than rendering "undefined".
+                   ?? `${policy.approvalChain} (not supported yet)`)
+                : '—'} />
           <Fixed label="Who can finalise" value={
             policy?.whoCanFinalise
               ? ((FINALISER_LABEL as Record<string, string>)[policy.whoCanFinalise]
@@ -772,6 +808,16 @@ export interface PublishRow {
    * answer with a raw P0001 is the behaviour that gate exists to replace.
    */
   signedOff?: boolean
+  /** 211: the HR Head's settlement of the final rating, as the row holds it. */
+  hrFinal?: HrFinalRow | null
+  /** Whether this row's policy requires that settlement before publishing. */
+  hrFinalRequired?: boolean
+  /** 212: built by the HR Head outside the chain, so 207's rule is waived. */
+  hrDirect?: boolean
+  hrDirectReason?: string | null
+  /** The branch, for the bulk filter. Null where the employee has none. */
+  locationId?: string | null
+  locationName?: string | null
   /** Whether the employee has confirmed reading the result. */
   acknowledged?: boolean
 }
@@ -989,10 +1035,446 @@ function ChainAsksBlock({ asks, onDecide }: {
   )
 }
 
+/**
+ * THE HR HEAD SETTLING THE FINAL RATING.
+ *
+ * Requested: a checkbox asking whether the rating was discussed with the
+ * company's management; the HR Head's number overwrites what the chain
+ * settled and counts as THE final rating; they may instead keep the chain's;
+ * and nothing publishes until they have done one or the other.
+ *
+ * Placed above the feedback boxes because the order is the point: settle
+ * what the number is, THEN write the words that go out beside it. Writing
+ * an appreciation remark about a 4 and then changing it to a 3 is how a
+ * result goes out contradicting itself.
+ *
+ * READ-ONLY FOR EVERYONE ELSE. An HR Manager sees where the appraisal has
+ * got to and who it is waiting on; they do not get the controls, because
+ * the owner chose the HR_HEAD role over "any HR-level user" precisely so
+ * that an HR Manager cannot set the number that overrides the HOD.
+ */
+function HrFinalBlock({ row, required, scale, canSettle, onSettle, busy }: {
+  row: HrFinalRow | null | undefined
+  required: boolean
+  scale: number[]
+  canSettle: boolean
+  onSettle?: (intent: FinalIntent) => void
+  busy?: boolean
+}) {
+  const state = hrFinalState(row)
+  const chainRating = state.overrode ? state.chainRating : state.rating
+  const [choice, setChoice] = useState<'KEEP' | 'REPLACE'>('KEEP')
+  const [rating, setRating] = useState('')
+  const [reason, setReason] = useState('')
+  const [discussed, setDiscussed] = useState(false)
+
+  if (!required) {
+    return (
+      <>
+        <Section>Final rating</Section>
+        <div className="k" style={{ lineHeight: 1.6 }}>
+          This policy does not require the HR Head to settle the rating, so
+          the chain&rsquo;s rating of <b>{state.rating ?? '—'}</b> stands and the
+          result can be published as it is.
+        </div>
+      </>
+    )
+  }
+
+  if (state.settled) {
+    return (
+      <>
+        <Section>Final rating</Section>
+        <div className="banner b-green">
+          <span aria-hidden="true">✓</span>
+          <div>
+            <b>Settled by the HR Head at {state.rating ?? '—'}</b>
+            {state.overrode
+              ? <> — replacing the <b>{state.chainRating}</b> the chain settled.</>
+              : <> — the rating the chain settled, kept.</>}
+            {state.at ? ` ${state.at.slice(0, 10)}.` : ''}
+            {state.reason && <div style={{ marginTop: 4 }}>{state.reason}</div>}
+            <div className="k" style={{ marginTop: 4 }}>
+              Discussed with the company&rsquo;s management.
+            </div>
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  if (!canSettle) {
+    return (
+      <>
+        <Section>Final rating</Section>
+        <div className="banner b-amber">
+          <span aria-hidden="true">!</span>
+          <div>
+            The chain settled <b>{state.rating ?? '—'}</b>, and the HR Head has
+            not confirmed it yet. <b>This result cannot be published until they
+            do.</b> Only the HR Head can settle a final rating.
+          </div>
+        </div>
+      </>
+    )
+  }
+
+  const intent: FinalIntent = {
+    choice,
+    rating: rating === '' ? null : Number(rating),
+    reason, discussed,
+  }
+  const check = checkFinal(intent, chainRating, scale)
+
+  return (
+    <>
+      <Section>Final rating</Section>
+      <div className="k" style={{ marginBottom: 8, lineHeight: 1.6 }}>
+        The chain settled <b>{chainRating ?? '—'}</b>. Keep it, or set the rating
+        that will stand instead — yours replaces it as the final rating. What
+        each manager scored stays on the record either way.
+      </div>
+
+      <div className="btnrow" style={{ marginBottom: 8 }}>
+        <button type="button"
+                className={`btn ${choice === 'KEEP' ? '' : 'ghost'} sm`}
+                onClick={() => setChoice('KEEP')}>
+          Keep {chainRating ?? 'the chain\u2019s rating'}
+        </button>
+        <button type="button"
+                className={`btn ${choice === 'REPLACE' ? '' : 'ghost'} sm`}
+                onClick={() => setChoice('REPLACE')}>
+          Set a different rating
+        </button>
+      </div>
+
+      {choice === 'REPLACE' && (
+        <>
+          <div className="grid g2">
+            <Field label="Final rating" hint="This becomes the rating the employee reads">
+              <select value={rating} onChange={e => setRating(e.target.value)}>
+                <option value="">Choose a rating</option>
+                {scale.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </Field>
+          </div>
+          <div className="fld">
+            <label htmlFor="hrf-reason">Why this replaces the chain&rsquo;s rating</label>
+            <textarea id="hrf-reason" rows={2} value={reason}
+                      placeholder="The only record of this decision — say what decided it."
+                      onChange={e => setReason(e.target.value)} />
+          </div>
+        </>
+      )}
+
+      {/* THE CHECKBOX, on both paths. The question is as live when the HR
+          Head agrees with the chain as when they overrule it. */}
+      <label className="chk" style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                                      margin: '8px 0', lineHeight: 1.6 }}>
+        <input type="checkbox" checked={discussed}
+               onChange={e => setDiscussed(e.target.checked)} />
+        <span>{HR_FINAL_PROMPT}</span>
+      </label>
+
+      {check.faults.length > 0 && discussed && (
+        <div className="banner b-amber">
+          <span aria-hidden="true">!</span>
+          <div>
+            <ul style={{ margin: 0, paddingLeft: 18, lineHeight: 1.7 }}>
+              {check.faults.map((f, i) => <li key={i}>{f}</li>)}
+            </ul>
+          </div>
+        </div>
+      )}
+
+      <div className="btnrow">
+        <button className="btn" type="button" disabled={!check.ok || !onSettle || busy}
+                onClick={() => onSettle?.(intent)}>
+          {busy ? 'Settling…'
+            : choice === 'KEEP' ? `Settle the final rating at ${chainRating ?? '—'}`
+            : `Settle the final rating at ${rating || '—'}`}
+        </button>
+      </div>
+    </>
+  )
+}
+
+/**
+ * RELEASING MANY RESULTS AT ONCE.
+ *
+ * Requested: "Bulk publish at one click for multiple employees with
+ * different employee ids in multiple departments filter by
+ * group/branch/company. Default filter: selected all."
+ *
+ * ── THE SHAPE OF THE SCREEN ────────────────────────────────────────────
+ *
+ * Filters first, then what the filter found, split into who can go and who
+ * cannot. The split is the point: a batch that silently publishes some
+ * people and ignores others is the worst possible version of this, so the
+ * ones left behind are counted, grouped by WHY, and listed by name.
+ *
+ * Every filter starts at "all", as asked. Group is the whole group of
+ * companies — a scope above Company — because the columns literally named
+ * unit and business_unit are empty on every employee in the database.
+ *
+ * ── NOTHING IS RELAXED ─────────────────────────────────────────────────
+ *
+ * Each person goes through the same publishFaults the single card uses.
+ * The difference is only which text is judged: the card weighs what is
+ * being typed, this weighs what was saved, because a batch releases
+ * results that were already prepared.
+ */
+function BulkPublish({ rows, deptNames, periodLabel, canAct, onPublishMany,
+                       bands = [] }: {
+  rows: PublishRow[] | null
+  deptNames: Record<string, string>
+  periodLabel?: string | null
+  canAct: boolean
+  onPublishMany?: (ids: string[], onDone: (n: number) => void) => Promise<BulkOutcome>
+  /** THE RATING SCALE, because one of the five gate rules lives on the band
+   *  rather than on the row — see improvementRequired below. Same shape
+   *  PublishTab already declares; it is the only caller. */
+  bands?: { value: number; label: string; improvementMandatory?: boolean }[]
+}) {
+  const [filter, setFilter] = useState<BulkFilter>({})
+  const [picked, setPicked] = useState<Set<string> | null>(null)
+  const [confirming, setConfirming] = useState(false)
+  const [running, setRunning] = useState<number | null>(null)
+  const [outcome, setOutcome] = useState<{ o: BulkOutcome; skipped: number } | null>(null)
+
+  const all: BulkRow[] = useMemo(() => (rows ?? []).map(r => ({
+    employeeId: r.employeeId, periodId: r.periodId, code: r.code, name: r.name,
+    companyName: r.companyName, departmentId: r.departmentId,
+    departmentName: r.departmentId ? (deptNames[r.departmentId] ?? null) : null,
+    locationId: r.locationId, locationName: r.locationName,
+    published: r.published,
+    finalRating: r.finalRating,
+    appreciation: r.appreciation, improvement: r.improvement,
+    /**
+     * THE BAND'S RULE, COMPUTED — it was hardcoded `false`.
+     *
+     * The comment here used to say "the band's own rule travels with the
+     * row", and it does not: PublishRow carries no such field. So the bulk
+     * preview applied four of the five gate rules and silently skipped the
+     * fifth, while the card beside it applied all five.
+     *
+     * What that looked like: somebody on a band that mandates improvement
+     * feedback, with none written, was listed under "Ready to publish" and
+     * counted in the number on the confirm button. publishMany then computed
+     * the rule properly from bandList and refused them — and the outcome
+     * banner reported them among the SERVER's refusals, which it was not.
+     * The admin pressed publish on N and got fewer, with the shortfall
+     * explained as something the database had done.
+     *
+     * The card's line is `!!bands.find(b => b.value === finalRating)
+     * ?.improvementMandatory`. This is that line, for the same reason.
+     */
+    improvementRequired: !!bands.find(b => b.value === r.finalRating)?.improvementMandatory,
+    signedOff: r.signedOff, hrDirect: r.hrDirect,
+    hrFinal: r.hrFinal, hrFinalRequired: r.hrFinalRequired,
+  })), [rows, deptNames, bands])
+
+  const opts = useMemo(() => bulkChoices(all), [all])
+  const inScope = useMemo(() => selectRows(all, filter), [all, filter])
+  const { ready, blocked, inChain } = useMemo(() => bulkSplit(inScope), [inScope])
+  const summary = useMemo(() => blockedSummary(blocked), [blocked])
+
+  // DEFAULT: EVERYTHING THE FILTER FOUND. `picked` stays null until somebody
+  // unticks something, so changing a filter cannot leave a stale selection
+  // of people who are no longer on screen.
+  const chosen = ready.filter(r => picked === null || picked.has(r.employeeId))
+  const toggle = (id: string) => setPicked(p => {
+    const next = new Set(p ?? ready.map(r => r.employeeId))
+    if (next.has(id)) next.delete(id); else next.add(id)
+    return next
+  })
+  const setFilterPart = (k: keyof BulkFilter, v: string) => {
+    setFilter(f => ({ ...f, [k]: v === '' ? null : v }))
+    setPicked(null); setOutcome(null); setConfirming(false)
+  }
+
+  if (!canAct) return null
+
+  return (
+    <Card title="Publish several at once"
+          sub={`Release every settled result in a company, branch or department for ${periodLabel || 'this period'}. Everything starts selected.`}>
+      {outcome && (
+        <div className={outcome.o.published.length ? 'banner b-green' : 'banner b-amber'}>
+          <span aria-hidden="true">{outcome.o.published.length ? '✓' : '!'}</span>
+          <div>
+            {outcomeText(outcome.o, outcome.skipped)}
+            {outcome.o.failed.length > 0 && (
+              <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                {outcome.o.failed.map(f => (
+                  <li key={f.code}><b>{f.name} · {f.code}</b> — {f.message}</li>
+                ))}
+              </ul>
+            )}
+          </div>
+        </div>
+      )}
+
+      <div className="grid g3">
+        <Field label="Company" hint="Group — every company at once — is the default">
+          <select value={filter.company ?? ''}
+                  onChange={e => setFilterPart('company', e.target.value)}>
+            <option value="">Group · all companies</option>
+            {opts.companies.map(c => <option key={c} value={c}>{c}</option>)}
+          </select>
+        </Field>
+        <Field label="Branch">
+          <select value={filter.location ?? ''}
+                  onChange={e => setFilterPart('location', e.target.value)}>
+            <option value="">All branches</option>
+            {opts.locations.map(l => <option key={l.id} value={l.id}>{l.name}</option>)}
+          </select>
+        </Field>
+        <Field label="Department">
+          <select value={filter.department ?? ''}
+                  onChange={e => setFilterPart('department', e.target.value)}>
+            <option value="">All departments</option>
+            {opts.departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
+          </select>
+        </Field>
+      </div>
+
+      <div className="grid g3" style={{ margin: '12px 0' }}>
+        <Stat label="Ready to publish" value={ready.length}
+              tone={ready.length ? 'accent' : undefined}
+              note={chosen.length !== ready.length ? `${chosen.length} selected` : 'all selected'} />
+        <Stat label="Waiting on you" value={blocked.length}
+              note={blocked.length ? 'settled, but missing something' : 'nothing held up'} />
+        <Stat label="Still with the chain" value={inChain}
+              note="nobody has rated them yet — not yours to act on" />
+      </div>
+
+      {ready.length === 0 ? (
+        <Empty what="Nothing here is ready to publish"
+               why={blocked.length
+                 ? 'Every settled result this filter found is still missing something. The reasons are below.'
+                 : inChain
+                   ? `${inChain} ${inChain === 1 ? 'appraisal is' : 'appraisals are'} still with the chain. A result reaches this list once the chain has settled it.`
+                   : 'No unpublished results match this filter. Widen it, or wait for the chain to settle more.'} />
+      ) : (
+        <>
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr>
+                  <th style={{ width: 34 }}>
+                    <input type="checkbox" aria-label="Select everybody ready"
+                           checked={chosen.length === ready.length}
+                           onChange={() => setPicked(chosen.length === ready.length
+                             ? new Set() : null)} />
+                  </th>
+                  <th>Code</th><th>Employee</th><th className="num">Rating</th>
+                  <th>Company</th><th>Branch</th><th>Department</th>
+                </tr>
+              </thead>
+              <tbody>
+                {ready.map(r => (
+                  <tr key={r.employeeId}>
+                    <td>
+                      <input type="checkbox"
+                             aria-label={`Publish ${r.name}`}
+                             checked={picked === null || picked.has(r.employeeId)}
+                             onChange={() => toggle(r.employeeId)} />
+                    </td>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num"><b>{r.finalRating}</b></td>
+                    <td className="k">{r.companyName ?? '—'}</td>
+                    <td className="k">{r.locationName ?? '—'}</td>
+                    <td className="k">{r.departmentName ?? '—'}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+
+          {!confirming ? (
+            <div className="btnrow">
+              <button className="btn" type="button"
+                      disabled={!chosen.length || !onPublishMany || running !== null}
+                      onClick={() => { setConfirming(true); setOutcome(null) }}>
+                {chosen.length
+                  ? `Publish ${chosen.length} ${chosen.length === 1 ? 'result' : 'results'}`
+                  : 'Nobody selected'}
+              </button>
+            </div>
+          ) : (
+            <div className="banner b-amber" style={{ marginTop: 12 }}>
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>Releasing {chosen.length} {chosen.length === 1 ? 'result' : 'results'} to{' '}
+                {chosen.length === 1 ? 'that employee' : 'those employees'}.</b> This cannot be
+                undone — once a result is out, the employee has seen it.
+                <div className="btnrow" style={{ marginTop: 8 }}>
+                  <button className="btn" type="button" disabled={running !== null}
+                          onClick={async () => {
+                            setRunning(0)
+                            const o = await onPublishMany!(chosen.map(r => r.employeeId),
+                              n => setRunning(n))
+                            setRunning(null); setConfirming(false); setPicked(null)
+                            setOutcome({ o, skipped: blocked.length })
+                          }}>
+                    {running !== null
+                      ? `Publishing… ${running} of ${chosen.length}`
+                      : `Yes, publish ${chosen.length}`}
+                  </button>
+                  <button className="btn ghost" type="button" disabled={running !== null}
+                          onClick={() => setConfirming(false)}>
+                    Cancel
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
+        </>
+      )}
+
+      {blocked.length > 0 && (
+        <>
+          <Section>Settled, but not ready to go out ({blocked.length})</Section>
+          <div className="k" style={{ marginBottom: 8, lineHeight: 1.6 }}>
+            These are left exactly as they are. Nothing below was touched.
+          </div>
+          <div className="chips" style={{ marginBottom: 10 }}>
+            {summary.map(s => (
+              <Pill key={s.reason} tone="amber">{s.n} · {s.reason}</Pill>
+            ))}
+          </div>
+          <div className="tblwrap">
+            <table>
+              <thead><tr><th>Code</th><th>Employee</th><th>What is missing</th></tr></thead>
+              <tbody>
+                {blocked.slice(0, 50).map(b => (
+                  <tr key={b.row.employeeId}>
+                    <td>{b.row.code}</td>
+                    <td style={{ fontWeight: 600 }}>{b.row.name}</td>
+                    <td className="k">{b.faults[0]}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+          {blocked.length > 50 && (
+            <div className="k" style={{ marginTop: 8 }}>
+              Showing the first 50 of {blocked.length}. Narrow the filter to see the rest.
+            </div>
+          )}
+        </>
+      )}
+    </Card>
+  )
+}
+
 export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishing,
                              periodLabel, bands = [], canAct = true, note,
                              company, onCompany, companies = [], allowAll = false,
-                             asks, onDecideAsk }: {
+                             asks, onDecideAsk,
+                             canSettleFinal = false, onSettleFinal, settling,
+                             onPublishMany, deptNames = {} }: {
   rows: PublishRow[] | null
   loading?: boolean
   onPublish?: (employeeId: string) => void
@@ -1033,6 +1515,13 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
   asks?: Record<string, ChainAsks>
   /** Accept or decline one proposal. Absent renders the block read-only. */
   onDecideAsk?: (id: string, status: HrStatus, note: string) => void
+  /** 211: whether the viewer holds the HR_HEAD role and may settle a rating. */
+  canSettleFinal?: boolean
+  onSettleFinal?: (employeeId: string, intent: FinalIntent) => void
+  settling?: string | null
+  /** Bulk release. Absent hides the whole section. */
+  onPublishMany?: (ids: string[], onDone: (n: number) => void) => Promise<BulkOutcome>
+  deptNames?: Record<string, string>
 }) {
   const [picked, setPicked] = useState<string | null>(null)
   const [draft, setDraft] = useState<{ appreciation: string; improvement: string
@@ -1090,20 +1579,27 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
   }
   const band = bands.find(b => b.value === member?.finalRating)
   const improvementRequired = !!band?.improvementMandatory
-  const faults: string[] = []
-  if (member) {
-    if (!d.appreciation.trim()) faults.push('An appreciation remark is needed.')
-    if (improvementRequired && !d.improvement.trim()) {
-      faults.push(`Improvement feedback is mandatory at a rating of ${member.finalRating}.`)
-    }
-    if (member.signedOff === false) {
-      // 207: the manager's acknowledgement, not both. The employee's is
-      // recorded when they give it and gates nothing.
-      faults.push('The final review one-to-one is not on record with the '
-                + 'manager\u2019s acknowledgement yet. The conversation has to '
-                + 'have happened before the rating reaches them.')
-    }
-  }
+  /**
+   * THE SHARED GATE. This was thirty lines inline, which was fine while the
+   * card was the only way to publish; bulk made it two copies waiting to
+   * drift, and the looser copy would have become the way to release a
+   * result the other refuses. See lib/pms/publishGate.ts for why each fault
+   * is there and which of them mirror a database trigger.
+   *
+   * The DRAFT is passed, not the saved row: somebody typing a remark should
+   * watch the fault clear as they type. Bulk passes the saved values,
+   * because a batch releases what was already prepared.
+   */
+  const faults = publishFaults({
+    finalRating: member?.finalRating ?? null,
+    appreciation: d.appreciation,
+    improvement: d.improvement,
+    improvementRequired,
+    signedOff: member?.signedOff,
+    hrDirect: member?.hrDirect,
+    hrFinal: member?.hrFinal,
+    hrFinalRequired: member?.hrFinalRequired,
+  })
   const publishable = !!member && faults.length === 0
   /**
    * REPORTED, NOT ENFORCED, and deliberately computed after `publishable` so
@@ -1170,7 +1666,7 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                   <tr>
                     <th>Code</th><th>Employee</th><th className="num">Rating</th>
                     <th>Settled by</th><th>Settled on</th><th>Sign-off</th>
-                    <th>Chain asked for</th><th />
+                    <th>Final rating</th><th>Chain asked for</th><th />
                   </tr>
                 </thead>
                 <tbody>
@@ -1184,9 +1680,18 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                       </td>
                       <td className="k">{r.finalisedByRole ?? '—'}</td>
                       <td className="k">{r.finalisedAt ? r.finalisedAt.slice(0, 10) : '—'}</td>
-                      <td>{r.signedOff === false
-                        ? <Pill tone="amber">not signed</Pill>
-                        : <Pill tone="green">signed</Pill>}</td>
+                      <td>{r.hrDirect
+                        ? <Pill tone="grey">waived · direct</Pill>
+                        : r.signedOff === false
+                          ? <Pill tone="amber">not signed</Pill>
+                          : <Pill tone="green">signed</Pill>}</td>
+                      <td>
+                        {r.hrFinalRequired === false
+                          ? <span className="k">not required</span>
+                          : hrFinalState(r.hrFinal).settled
+                            ? <Pill tone="green">settled</Pill>
+                            : <Pill tone="amber">awaiting HR Head</Pill>}
+                      </td>
                       <td className="k">
                         {asksBadge(asks?.[r.employeeId]) ?? <span className="k">—</span>}
                       </td>
@@ -1209,6 +1714,10 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
         </div>
       </Card>
 
+      <BulkPublish rows={scoped} deptNames={deptNames} periodLabel={periodLabel}
+                   canAct={canAct && !!onPublishMany} onPublishMany={onPublishMany}
+                   bands={bands} />
+
       {member && (
         <Card title={`${member.name} — ${member.code}`}
               sub={`Rated ${member.finalRating ?? '—'}${band ? ` · ${band.label}` : ''} by ${member.finalisedByRole ?? 'the chain'}`
@@ -1227,6 +1736,30 @@ export function PublishTab({ rows, loading, onPublish, onSaveFeedback, publishin
                   the result in — the input arriving after the decision it is
                   supposed to inform. */}
               <ChainAsksBlock asks={asks?.[member.employeeId]} onDecide={onDecideAsk} />
+
+              {/* SETTLE THE NUMBER BEFORE WRITING THE WORDS. An appreciation
+                  remark composed about a 4 and then published beside a 3
+                  is a result that contradicts itself. */}
+              {member.hrDirect && (
+                <div className="banner b-amber">
+                  <span aria-hidden="true">!</span>
+                  <div>
+                    <b>Built outside the chain.</b> No manager rated this
+                    person and there is no final-review one-to-one, so that
+                    requirement is waived for this result alone.
+                    {member.hrDirectReason && <div style={{ marginTop: 4 }}>
+                      {member.hrDirectReason}</div>}
+                  </div>
+                </div>
+              )}
+
+              <HrFinalBlock row={member.hrFinal}
+                            required={member.hrFinalRequired !== false}
+                            scale={bands.map(b => b.value)}
+                            canSettle={canSettleFinal}
+                            busy={settling === member.employeeId}
+                            onSettle={onSettleFinal
+                              ? i => onSettleFinal(member.employeeId, i) : undefined} />
 
               <div className="fld">
                 <label htmlFor="pf-appr">Appreciation remark</label>
@@ -1543,8 +2076,601 @@ export function SummaryTab({ rows, deptNames = {}, bands = [], loading, periodLa
 
 // ── §6.4 Final Rating Upload ─────────────────────────────────────────────
 
+/**
+ * ONE COMMIT PATH, used by the file and by the single-employee form.
+ *
+ * Two call sites writing their own fetch is how the two routes drift: the
+ * actor role, the period, the error handling and the audit row all have to
+ * be identical, because the RPC behind them treats both as the same kind of
+ * override.
+ */
+async function commitRatings(
+  periodId: string,
+  rows: UploadRow[],
+): Promise<{ ok: boolean; text: string }> {
+  const r = await pmsAdmin<{ message?: string; applied?: number }>(
+    'upload_commit',
+    { period_id: periodId, actor_role: 'HR_MANAGER', rows })
+  if (r.error) return { ok: false, text: r.error.message }
+  return { ok: true, text: r.data?.message ?? 'Committed.' }
+}
+
+/**
+ * WHO THE CHAIN HAS FINISHED WITH, on the screen where HR acts on them.
+ *
+ * Requested: show "all the employees that have already done with
+ * finalization from hod and ready for hr final rating upload ... and their
+ * current status".
+ *
+ * Three groups, and the third is a sentence rather than rows: 386 of the
+ * 395 people enrolled in this period have not started, and listing them is
+ * what made the publish queue unreadable before it was narrowed. The ones
+ * already released are kept, separately, so the screen can be used to
+ * confirm the cycle is finished — but never mistaken for work outstanding.
+ */
+function FinalisedQueue({ rows, periodLabel, onPick, picked }: {
+  rows?: FillRow[] | null
+  periodLabel?: string
+  onPick: (c: Candidate) => void
+  picked: Candidate | null
+}) {
+  const q = useMemo(() => finalisedQueue(rows), [rows])
+  const toCandidate = (r: QueueRow): Candidate => ({
+    code: r.code, name: r.name, rating: r.rating,
+    flag: r.flag, periodCode: r.periodCode,
+  })
+
+  if (rows === null || rows === undefined) return <div className="k">Loading…</div>
+
+  return (
+    <>
+      <Card title={`Finalised by the chain, waiting on you (${q.ready.length})`}
+            sub={`Settled ratings for ${periodLabel || 'this period'}, whoever signed them off`
+               + ` — the finaliser is the HOD on most policies and may be another role.`
+               + (q.inChain ? ` ${q.inChain} more ${q.inChain === 1 ? 'appraisal is' : 'appraisals are'}`
+                            + ' still with the chain and will appear here once settled.' : '')}>
+        {!q.ready.length ? (
+          <Empty what="Nothing is waiting"
+                 why={q.inChain
+                   ? `A rating reaches this list once the chain has settled it. ${q.inChain} ${q.inChain === 1 ? 'appraisal is' : 'appraisals are'} still in the chain.`
+                   : 'A rating reaches this list once the chain has settled it.'} />
+        ) : (
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Finalised by</th><th>Status</th><th /></tr>
+              </thead>
+              <tbody>
+                {q.ready.map(r => (
+                  <tr key={r.code}>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num"><b>{r.rating ?? '—'}</b></td>
+                    <td className="k">{(r.finalisedBy ?? '—').replace(/_/g, ' ')}</td>
+                    <td>
+                      {r.locked
+                        ? <Pill tone="grey">locked — exited and rated</Pill>
+                        : <Pill tone="amber">{QUEUE_STATUS_LABEL[r.status]}</Pill>}
+                    </td>
+                    <td>
+                      <button className="btn ghost sm" type="button" disabled={r.locked}
+                              onClick={() => onPick(toCandidate(r))}>
+                        {picked?.code === r.code ? 'Open below' : 'Set rating'}
+                      </button>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </Card>
+
+      {q.done.length > 0 && (
+        <Card title={`Already released (${q.done.length})`}
+              sub="Out to the employee. Here so the cycle can be read at a glance, not because anything is owed on them.">
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Code</th><th>Employee</th><th className="num">Rating</th>
+                    <th>Finalised by</th><th>Status</th></tr>
+              </thead>
+              <tbody>
+                {q.done.map(r => (
+                  <tr key={r.code}>
+                    <td>{r.code}</td>
+                    <td style={{ fontWeight: 600 }}>{r.name}</td>
+                    <td className="num">{r.rating ?? '—'}</td>
+                    <td className="k">{(r.finalisedBy ?? '—').replace(/_/g, ' ')}</td>
+                    <td><Pill tone="green">{QUEUE_STATUS_LABEL[r.status]}</Pill></td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
+    </>
+  )
+}
+
+/**
+ * ONE PERSON'S FINAL RATING, found by employee code or name.
+ *
+ * Requested: "final rating can be uploaded in bulk or hr can also give
+ * rating per employee basis using there employee code and name."
+ *
+ * A BATCH OF ONE, deliberately. This builds an ordinary UploadRow, runs it
+ * through the same checkUpload the file goes through, and commits it with
+ * commitRatings. Nothing here can get a rating past a rule the bulk route
+ * enforces — eligibility, a locked record, the policy's scale, a reason for
+ * an override, the audit row — because it is not a second write path.
+ *
+ * What differs is the reading, not the writing. A file is checked in bulk
+ * and applied; one person is looked up, and the rating they are on NOW is
+ * put in front of the reviewer before they change it.
+ */
+function OneEmployeeRating({ enrolled, known, periodId, periodLabel, onCommitted,
+                             picked, onPicked }: {
+  enrolled?: FillRow[] | null
+  known: Known
+  periodId?: string | null
+  periodLabel?: string
+  onCommitted?: (message: string) => void
+  /**
+   * CONTROLLED BY THE TAB, so the queue above can hand somebody straight to
+   * this form. The tab also keys this component on the person, so choosing
+   * a different one remounts it rather than leaving the previous rating,
+   * reason and feedback sitting in the boxes under a new name.
+   */
+  picked: Candidate | null
+  onPicked: (c: Candidate | null) => void
+}) {
+  const [query, setQuery] = useState('')
+  const [rating, setRating] = useState(picked?.rating != null ? String(picked.rating) : '')
+  const [reason, setReason] = useState('')
+  const [improvement, setImprovement] = useState('')
+  const [appreciation, setAppreciation] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  const matches = picked ? [] : searchEnrolled(enrolled, query)
+
+  const reset = () => {
+    onPicked(null); setQuery(''); setRating('')
+    setReason(''); setImprovement(''); setAppreciation('')
+  }
+
+  // Validated THROUGH THE SHARED ENGINE on every keystroke, so the reviewer
+  // sees the same sentence the file would have shown them — before they
+  // press anything, rather than after.
+  const row = picked && rating
+    ? oneRow({ employeeCode: picked.code, periodCode: picked.periodCode,
+               finalRating: Number(rating), overrideReason: reason,
+               improvementFeedback: improvement, appreciation })
+    : null
+  const checked = row ? checkUpload([row], known) : null
+  const faults = checked?.rows[0]?.errors ?? []
+  const delta = checked?.rows[0]?.delta ?? null
+  const ready = !!checked?.canCommit && !!periodId && !busy
+
+  return (
+    <Card title="One employee at a time"
+          sub="Look somebody up by employee code or name and set their final rating. Same rules, same audit trail as the file.">
+      {result && (
+        <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
+          <span aria-hidden="true">{result.ok ? '✓' : '⚠️'}</span>
+          <div>{result.text}</div>
+        </div>
+      )}
+
+      {!picked ? (
+        <>
+          <Field label="Employee"
+                 hint="Type an employee code or a name. Nothing is listed until you do.">
+            <input value={query} placeholder="e.g. SRS9057, or Isha"
+                   onChange={e => setQuery(e.target.value)} />
+          </Field>
+          {query.trim() && !matches.length && (
+            <div className="k">Nobody in {periodLabel || 'this period'} matches that.</div>
+          )}
+          {matches.length > 0 && (
+            <div className="tblwrap">
+              <table>
+                <thead>
+                  <tr><th>Code</th><th>Employee</th><th className="num">Rating now</th>
+                      <th>Status</th><th /></tr>
+                </thead>
+                <tbody>
+                  {matches.map(m => (
+                    <tr key={m.code}>
+                      <td>{m.code}</td>
+                      <td style={{ fontWeight: 600 }}>{m.name}</td>
+                      <td className="num">{m.rating ?? <span className="k">not rated</span>}</td>
+                      <td className="k">{(m.flag ?? '').replace(/_/g, ' ').toLowerCase() || '—'}</td>
+                      <td>
+                        <button className="btn ghost sm" type="button"
+                                onClick={() => onPicked(m)}>
+                          Choose
+                        </button>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+        </>
+      ) : (
+        <>
+          <div className="banner b-blue">
+            <span aria-hidden="true">i</span>
+            <div>
+              <b>{picked.name} · {picked.code}</b> — on record at{' '}
+              {picked.rating ?? 'no rating yet'}
+              {periodLabel ? ` for ${periodLabel}` : ''}.
+              {' '}<button className="btn ghost sm" type="button" onClick={reset}>
+                Choose somebody else
+              </button>
+            </div>
+          </div>
+
+          <div className="grid g2">
+            <Field label="Final rating"
+                   hint={delta ? `${delta > 0 ? '+' : ''}${delta} against the rating on record` : 'The rating that will stand'}>
+              <select value={rating} onChange={e => setRating(e.target.value)}>
+                <option value="">Choose a rating</option>
+                {known.scale.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          <div className="fld">
+            <label htmlFor="oe-reason">
+              Reason{faults.includes('ERROR_REASON_MISSING') ? ' (required: this changes the rating on record)' : ''}
+            </label>
+            <textarea id="oe-reason" rows={2} value={reason}
+                      placeholder="What decided this — a calibration meeting, a correction, a late input."
+                      onChange={e => setReason(e.target.value)} />
+          </div>
+
+          <div className="fld">
+            <label htmlFor="oe-impr">
+              Improvement feedback{known.improvementMandatoryAtOrBelow != null
+                && Number(rating) <= known.improvementMandatoryAtOrBelow && rating
+                ? ' (mandatory at this rating)' : ' (optional)'}
+            </label>
+            <textarea id="oe-impr" rows={2} value={improvement}
+                      onChange={e => setImprovement(e.target.value)} />
+          </div>
+
+          <div className="fld">
+            <label htmlFor="oe-appr">Appreciation remark (optional)</label>
+            <textarea id="oe-appr" rows={2} value={appreciation}
+                      onChange={e => setAppreciation(e.target.value)} />
+          </div>
+
+          {faults.length > 0 && (
+            <div className="banner b-amber">
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>Before this can be saved:</b>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                  {faults.map(f => <li key={f}>{ERROR_TEXT[f]}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          <div className="btnrow">
+            <button className="btn" type="button" disabled={!ready}
+                    onClick={async () => {
+                      if (!row || !periodId) return
+                      setBusy(true); setResult(null)
+                      const r = await commitRatings(periodId, [row])
+                      setBusy(false)
+                      setResult(r)
+                      if (!r.ok) return
+                      reset()
+                      onCommitted?.(r.text)
+                    }}>
+              {busy ? 'Saving…' : !rating ? 'Choose a rating'
+                : ready ? `Set ${picked.name}'s rating to ${rating}` : 'Cannot save yet'}
+            </button>
+            <button className="btn ghost" type="button" onClick={reset}>Cancel</button>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
+/**
+ * AN APPRAISAL THE CHAIN NEVER PICKED UP, built by the HR Head.
+ *
+ * Requested as "a special case feature": set the KRAs, rate them, set the
+ * final rating, publish. The exceptions — somebody who transferred in after
+ * the cycle opened, a role the routing never covered — who would otherwise
+ * end the year with no appraisal at all.
+ *
+ * ── WHAT THIS FORM DOES NOT DO ─────────────────────────────────────────
+ *
+ * It does not publish. It builds the record and leaves it FINALISED, which
+ * puts it on Publish Results like any other settled appraisal — where the
+ * HR Head settles it under 211 and releases it.
+ *
+ * That is deliberate. The 211 attestation asks whether the rating was
+ * discussed with the company's management, and that question is MORE live
+ * for an appraisal nobody else saw, not less. Asking it here as well would
+ * be asking twice; skipping it would be the one result in the system that
+ * never faced it.
+ *
+ * ── ONLY PEOPLE THE CHAIN NEVER TOUCHED ────────────────────────────────
+ *
+ * And when somebody is not eligible they are shown with the REASON rather
+ * than omitted, because a name missing from a list cannot explain itself.
+ */
+function DirectAppraisal({ enrolled, scale, periodId, periodLabel, canAct,
+                           onDone }: {
+  enrolled?: FillRow[] | null
+  scale: number[]
+  periodId?: string | null
+  periodLabel?: string
+  canAct: boolean
+  onDone?: (employeeId: string, intent: DirectIntent, code: string) => Promise<string | null>
+}) {
+  const [open, setOpen] = useState(false)
+  const [query, setQuery] = useState('')
+  const [picked, setPicked] = useState<FillRow | null>(null)
+  const [reason, setReason] = useState('')
+  const [kras, setKras] = useState<Kra[]>([])
+  const [scores, setScores] = useState<Record<number, number | null>>({})
+  const [finalRating, setFinalRating] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+
+  if (!canAct) return null
+
+  const matches = (() => {
+    const q = query.trim().toUpperCase()
+    if (!q || picked) return []
+    return (enrolled ?? []).filter(r =>
+      String(r.employee_code ?? '').toUpperCase().includes(q)
+      || String(r.employee_name ?? '').toUpperCase().includes(q)).slice(0, 8)
+  })()
+
+  const reset = () => {
+    setPicked(null); setQuery(''); setReason(''); setKras([]); setScores({})
+    setFinalRating('')
+  }
+
+  const addKra = () => setKras(k => [...k, {
+    seq_no: k.length + 1, kra_title: '', kpi_metric: '', target_value: '',
+    category: 'BUSINESS', weightage: 0,
+  }])
+  const setKra = (i: number, patch: Partial<Kra>) =>
+    setKras(k => k.map((x, j) => j === i ? { ...x, ...patch } : x))
+  const dropKra = (i: number) => setKras(k => k.filter((_, j) => j !== i)
+    .map((x, j) => ({ ...x, seq_no: j + 1 })))
+
+  const intent: DirectIntent = {
+    reason, kras,
+    scores,
+    finalRating: finalRating === '' ? null : Number(finalRating),
+  }
+  const check = checkDirect(intent, scale)
+  const suggested = suggestedFinal(intent)
+
+  if (!open) {
+    return (
+      <Card title="Somebody the chain never picked up"
+            sub="Build an appraisal directly — KRAs, a rating for each, and the final rating — for an employee no chain was assigned to.">
+        <div className="k" style={{ marginBottom: 10, lineHeight: 1.6 }}>
+          A special case, and recorded as one: your name and your reason stay
+          on the record, and the final-review sign-off is waived because there
+          is no manager to have had that conversation. Everything else — the
+          KRA rules, the rating scale, your settlement before publishing —
+          applies exactly as it does to everybody else.
+        </div>
+        <div className="btnrow">
+          <button className="btn ghost" type="button" onClick={() => setOpen(true)}>
+            Build an appraisal outside the chain
+          </button>
+        </div>
+      </Card>
+    )
+  }
+
+  return (
+    <Card title="Building an appraisal outside the chain"
+          sub={`For ${periodLabel || 'the open period'}. Recorded against your name, with your reason.`}>
+      {result && (
+        <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
+          <span aria-hidden="true">{result.ok ? '✓' : '⚠️'}</span>
+          <div>{result.text}</div>
+        </div>
+      )}
+
+      {!picked ? (
+        <>
+          <Field label="Employee"
+                 hint="Employee code or name. Only people the chain never started can be taken outside it.">
+            <input value={query} placeholder="e.g. SRS9012, or Priya"
+                   onChange={e => setQuery(e.target.value)} />
+          </Field>
+          {query.trim() && !matches.length && (
+            <div className="k">Nobody in {periodLabel || 'this period'} matches that.</div>
+          )}
+          {matches.length > 0 && (
+            <div className="tblwrap">
+              <table>
+                <thead><tr><th>Code</th><th>Employee</th><th>Status</th><th /></tr></thead>
+                <tbody>
+                  {matches.map(m => {
+                    const why = whyNotDirect({
+                      final_rating: m.final_rating, workflow_status: m.workflow_status,
+                      kra_count: m.kra_count, self_score: m.self_score,
+                    })
+                    return (
+                      <tr key={String(m.employee_code)}>
+                        <td>{m.employee_code}</td>
+                        <td style={{ fontWeight: 600 }}>{m.employee_name}</td>
+                        <td className="k">{why ?? 'Never started — can be built here'}</td>
+                        <td>
+                          <button className="btn ghost sm" type="button" disabled={!!why}
+                                  onClick={() => setPicked(m)}>
+                            {why ? 'Not eligible' : 'Choose'}
+                          </button>
+                        </td>
+                      </tr>
+                    )
+                  })}
+                </tbody>
+              </table>
+            </div>
+          )}
+          <div className="btnrow">
+            <button className="btn ghost sm" type="button"
+                    onClick={() => { reset(); setOpen(false) }}>Close</button>
+          </div>
+        </>
+      ) : (
+        <>
+          <div className="banner b-blue">
+            <span aria-hidden="true">i</span>
+            <div>
+              <b>{picked.employee_name} · {picked.employee_code}</b> — no KRAs, no
+              ratings, nothing from the chain.{' '}
+              <button className="btn ghost sm" type="button" onClick={reset}>
+                Choose somebody else
+              </button>
+            </div>
+          </div>
+
+          <div className="fld">
+            <label htmlFor="da-reason">Why this is being done outside the chain</label>
+            <textarea id="da-reason" rows={2} value={reason}
+                      placeholder="e.g. Transferred in after the cycle opened; no reporting chain was assigned."
+                      onChange={e => setReason(e.target.value)} />
+          </div>
+
+          <Section>KRAs and their ratings</Section>
+          {!kras.length && (
+            <div className="k" style={{ marginBottom: 8 }}>
+              Nothing yet. The same rules apply as to anybody else&rsquo;s
+              scorecard — the weightages have to add up, and every KRA needs a
+              rating.
+            </div>
+          )}
+          {kras.map((k, i) => (
+            <div key={i} className="askrow">
+              <div className="grid g2">
+                <Field label={`KRA ${k.seq_no}`}>
+                  <input value={k.kra_title} placeholder="What they were measured on"
+                         onChange={e => setKra(i, { kra_title: e.target.value })} />
+                </Field>
+                <Field label="Measure">
+                  <input value={k.kpi_metric} placeholder="How it was measured"
+                         onChange={e => setKra(i, { kpi_metric: e.target.value })} />
+                </Field>
+              </div>
+              <div className="grid g3">
+                <Field label="Target">
+                  <input value={k.target_value}
+                         onChange={e => setKra(i, { target_value: e.target.value })} />
+                </Field>
+                <Field label="Weightage %">
+                  <input type="number" value={k.weightage || ''}
+                         onChange={e => setKra(i, { weightage: Number(e.target.value) || 0 })} />
+                </Field>
+                <Field label="Rating">
+                  <select value={scores[k.seq_no] ?? ''}
+                          onChange={e => setScores(s => ({ ...s,
+                            [k.seq_no]: e.target.value === '' ? null : Number(e.target.value) }))}>
+                    <option value="">—</option>
+                    {scale.map(v => <option key={v} value={v}>{v}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <div className="grid g2">
+                <Field label="Category">
+                  <select value={k.category}
+                          onChange={e => setKra(i, { category: e.target.value as Kra['category'] })}>
+                    {CATEGORIES.map(c => (
+                      <option key={c} value={c}>{CATEGORY_LABEL[c]}</option>
+                    ))}
+                  </select>
+                </Field>
+                <div className="fld" style={{ alignSelf: 'end' }}>
+                  <button className="btn ghost sm" type="button" onClick={() => dropKra(i)}>
+                    Remove this KRA
+                  </button>
+                </div>
+              </div>
+            </div>
+          ))}
+          <div className="btnrow">
+            <button className="btn ghost sm" type="button" onClick={addKra}>+ Add a KRA</button>
+          </div>
+
+          <Section>Final rating</Section>
+          <div className="grid g2">
+            <Field label="Final rating"
+                   hint={suggested === null
+                     ? 'The weighted average appears once the KRAs are rated.'
+                     : `The weighted average of what you have rated is ${suggested}. You are not bound by it.`}>
+              <select value={finalRating} onChange={e => setFinalRating(e.target.value)}>
+                <option value="">Choose a rating</option>
+                {scale.map(v => <option key={v} value={v}>{v}</option>)}
+              </select>
+            </Field>
+          </div>
+
+          {check.faults.length > 0 && (
+            <div className="banner b-amber">
+              <span aria-hidden="true">!</span>
+              <div>
+                <b>Before this can be saved:</b>
+                <ul style={{ margin: '6px 0 0', paddingLeft: 18, lineHeight: 1.7 }}>
+                  {check.faults.map((f, i) => <li key={i}>{f}</li>)}
+                </ul>
+              </div>
+            </div>
+          )}
+
+          <div className="k" style={{ margin: '8px 0', lineHeight: 1.6 }}>
+            Saving does not publish. The appraisal becomes a settled record and
+            appears on <b>Publish Results</b>, where you confirm the final
+            rating and release it — the same last step as everybody else.
+          </div>
+
+          <div className="btnrow">
+            <button className="btn" type="button"
+                    disabled={!check.ok || !periodId || busy || !onDone}
+                    onClick={async () => {
+                      setBusy(true); setResult(null)
+                      const err = await onDone?.(String(picked.employee_code), intent,
+                        String(picked.employee_code))
+                      setBusy(false)
+                      if (err) { setResult({ ok: false, text: err }); return }
+                      setResult({ ok: true, text: `${picked.employee_name}\u2019s appraisal is `
+                        + 'on record and waiting on Publish Results.' })
+                      reset()
+                    }}>
+              {busy ? 'Saving…' : check.ok ? 'Save this appraisal' : 'Cannot save yet'}
+            </button>
+            <button className="btn ghost" type="button" onClick={reset}>Cancel</button>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
 export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
-                            periodId, periodLabel, onCommitted }: {
+                            periodId, periodLabel, onCommitted,
+                            canBuildDirect = false, onDirect }: {
   /** vw_pms_fill_status for the open period. Null while loading. */
   rows?: FillRow[] | null
   scale?: number[]
@@ -1552,6 +2678,10 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
   /** The open period. Without it the commit has nowhere to write. */
   periodId?: string | null
   periodLabel?: string
+  /** 212: whether the viewer holds the HR_HEAD role. */
+  canBuildDirect?: boolean
+  /** Writes the whole direct appraisal. Returns an error sentence, or null. */
+  onDirect?: (employeeCode: string, intent: DirectIntent) => Promise<string | null>
   /**
    * Called with the success sentence, NOT just as a refresh signal.
    *
@@ -1568,6 +2698,8 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
   const [name, setName] = useState('')
   const [busy, setBusy] = useState(false)
   const [result, setResult] = useState<{ ok: boolean; text: string } | null>(null)
+  /** Lifted out of the form so a queue row can hand somebody to it. */
+  const [picked, setPicked] = useState<Candidate | null>(null)
 
   /**
    * THE REAL LOOKUP. This was KNOWN_NOTHING, which answered "no such
@@ -1623,14 +2755,33 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
       <div className="banner b-amber">
         <span aria-hidden="true">⚠️</span>
         <div>
-          These are <b>override rights</b>. A manual upload replaces the rating the
-          system computed, and every row is written to the audit log with the actor,
-          the timestamp and the reason. Use it for an offline calibration or a legacy
-          migration, not to correct one person.
+          These are <b>override rights</b>. Setting a rating here replaces the one
+          the system computed, and every change is written to the audit log with the
+          actor, the timestamp and the reason — whether it arrives in a file or one
+          person at a time. A rating that differs from the computed one cannot be
+          saved without a reason.
         </div>
       </div>
 
-      <Card title="Final rating upload"
+      <DirectAppraisal enrolled={enrolled} scale={scale?.length ? scale : [1,2,3,4,5]}
+                       periodId={periodId} periodLabel={periodLabel}
+                       canAct={canBuildDirect}
+                       onDone={onDirect ? (code, intent) => onDirect(code, intent) : undefined} />
+
+      <FinalisedQueue rows={enrolled} periodLabel={periodLabel}
+                      onPick={setPicked} picked={picked} />
+
+      {/* KEYED ON THE PERSON. Choosing somebody else remounts the form, so
+          the previous rating, reason and feedback cannot be left sitting in
+          the boxes under a new name — which, on a control that overrides a
+          final rating, is the mistake worth designing out. */}
+      <OneEmployeeRating key={picked?.code ?? 'none'}
+                         enrolled={enrolled} known={known}
+                         periodId={periodId} periodLabel={periodLabel}
+                         onCommitted={onCommitted}
+                         picked={picked} onPicked={setPicked} />
+
+      <Card title="Several at once, from a file"
             sub="For when a calibration happened offline, or legacy data has to be brought in.">
         {result && (
           <div className={result.ok ? 'banner b-green' : 'banner b-amber'}>
@@ -1722,14 +2873,12 @@ export function UploadTab({ rows: enrolled, scale, improvementAtOrBelow,
                       disabled={!preview.canCommit || !periodId || busy}
                       onClick={async () => {
                         setBusy(true); setResult(null)
-                        const r = await pmsAdmin<{ message?: string; applied?: number }>(
-                          'upload_commit',
-                          { period_id: periodId, actor_role: 'HR_MANAGER',
-                            rows: preview.rows.map(x => x.row) })
+                        // The SAME commit the single-employee form uses.
+                        const r = await commitRatings(periodId!, preview.rows.map(x => x.row))
                         setBusy(false)
-                        if (r.error) { setResult({ ok: false, text: r.error.message }); return }
-                        const msg = r.data?.message ?? 'Committed.'
-                        setResult({ ok: true, text: msg })
+                        setResult(r)
+                        if (!r.ok) return
+                        const msg = r.text
                         // The file is spent: its preview was computed against
                         // ratings this commit has just changed, so leaving it
                         // on screen would invite a second application of the

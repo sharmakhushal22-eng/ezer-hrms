@@ -49,10 +49,13 @@ test('the policy query is ordered, so "first" means something', () => {
   // records. A magic length is a assertion about formatting, not behaviour.
   const i = PAGE.indexOf("let polQ = supabase.from('pms_policies')")
   assert.ok(i > 0, 'could not find the policy query')
-  const end = PAGE.indexOf('await polQ', i)
-  assert.ok(end > i, 'could not find where the policy query is executed')
+  // 211 moved the execution into an `ordered()` helper so the select can be
+  // retried without a column PostgREST may not know yet. The ORDER BY still
+  // has to be on whatever actually runs, so the test follows it there.
+  const end = PAGE.indexOf('polQ.order(', i)
+  assert.ok(end > i, 'could not find where the policy query is ordered')
   const q = PAGE.slice(i, PAGE.indexOf('\n', end))
-  const exec = q.match(/await polQ[^\n]*/)
+  const exec = q.match(/polQ\.order[^\n]*/)
   assert.ok(exec, 'could not find where the policy query is executed')
   assert.match(exec![0], /\.order\(/,
     'the policy query has no ORDER BY, so row [0] is whichever policy Postgres '

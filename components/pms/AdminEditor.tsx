@@ -19,7 +19,11 @@
 
 import React, { useCallback, useEffect, useMemo, useState } from 'react'
 import { loadPmsAdmin, pmsAdmin, type PmsAdminSnapshot } from '@/lib/pms/adminClient'
+import { IconPolicies, IconTemplates, IconOrgChart, IconSliders, IconLetters,
+         IconCompliance, IconCalendar, IconLock, type IconProps } from '@/lib/ui'
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL } from '@/lib/pms/hierarchy'
+import { RUNG_CHOICES, chainFault, chainWarnings, chainSummary, usedBy,
+         MAX_CHAIN_NAME } from '@/lib/pms/chainBuilder'
 
 type Row = Record<string, unknown>
 const s = (v: unknown) => (v === null || v === undefined) ? '' : String(v)
@@ -100,6 +104,24 @@ function SaveRow({ busy, error, saved, onSave, label = 'Save changes', disabled 
   )
 }
 
+/**
+ * The same feedback, for an action that has no save button next to it.
+ *
+ * SaveRow pairs a message with the button that caused it, which is right for
+ * a form. It is WRONG for a row action in a table: Retire lives outside the
+ * editor, so a SaveRow inside `{editing && …}` had nowhere to render its
+ * refusal. Clicking Retire on a chain a policy still uses did exactly what it
+ * should — the route refused, naming the policy — and the screen showed
+ * nothing at all. The button appeared to do nothing.
+ *
+ * Rendered only when no editor is open, so the message never appears twice.
+ */
+function RowFeedback({ error, saved }: { error: string | null; saved: string | null }) {
+  if (error) return <Note tone="bad">{error}</Note>
+  if (saved) return <Note tone="good">{saved}</Note>
+  return null
+}
+
 /** Every panel needs the same three pieces of state and the same reset on a
  *  fresh attempt. Written once so a panel cannot show a stale "Saved" next to
  *  a new failure. */
@@ -121,12 +143,26 @@ function useSaver(reload: () => Promise<void>) {
     return true
   }, [reload])
 
-  return { busy, error, saved, run, setError }
+  /**
+   * Forget the last outcome.
+   *
+   * The state outlives the action that produced it, which is right while you
+   * are looking at the thing you just did and wrong the moment you start
+   * something else: a refusal from Retire sat under the editor's Save button
+   * afterwards, reading as a failed save. Call this when opening or closing
+   * an editor.
+   */
+  const reset = useCallback(() => { setError(null); setSaved(null) }, [])
+
+  return { busy, error, saved, run, setError, reset }
 }
 
 // ══ 1. POLICIES ═══════════════════════════════════════════════════════════
-function PolicyPanel({ policies, companies, people, reload }: {
-  policies: Row[]; companies: Row[]; people: Row[]; reload: () => Promise<void>
+function PolicyPanel({ policies, companies, people, chains, reload }: {
+  policies: Row[]; companies: Row[]; people: Row[]
+  /** 218. The built chains a policy may point at instead of a preset. */
+  chains: Row[]
+  reload: () => Promise<void>
 }) {
   const [id, setId] = useState<string>('')
   const [draft, setDraft] = useState<Row>({})
@@ -194,6 +230,41 @@ function PolicyPanel({ policies, companies, people, reload }: {
         <Field label="Total weightage" hint="Usually 100"><input type="number" value={n(draft.total_weightage)} onChange={e => set('total_weightage', Number(e.target.value))} /></Field>
       </div>
 
+      {/* ── 221. HOW MANY KPIs ONE KRA MAY HOLD ──────────────────────────────
+          A KRA is the objective; a KPI is how it is measured, and each KPI is
+          rated on its own. The pair is editable here because it was neither:
+          the floor of one lived in lib/pms/kpi.ts and there was no ceiling at
+          all.
+
+          `min` on the max input is bound to the minimum rather than to 1, so
+          the browser refuses an inverted pair before the request is made.
+          pms_policies_kpi_range refuses it too — this only means the
+          administrator finds out while typing instead of on save. */}
+      <div className="grid g4">
+        <Field label="Minimum KPIs per KRA"
+               hint="At least one, or the KRA has nothing to rate">
+          <input type="number" min={1} max={n(draft.max_kpi_per_kra) || 20}
+                 value={n(draft.min_kpi_per_kra) || 1}
+                 onChange={e => set('min_kpi_per_kra', Number(e.target.value))} />
+        </Field>
+        <Field label="Maximum KPIs per KRA" hint="Default 5, 20 at most">
+          <input type="number" min={n(draft.min_kpi_per_kra) || 1} max={20}
+                 value={n(draft.max_kpi_per_kra) || 5}
+                 onChange={e => set('max_kpi_per_kra', Number(e.target.value))} />
+        </Field>
+        {/* Spanning the two columns the fields leave empty. In one column it
+            renders as a tall narrow ribbon beside two short inputs, which
+            reads as a warning about the field next to it rather than as a
+            note about the pair. */}
+        <div style={{ gridColumn: 'span 2' }}>
+          <Note tone="warn">
+            The KPIs under one KRA share that KRA's weightage — three KPIs on a
+            30% KRA might be 15, 10 and 5. Lowering the maximum leaves KRAs that
+            already hold more than that alone; it refuses the next one.
+          </Note>
+        </div>
+      </div>
+
       <div className="grid g4">
         <Field label="Minimum weightage per KRA"><input type="number" value={n(draft.min_weightage_per_kra)} onChange={e => set('min_weightage_per_kra', Number(e.target.value))} /></Field>
         <Field label="New joiner cut-off (days)"
@@ -207,8 +278,16 @@ function PolicyPanel({ policies, companies, people, reload }: {
             {KRA_AUTHORS.map(k => <option key={k} value={k}>{KRA_AUTHOR_LABEL[k]}</option>)}
           </select>
         </Field>
-        <Field label="Approval chain" hint="Who rates, in order">
+        {/* 218. THE CUSTOM CHAIN WINS WHEN ONE IS SET, so the preset below is
+            disabled rather than hidden while it is — hiding it would leave an
+            administrator unable to see what the policy falls back to, and
+            leaving it live would offer two controls where only one decides. */}
+        <Field label="Approval chain"
+               hint={s(draft.chain_id)
+                 ? 'A built chain is selected below, and that is what runs.'
+                 : 'Who rates, in order'}>
           <select value={s(draft.approval_chain) || 'SELF_RM1_RM2_HOD'}
+                  disabled={!!s(draft.chain_id)}
                   onChange={e => set('approval_chain', e.target.value)}>
             {CHAINS.map(c => <option key={c} value={c}>{CHAIN_LABEL[c]}</option>)}
             {/* The schema also permits SELF_RM1_RM2_HOD_MD and §6.2's example
@@ -222,6 +301,20 @@ function PolicyPanel({ policies, companies, people, reload }: {
                 Self → RM L1 → RM L2 → HOD → MD (set in the database; not supported yet)
               </option>
             )}
+          </select>
+        </Field>
+        <Field label="Or a chain you built"
+               hint="Overrides the preset. Built in Approval chains.">
+          <select value={s(draft.chain_id)}
+                  onChange={e => set('chain_id', e.target.value || null)}>
+            <option value="">Use the preset above</option>
+            {chains.filter(c => c.is_active || s(c.id) === s(draft.chain_id))
+                   .map(c => (
+              <option key={s(c.id)} value={s(c.id)}>
+                {s(c.name)} — {chainSummary(c.rungs as string[] | null)}
+                {!c.is_active ? ' (retired)' : ''}
+              </option>
+            ))}
           </select>
         </Field>
         <Field label="Rating scale" hint="§13.2 recommends the 5-point scale">
@@ -409,6 +502,669 @@ function KraPanel({ kras, companyId, reload }: {
           </tbody>
         </table>
       </div>
+    </Card>
+  )
+}
+
+// ══ 3c. HR HEAD AUTHORITY ═════════════════════════════════════════════════
+
+/**
+ * WHAT THE HR HEAD MAY DO, in one place.
+ *
+ * Requested: whether the HR Head can finalise a rating, override the HOD's,
+ * and the rest, should all be flexible and changeable from here.
+ *
+ * Most of it already was — hr_head_final_rating, post_final_owner,
+ * publish_scope and hr_head_id are policy columns and have been. They were
+ * spread across two tabs, which is most of why it did not feel
+ * configurable. Only the override, the direct appraisal and the upload
+ * needed new columns (217).
+ *
+ * ── PER POLICY, WHICH MEANS PER COMPANY ────────────────────────────────
+ *
+ * Three companies, three policies, three different answers if they want
+ * them. The selector is the first thing on the screen for the reason the
+ * publish workspace narrows by company: every policy here is called
+ * "Standard Quarterly", and changing the wrong company's rules is not a
+ * mistake you notice.
+ *
+ * ── THE HR HEAD CANNOT REACH THIS SCREEN ───────────────────────────────
+ *
+ * Setup & Controls requires full Performance management, which the HR Head
+ * role does not have. That is the only version of this that means
+ * anything: a person who can grant themselves a power is not limited by it.
+ */
+function AuthorityPanel({ policies, companies, reload }: {
+  policies: Row[]; companies: Row[]; reload: () => Promise<void>
+}) {
+  const [id, setId] = useState<string>('')
+  const [draft, setDraft] = useState<Row>({})
+  const { busy, error, saved, run } = useSaver(reload)
+  const current = useMemo(() => policies.find(p => s(p.id) === id), [policies, id])
+  const coName = (cid: unknown) =>
+    s(companies.find(c => s(c.id) === s(cid))?.company_name) || 'Unknown company'
+
+  useEffect(() => {
+    if (!id && policies.length) setId(s(policies[0].id))
+  }, [policies, id])
+  useEffect(() => { setDraft(current ? { ...current } : {}) }, [current])
+
+  const set = (k: string, v: unknown) => setDraft(d => ({ ...d, [k]: v }))
+  // UNSET READS AS ON, exactly as the engine reads it: a policy written
+  // before 217 has no value in these columns and the module behaves as it
+  // always did. A screen that showed them as off would be describing a
+  // state the code disagrees with.
+  const yes = (k: string) => draft[k] !== false
+
+  const Toggle = ({ col, title, when, unless }: {
+    col: string; title: string; when: string; unless: string
+  }) => (
+    <div className="askrow" style={{ marginBottom: 8 }}>
+      <label className="chk" style={{ display: 'flex', gap: 10, alignItems: 'flex-start' }}>
+        <input type="checkbox" checked={yes(col)}
+               onChange={e => set(col, e.target.checked)} />
+        <span>
+          <b>{title}</b>
+          <div className="k" style={{ marginTop: 3, lineHeight: 1.6 }}>
+            {yes(col) ? when : unless}
+          </div>
+        </span>
+      </label>
+    </div>
+  )
+
+  if (!policies.length) {
+    return <Card title="HR Head authority" sub="What the HR Head may do in this cycle.">
+      <Note tone="warn">No policy exists yet, so there is nothing to configure.</Note>
+    </Card>
+  }
+
+  return (
+    <Card title="HR Head authority"
+          sub="What the HR Head may do, per policy. Switching something off stops new use of it — ratings already settled stay settled.">
+      <Field label="Policy"
+             hint="Every company has its own, and they can differ.">
+        <select value={id} onChange={e => setId(e.target.value)}>
+          {policies.map(p => (
+            <option key={s(p.id)} value={s(p.id)}>
+              {coName(p.company_id)} — {s(p.policy_name) || 'Policy'}
+            </option>
+          ))}
+        </select>
+      </Field>
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>Settling the final rating</div>
+      <Toggle col="hr_head_final_rating"
+              title="The HR Head settles the final rating before anything is published"
+              when="Nothing publishes until they confirm the rating and record that it was discussed with management."
+              unless="The chain’s rating stands and results publish without a separate confirmation." />
+      {yes('hr_head_final_rating') && (
+        <Toggle col="hr_head_can_override"
+                title="…and may replace the rating the chain settled"
+                when="They can keep the chain’s number or set a different one, with a written reason."
+                unless="They confirm the chain’s rating as it is. The number itself is the chain’s." />
+      )}
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>Outside the chain</div>
+      <Toggle col="hr_head_can_direct"
+              title="The HR Head can build an appraisal for somebody the chain never started"
+              when="KRAs, a rating for each and a final rating, for a transfer or a role the routing missed. Recorded as an exception with their name and reason."
+              unless="Everybody goes through the chain. Someone the cycle missed ends the period with no appraisal." />
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>Rating uploads</div>
+      <Field label="Who may commit a bulk or single rating upload"
+             hint="A rating upload replaces what the chain decided, so this is the widest power on the screen.">
+        <select value={s(draft.rating_upload_by) || 'HR_ANY'}
+                onChange={e => set('rating_upload_by', e.target.value)}>
+          <option value="HR_ANY">HR Manager, HR Head or Admin</option>
+          <option value="HR_HEAD">The HR Head only</option>
+          <option value="NOBODY">Nobody — the chain is the only route</option>
+        </select>
+      </Field>
+
+      <div className="divider" />
+      <div className="lbl" style={{ marginBottom: 6 }}>After the rating is settled</div>
+      <Field label="Who writes the feedback and publishes"
+             hint="Already on the Policy tab; here too because it is part of the same question.">
+        <select value={s(draft.post_final_owner) || 'HR'}
+                onChange={e => set('post_final_owner', e.target.value)}>
+          <option value="HR">HR</option>
+          <option value="FINALISER">Whoever finalised the rating</option>
+        </select>
+      </Field>
+      <Field label="Publishing scope"
+             hint="Whether this company’s results can be released alongside other companies’.">
+        <select value={s(draft.publish_scope) || 'COMPANY'}
+                onChange={e => set('publish_scope', e.target.value)}>
+          <option value="COMPANY">One company at a time</option>
+          <option value="ALL">May be published together with other opted-in companies</option>
+        </select>
+      </Field>
+
+      <SaveRow busy={busy} error={error} saved={saved} label="Save authority"
+               disabled={!id}
+               onSave={() => run(() => pmsAdmin('policy_update', { ...draft, id }),
+                                 'Authority saved.')} />
+
+      <Note tone="warn">
+        These settings are not visible to the HR Head: Setup &amp; Controls needs
+        full access to Performance, which that role does not have. A power
+        somebody can grant themselves is not a limit on them.
+      </Note>
+    </Card>
+  )
+}
+
+// ══ 3b. TRAINING CATALOGUE ════════════════════════════════════════════════
+
+const BLANK_COURSE: Row = {
+  course_name: '', provider: '', skill: '', category: 'TECHNICAL',
+  level: 'INTERMEDIATE', url: '', duration_hours: null, notes: '', is_active: true,
+}
+
+const COURSE_CATEGORIES = ['TECHNICAL', 'BEHAVIOURAL', 'LEADERSHIP',
+                           'DOMAIN', 'COMPLIANCE', 'OTHER'] as const
+const COURSE_LEVELS = ['FOUNDATION', 'INTERMEDIATE', 'ADVANCED'] as const
+
+/**
+ * THE COURSES THE AI SUGGESTION RETRIEVES FROM (215).
+ *
+ * Empty until somebody fills it, and the screen says so rather than
+ * showing a blank table: while it is empty every suggestion a rater sees
+ * is a skill area, because the model is not allowed to name a course it
+ * cannot vouch for.
+ *
+ * ── WHY "WHAT IT TEACHES" IS THE FIELD THAT MATTERS ────────────────────
+ *
+ * Retrieval scores the skill three times higher than the course title. A
+ * row with a polished name and no skill is a course the engine can never
+ * surface — present in the catalogue and invisible in practice, which is
+ * worse than absent. The form says so, and refuses to save without it.
+ */
+function CataloguePanel({ catalogue, companyId, reload }: {
+  catalogue: Row[]; companyId: string | null; reload: () => Promise<void>
+}) {
+  const [editing, setEditing] = useState<Row | null>(null)
+  const [q, setQ] = useState('')
+  const [group, setGroup] = useState(false)
+  const { busy, error, saved, run } = useSaver(reload)
+  const set = (k: string, v: unknown) => setEditing(d => d ? { ...d, [k]: v } : d)
+
+  const shown = catalogue.filter(c => {
+    const t = q.trim().toLowerCase()
+    if (!t) return true
+    return [c.course_name, c.skill, c.provider].some(v => s(v).toLowerCase().includes(t))
+  })
+  const active = catalogue.filter(c => c.is_active).length
+
+  return (
+    <Card title="Training catalogue"
+          sub="The courses this organisation can actually send somebody on. The AI suggestion matches against these before it proposes anything of its own.">
+      {!catalogue.length && (
+        <Note tone="warn">
+          The catalogue is empty. Until it has courses, every suggestion a
+          manager sees is a <b>skill area</b> rather than something they can
+          book — the model is deliberately not allowed to name a course,
+          because an invented one is indistinguishable from a real one once
+          it reaches HR.
+        </Note>
+      )}
+
+      <div className="btnrow">
+        <button className="btn" onClick={() => setEditing({ ...BLANK_COURSE })}>Add a course</button>
+        {catalogue.length > 0 && (
+          <span className="k" style={{ alignSelf: 'center' }}>
+            {active} active of {catalogue.length}
+          </span>
+        )}
+      </div>
+
+      {/* Retire and Bring back sit in the table, away from any SaveRow. */}
+      {!editing && <RowFeedback error={error} saved={saved} />}
+
+      {editing && (
+        <>
+          <div className="divider" />
+          <div className="grid g2">
+            <Field label="Course name" hint="What it is called on the invoice">
+              <input value={s(editing.course_name)}
+                     onChange={e => set('course_name', e.target.value)} />
+            </Field>
+            <Field label="Provider" hint="Internal L&amp;D, or whoever runs it">
+              <input value={s(editing.provider)}
+                     onChange={e => set('provider', e.target.value)} />
+            </Field>
+          </div>
+
+          <Field label="What it teaches"
+                 hint="The words a manager would use in a review — “stock accuracy cycle counting variance”. This is what the suggestion matches on, and it counts for three times the course name.">
+            <input value={s(editing.skill)} onChange={e => set('skill', e.target.value)} />
+          </Field>
+
+          <div className="grid g4">
+            <Field label="Kind">
+              <select value={s(editing.category)} onChange={e => set('category', e.target.value)}>
+                {COURSE_CATEGORIES.map(c => (
+                  <option key={c} value={c}>{c.toLowerCase()}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Level">
+              <select value={s(editing.level)} onChange={e => set('level', e.target.value)}>
+                {COURSE_LEVELS.map(c => (
+                  <option key={c} value={c}>{c.toLowerCase()}</option>
+                ))}
+              </select>
+            </Field>
+            <Field label="Hours" hint="Blank if it varies">
+              <input type="number" value={editing.duration_hours === null ? '' : n(editing.duration_hours)}
+                     onChange={e => set('duration_hours',
+                       e.target.value === '' ? null : Number(e.target.value))} />
+            </Field>
+            <Field label="Link" hint="Where to book it">
+              <input value={s(editing.url)} onChange={e => set('url', e.target.value)} />
+            </Field>
+          </div>
+
+          {!editing.id && (
+            <label className="chk" style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                                            margin: '8px 0', lineHeight: 1.6 }}>
+              <input type="checkbox" checked={group}
+                     onChange={e => setGroup(e.target.checked)} />
+              <span>
+                Available to <b>every company</b> in the group, not just this one.
+                <span className="k"> Leave this off for a course only one company runs.</span>
+              </span>
+            </label>
+          )}
+
+          <SaveRow busy={busy} error={error} saved={saved}
+                   label={editing.id ? 'Save course' : 'Add course'}
+                   disabled={!s(editing.course_name).trim() || !s(editing.skill).trim()
+                             || (!editing.id && !group && !companyId)}
+                   onSave={async () => {
+                     const okDone = await run(
+                       () => pmsAdmin('catalogue_upsert',
+                         { ...editing, company_id: group ? null : companyId }),
+                       editing.id ? 'Course saved.' : 'Course added.')
+                     if (okDone) { setEditing(null); setGroup(false) }
+                   }} />
+          {!s(editing.skill).trim() && s(editing.course_name).trim() && (
+            <Note tone="warn">
+              Without “what it teaches”, nothing will ever match this course.
+            </Note>
+          )}
+        </>
+      )}
+
+      {catalogue.length > 0 && (
+        <>
+          <div className="divider" />
+          <Field label="Find a course">
+            <input value={q} placeholder="name, provider, or what it teaches"
+                   onChange={e => setQ(e.target.value)} />
+          </Field>
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Course</th><th>What it teaches</th><th>Provider</th>
+                    <th>Kind</th><th>Scope</th><th>Status</th><th /></tr>
+              </thead>
+              <tbody>
+                {!shown.length && (
+                  <tr><td colSpan={7} className="k">Nothing matches that.</td></tr>
+                )}
+                {shown.map(c => (
+                  <tr key={s(c.id)}>
+                    <td>{s(c.course_name)}</td>
+                    <td className="k">{s(c.skill)}</td>
+                    <td className="k">{s(c.provider) || '-'}</td>
+                    <td>{s(c.category).toLowerCase()}</td>
+                    <td className="k">{c.company_id ? 'this company' : 'whole group'}</td>
+                    <td>
+                      <span className={`pill ${c.is_active ? 'p-green' : 'p-grey'}`}>
+                        {c.is_active ? 'active' : 'retired'}
+                      </span>
+                    </td>
+                    <td>
+                      <div className="btnrow">
+                        <button className="btn ghost" onClick={() => setEditing({ ...c })}>Edit</button>
+                        {/* Retired, never deleted: a suggestion already in a
+                            manager's bin points at this row. */}
+                        <button className="btn ghost"
+                                onClick={() => run(
+                                  () => pmsAdmin('catalogue_set_active',
+                                    { id: c.id, is_active: !c.is_active }),
+                                  c.is_active ? 'Course retired.' : 'Course back in use.')}>
+                          {c.is_active ? 'Retire' : 'Bring back'}
+                        </button>
+                      </div>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
+    </Card>
+  )
+}
+
+// ══ 2b. THE CHAIN BUILDER (218) ═══════════════════════════════════════════
+//
+// Requested: the chain should be fully customisable and editable — change the
+// KRA and approval chains, build a completely new one, all from the admin side.
+//
+// ── WHAT THIS SCREEN HAS TO MAKE OBVIOUS ─────────────────────────────────
+//
+// Three things, and getting any of them wrong leaves somebody confidently
+// mistaken about how their company is being appraised:
+//
+//   THE TWO ENDS ARE FIXED. The self rating starts every chain and HR ends
+//   it. They are drawn, dimmed, in the track — not offered as removable
+//   rungs — because a chain that looks like it has no publisher is one
+//   somebody will try to build.
+//
+//   AN EMPTY RUNG IS SKIPPED, NOT BLOCKED ON. Nobody has a regional head
+//   assigned. A chain naming one still works and simply does less than it
+//   appears to, so the coverage count sits against the choice rather than in
+//   a footnote — the number is the warning.
+//
+//   AN EDIT DOES NOT REACH APPRAISALS ALREADY RUNNING. chain_shape freezes
+//   per appraisal at submission. Said on the screen because the opposite is
+//   the natural assumption and the consequence of assuming wrongly is an
+//   administrator "fixing" a live cycle.
+
+/** Reordering by drag, with the keyboard as the equal path and not a fallback. */
+function RungRow({ rung, idx, count, cover, onMove, onRemove }: {
+  rung: string; idx: number; count: number
+  cover?: { have: number; of: number }
+  onMove: (from: number, to: number) => void
+  onRemove: () => void
+}) {
+  const [over, setOver] = useState(false)
+  const choice = RUNG_CHOICES.find(c => c.stage === rung)
+  const empty = cover && cover.of > 0 && cover.have === 0
+  const partial = cover && cover.of > 0 && cover.have > 0 && cover.have < cover.of
+
+  return (
+    <div className={`rung${over ? ' rung-over' : ''}`}
+         draggable
+         onDragStart={e => {
+           e.dataTransfer.setData('application/x-pms-rung', String(idx))
+           e.dataTransfer.effectAllowed = 'move'
+         }}
+         onDragOver={e => { e.preventDefault(); setOver(true) }}
+         onDragLeave={() => setOver(false)}
+         onDrop={e => {
+           e.preventDefault(); setOver(false)
+           const from = Number(e.dataTransfer.getData('application/x-pms-rung'))
+           if (Number.isInteger(from) && from !== idx) onMove(from, idx)
+         }}>
+      <span className="rung-no">{idx + 1}</span>
+      <span className="rung-grip" aria-hidden>⠿</span>
+      <span className="rung-name">
+        {choice?.label ?? rung}
+        {empty && <span className="pill p-amber">skipped for everybody</span>}
+        {partial && (
+          <span className="pill p-grey">
+            skipped for {cover!.of - cover!.have} of {cover!.of}
+          </span>
+        )}
+      </span>
+      {/* The keyboard path. A drag handle alone makes ordering — the only
+          thing this screen is for — reachable by exactly one input method. */}
+      <div className="btnrow">
+        <button className="btn ghost" disabled={idx === 0}
+                aria-label={`Move ${choice?.label ?? rung} earlier`}
+                onClick={() => onMove(idx, idx - 1)}>↑</button>
+        <button className="btn ghost" disabled={idx === count - 1}
+                aria-label={`Move ${choice?.label ?? rung} later`}
+                onClick={() => onMove(idx, idx + 1)}>↓</button>
+        <button className="btn ghost"
+                aria-label={`Remove ${choice?.label ?? rung}`}
+                onClick={onRemove}>Remove</button>
+      </div>
+    </div>
+  )
+}
+
+const BLANK_CHAIN: Row = { name: '', rungs: [], notes: '', is_active: true }
+
+function ChainPanel({ chains, policies, coverage, companyId, reload }: {
+  chains: Row[]; policies: Row[]
+  coverage: Record<string, { have: number; of: number }> | null
+  companyId: string | null; reload: () => Promise<void>
+}) {
+  const [editing, setEditing] = useState<Row | null>(null)
+  const [group, setGroup] = useState(false)
+  const { busy, error, saved, run, reset } = useSaver(reload)
+
+  const draft = (editing?.rungs as string[] | undefined) ?? []
+  const setRungs = (next: string[]) => setEditing(d => d ? { ...d, rungs: next } : d)
+  const set = (k: string, v: unknown) => setEditing(d => d ? { ...d, [k]: v } : d)
+
+  const move = (from: number, to: number) => {
+    const next = [...draft]
+    const [r] = next.splice(from, 1)
+    next.splice(Math.max(0, Math.min(next.length, to)), 0, r)
+    setRungs(next)
+  }
+
+  // The same refusal the route will give, computed as they type so the Save
+  // button can explain itself before it is pressed rather than after.
+  const fault = editing
+    ? chainFault({ name: s(editing.name), rungs: draft })
+    : null
+  const warnings = editing ? chainWarnings(draft, coverage) : []
+  const unused = RUNG_CHOICES.filter(c => !draft.includes(c.stage))
+
+  return (
+    <Card title="Approval chains"
+          sub="Who an appraisal travels through, in what order. Build as many as you need and point each policy at one.">
+      {!chains.length && (
+        <Note tone="warn">
+          No chains yet, so every policy is using one of the three built-in
+          presets. Nothing changes until you build a chain <i>and</i> select it
+          on a policy — see <b>Policy rules</b>.
+        </Note>
+      )}
+
+      <div className="btnrow">
+        <button className="btn"
+                onClick={() => { reset(); setEditing({ ...BLANK_CHAIN, rungs: [] }) }}>
+          Build a chain
+        </button>
+        {chains.length > 0 && (
+          <span className="k" style={{ alignSelf: 'center' }}>
+            {chains.filter(c => c.is_active).length} active of {chains.length}
+          </span>
+        )}
+      </div>
+
+      {/* Retire lives in the table below, with no save button beside it. */}
+      {!editing && <RowFeedback error={error} saved={saved} />}
+
+      {editing && (
+        <>
+          <div className="divider" />
+          <Field label="Name this chain"
+                 hint="What you will pick on a policy — “Plant staff, via site HR”">
+            <input value={s(editing.name)} maxLength={MAX_CHAIN_NAME}
+                   onChange={e => set('name', e.target.value)} />
+          </Field>
+
+          {/* ── the track ────────────────────────────────────────────────── */}
+          <div className="k" style={{ margin: '10px 0 6px' }}>
+            The order an appraisal travels. Drag to reorder, or use the arrows.
+          </div>
+          <div className="chaintrack">
+            <div className="rung rung-end">
+              <span className="rung-no">·</span>
+              <span className="rung-name">
+                The employee rates themselves
+                <span className="pill p-grey">always first</span>
+              </span>
+            </div>
+
+            {!draft.length && (
+              <div className="rung rung-none">
+                <span className="rung-name k">
+                  No approvers yet. Add one below — without any, a submission
+                  would go straight to publishing.
+                </span>
+              </div>
+            )}
+
+            {draft.map((r, i) => (
+              <RungRow key={r} rung={r} idx={i} count={draft.length}
+                       cover={coverage?.[r]} onMove={move}
+                       onRemove={() => setRungs(draft.filter(x => x !== r))} />
+            ))}
+
+            <div className="rung rung-end">
+              <span className="rung-no">·</span>
+              <span className="rung-name">
+                HR settles the final rating and publishes
+                <span className="pill p-grey">always last</span>
+              </span>
+            </div>
+          </div>
+
+          {/* ── what is left to add ──────────────────────────────────────── */}
+          {unused.length > 0 && (
+            <>
+              <div className="k" style={{ margin: '12px 0 6px' }}>Add a rung</div>
+              <div className="btnrow wrap">
+                {unused.map(c => {
+                  const cov = coverage?.[c.stage]
+                  return (
+                    <button key={c.stage} className="btn ghost"
+                            title={c.hint}
+                            onClick={() => setRungs([...draft, c.stage])}>
+                      + {c.label}
+                      {cov && cov.of > 0 && (
+                        <span className="k"> · {cov.have} of {cov.of} have one</span>
+                      )}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
+
+          <Field label="Notes" hint="Why this chain exists, for whoever reads it next">
+            <input value={s(editing.notes)} onChange={e => set('notes', e.target.value)} />
+          </Field>
+
+          {!editing.id && (
+            <label className="chk" style={{ display: 'flex', gap: 8, alignItems: 'flex-start',
+                                            margin: '8px 0', lineHeight: 1.6 }}>
+              <input type="checkbox" checked={group}
+                     onChange={e => setGroup(e.target.checked)} />
+              <span>
+                Available to <b>every company</b> in the group, not just this one.
+                <span className="k"> Leave this off for a chain only one company runs.</span>
+              </span>
+            </label>
+          )}
+
+          {warnings.map((w, i) => <Note key={i} tone="warn">{w}</Note>)}
+
+          {/* The consequence of an edit, said where the edit happens. */}
+          {editing.id && usedBy(s(editing.id), policies as never).length > 0 && (
+            <Note tone="warn">
+              <b>{usedBy(s(editing.id), policies as never).join(', ')}</b>{' '}
+              {usedBy(s(editing.id), policies as never).length === 1 ? 'uses' : 'use'}{' '}
+              this chain. Appraisals already under way keep the chain they
+              started on — the shape is frozen when an employee submits — so
+              this applies to appraisals that start after you save.
+            </Note>
+          )}
+
+          <SaveRow busy={busy} error={error} saved={saved}
+                   label={editing.id ? 'Save chain' : 'Create chain'}
+                   disabled={!!fault || (!editing.id && !group && !companyId)}
+                   onSave={async () => {
+                     const okDone = await run(
+                       () => pmsAdmin('chain_upsert',
+                         { ...editing, company_id: group ? null : companyId }),
+                       editing.id ? 'Chain saved.' : 'Chain created.')
+                     if (okDone) { setEditing(null); setGroup(false) }
+                   }} />
+          {/* Why the button is off, rather than a disabled button and silence. */}
+          {fault && <Note tone="warn">{fault}</Note>}
+          <div className="k" style={{ marginTop: 6 }}>
+            Will run as: <b>{chainSummary(draft)}</b>
+          </div>
+        </>
+      )}
+
+      {chains.length > 0 && (
+        <>
+          <div className="divider" />
+          <div className="tblwrap">
+            <table>
+              <thead>
+                <tr><th>Chain</th><th>Runs as</th><th>Used by</th>
+                    <th>Scope</th><th>Status</th><th /></tr>
+              </thead>
+              <tbody>
+                {chains.map(c => {
+                  const users = usedBy(s(c.id), policies as never)
+                  return (
+                    <tr key={s(c.id)}>
+                      <td>
+                        {s(c.name)}
+                        {!!s(c.notes) && <div className="k">{s(c.notes)}</div>}
+                      </td>
+                      <td className="k">{chainSummary(c.rungs as string[] | null)}</td>
+                      <td className="k">
+                        {users.length ? users.join(', ') : 'no policy yet'}
+                      </td>
+                      <td className="k">{c.company_id ? 'this company' : 'whole group'}</td>
+                      <td>
+                        <span className={`pill ${c.is_active ? 'p-green' : 'p-grey'}`}>
+                          {c.is_active ? 'active' : 'retired'}
+                        </span>
+                      </td>
+                      <td>
+                        <div className="btnrow">
+                          <button className="btn ghost"
+                                  onClick={() => { reset(); setEditing({
+                                    ...c,
+                                    // The two fixed ends are drawn separately, so
+                                    // the editable list is the approvers only.
+                                    rungs: ((c.rungs as string[] | null) ?? [])
+                                      .filter(r => r !== 'EMPLOYEE' && r !== 'HR'),
+                                  }) }}>Edit</button>
+                          {/* Retired, never deleted: a policy may point at this
+                              row and every appraisal that ran it recorded the
+                              shape. The route refuses while it is in use. */}
+                          <button className="btn ghost"
+                                  title={users.length && c.is_active
+                                    ? `${users.join(', ')} still use this chain`
+                                    : undefined}
+                                  onClick={() => run(
+                                    () => pmsAdmin('chain_set_active',
+                                      { id: c.id, is_active: !c.is_active }),
+                                    c.is_active ? 'Chain retired.' : 'Chain back in use.')}>
+                            {c.is_active ? 'Retire' : 'Bring back'}
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  )
+                })}
+              </tbody>
+            </table>
+          </div>
+        </>
+      )}
     </Card>
   )
 }
@@ -749,10 +1505,26 @@ function FinalisePanel({ periods, canAttribute, reload }: {
 }
 
 // ══ the tab itself ════════════════════════════════════════════════════════
+// How each section is presented in the settings rail — icon, group and one
+// line on what it controls. Presentation only: which section is open is still
+// the `section` state below, set by the same setSection call.
+type SectionKey = 'policy' | 'kra' | 'chains' | 'scale' | 'courses' | 'authority' | 'cycle' | 'finalise'
+const SECTION_META: Record<SectionKey, { icon: (p: IconProps) => React.ReactNode; group: string; blurb: string }> = {
+  policy:    { icon: IconPolicies, group: 'Rules',      blurb: 'Frequency, KRA limits, one-to-ones and who finalises' },
+  chains:    { icon: IconOrgChart, group: 'Rules',      blurb: 'Who reviews a set, in which order' },
+  scale:     { icon: IconSliders,  group: 'Rules',      blurb: 'Rating bands, labels and what each one asks for' },
+  authority: { icon: IconCompliance, group: 'Rules',      blurb: 'What the HR Head may settle, override or do directly' },
+  kra:       { icon: IconTemplates, group: 'Libraries', blurb: 'Ready-made KRAs employees and managers can pick' },
+  courses:   { icon: IconLetters,  group: 'Libraries',  blurb: 'Courses a rater can recommend' },
+  cycle:     { icon: IconCalendar, group: 'Operations', blurb: 'Open, extend or close a period' },
+  finalise:  { icon: IconLock,     group: 'Operations', blurb: 'Record a final rating by hand, with a reason' },
+}
+const SECTION_GROUPS = ['Rules', 'Libraries', 'Operations']
+
 export default function AdminEditor() {
   const [snap, setSnap] = useState<PmsAdminSnapshot | null>(null)
   const [err, setErr] = useState<string | null>(null)
-  const [section, setSection] = useState<'policy' | 'kra' | 'scale' | 'cycle' | 'finalise'>('policy')
+  const [section, setSection] = useState<'policy' | 'kra' | 'chains' | 'scale' | 'courses' | 'authority' | 'cycle' | 'finalise'>('policy')
 
   const reload = useCallback(async () => {
     const r = await loadPmsAdmin()
@@ -770,30 +1542,71 @@ export default function AdminEditor() {
   }, [snap])
 
   if (err) return <div className="card"><Note tone="bad">{err}</Note></div>
-  if (!snap) return <div className="card"><div className="k">Loading…</div></div>
+  if (!snap) return <div className="pms-skel" aria-busy="true" aria-label="Loading"><i /><i /><i /></div>
 
   const TABS = [
     ['policy',   'Policy rules'],
     ['kra',      'KRA library'],
+    ['chains',   'Approval chains'],
     ['scale',    'Rating scale'],
+    ['courses',  'Training catalogue'],
+    ['authority','HR Head authority'],
     ['cycle',    'Cycle control'],
     ['finalise', 'Finalise'],
   ] as const
 
-  return (
-    <>
-      <div className="tabs">
-        {TABS.map(([k, label]) => (
-          <button key={k} className={section === k ? 'on' : ''} onClick={() => setSection(k)}>{label}</button>
-        ))}
-      </div>
+  // The number beside each section in the rail — how many rows it holds, from
+  // the snapshot already loaded. Nothing is fetched for it.
+  const countOf: Partial<Record<SectionKey, number>> = {
+    policy: snap.policies.length, kra: snap.kras.length, chains: (snap.chains ?? []).length,
+    scale: snap.scale.length, courses: (snap.catalogue ?? []).length, cycle: snap.periods.length,
+  }
 
+  return (
+    <div className="pms-settings">
+      {/* A settings layout: the eight sections down the left, grouped by what
+          they control; the open one on the right under its own header. Each
+          item is still one button calling setSection, as the strip was. */}
+      <nav className="pms-settings-rail" aria-label="Setup sections">
+        {SECTION_GROUPS.map(g => (
+          <div key={g} className="pms-settings-group">
+            <div className="pms-settings-glabel">{g}</div>
+            {TABS.filter(([k]) => SECTION_META[k].group === g).map(([k, label]) => {
+              const Ico = SECTION_META[k].icon
+              const n = countOf[k]
+              return (
+                <button key={k} type="button" className={section === k ? 'on' : ''}
+                        aria-current={section === k ? 'page' : undefined}
+                        onClick={() => setSection(k)}>
+                  <span className="pms-settings-ico" aria-hidden="true"><Ico size={16} /></span>
+                  <span className="pms-settings-txt">
+                    <span className="pms-settings-name">{label}</span>
+                    <span className="pms-settings-blurb">{SECTION_META[k].blurb}</span>
+                  </span>
+                  {n != null && <span className="pms-settings-n">{n}</span>}
+                </button>
+              )
+            })}
+          </div>
+        ))}
+      </nav>
+
+      <div className="pms-settings-body">
       {section === 'policy'   && <PolicyPanel policies={snap.policies} companies={snap.companies}
-                                              people={snap.people ?? []} reload={reload} />}
+                                              people={snap.people ?? []}
+                                              chains={snap.chains ?? []} reload={reload} />}
       {section === 'kra'      && <KraPanel kras={snap.kras} companyId={companyId} reload={reload} />}
+      {section === 'chains'   && <ChainPanel chains={snap.chains ?? []} policies={snap.policies}
+                                             coverage={snap.coverage ?? null}
+                                             companyId={companyId} reload={reload} />}
       {section === 'scale'    && <ScalePanel scale={snap.scale} companyId={companyId} reload={reload} />}
+      {section === 'courses'  && <CataloguePanel catalogue={snap.catalogue ?? []}
+                                                 companyId={companyId} reload={reload} />}
+      {section === 'authority' && <AuthorityPanel policies={snap.policies}
+                                                  companies={snap.companies} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
       {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
-    </>
+      </div>
+    </div>
   )
 }

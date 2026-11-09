@@ -110,8 +110,18 @@ test('the rating field appears only where approval finalises', () => {
   // AND IT MUST ASK ABOUT THE HOLDERS, not just the policy's chain. On a
   // collapsed line — 190 of 395 enrolments — RM L2 is unfilled, so the RM L1's
   // approval finalises.
-  assert.match(PERF, /approvalFinalises\(\s*\n?\s*\(policy\?\.approval_chain as Chain \| undefined\) \?\? 'SELF_RM1_RM2_HOD',\s*\n?\s*rung, held\)/,
-    'whether approval finalises is computed without the rung holders')
+  //
+  // 218: the chain now comes from effectiveChain rather than approval_chain
+  // directly, so a company on a composed chain gets its own last rung asked
+  // for the rating. Reading approval_chain here would put "Rate, confirm and
+  // finalise" on whichever rung the PRESET ends at — a manager asked to
+  // settle a rating they do not settle, and the real last rung refused for
+  // want of one.
+  assert.match(PERF, /approvalFinalises\(\s*\n?\s*effectiveChain\(policy\), rung, held\)/,
+    'whether approval finalises is computed without the rung holders, or '
+    + 'from the preset rather than the chain actually in force')
+  assert.ok(!/approvalFinalises\([^)]*approval_chain/.test(PERF),
+    'approval_chain is read directly, so a composed chain is ignored here')
 })
 
 test('the reject button names where the set is going', () => {
@@ -198,8 +208,13 @@ test('the publish queue cannot miss a settled rating', () => {
   // The RULE is that the loader must not narrow in a way that can drop a
   // settled rating. Narrowing by nothing satisfies it; the tab filters what
   // it shows.
-  const q = PAGE.slice(PAGE.indexOf('const pub = await supabase'),
-                       PAGE.indexOf('const pub = await supabase') + 700)
+  // Anchored on the helper, not on a fixed window from a `const pub =`
+  // line: 211 moved the call behind askPub() so the select can be retried
+  // without its new columns, and a window from a vanished anchor silently
+  // sliced nothing at all.
+  const a = PAGE.indexOf('const askPub = (sel: string) => supabase')
+  assert.ok(a > 0, 'could not find the publish/summary loader')
+  const q = PAGE.slice(a, PAGE.indexOf('if (pub.error) {', a))
   assert.ok(q.length > 200, 'could not find the publish/summary loader')
   assert.ok(!/\.in\('chain_stage'/.test(q),
     'the loader filters on chain_stage, which excludes NULL-stage rows — the '
@@ -234,8 +249,14 @@ test('HR cannot change a rating or a KRA from the publish screen', () => {
   assert.ok(tab.length > 1000, 'could not isolate the publish workspace')
   assert.ok(!/type="number"/.test(tab),
     'the publish workspace offers a numeric input — HR must not set a rating')
-  assert.ok(!/final_rating|finalRating:\s/.test(tab.replace(/finalRating[\s)}\]]/g, '')),
-    'the workspace writes a final rating')
+  // THE COLUMN NAME, not the camelCase field. `finalRating:` now appears
+  // legitimately as an argument to publishFaults — the gate has to be TOLD
+  // the rating to judge whether it can go out, and reading a number is not
+  // writing one. final_rating is what a write would have to name, and the
+  // component never calls the database at all.
+  assert.ok(!/final_rating/.test(tab), 'the workspace writes a final rating')
+  assert.ok(!/\.update\(|\.insert\(|\.upsert\(/.test(tab),
+    'the publish workspace writes to the database directly')
   // No KRA editing either: that is the employee's set, locked long before.
   assert.ok(!/weightage|kra_title/i.test(tab), 'the workspace touches KRAs')
   // And no reject path — a rating that needs changing goes back through the

@@ -207,8 +207,15 @@ for label in ['PMS Configuration', 'Policy Builder', 'Fill Status Tracker',
     check(f'tab named as the mockup names it: {label}', label in ui)
 
 # The connector bug that struck through the stepper numerals.
-check('the stepper connector is trimmed to the gap between dots',
-      'calc(50% + 18px)' in decl and 'calc(-50% + 18px)' in decl)
+# Same property as smoke-pms.py, asserted on the pms.css stepper: the trim
+# must exceed the dot's radius so the line never runs under a numeral.
+_dot  = re.search(r'\.pms \.dot\b[^{]*\{[^}]*?width:\s*(\d+)px', decl, re.S)
+_trim = re.search(r'left:\s*calc\(50% \+ (\d+)px\)', decl)
+_ok   = bool(_dot and _trim) and int(_trim.group(1)) > int(_dot.group(1)) / 2
+check('the stepper connector is trimmed to the gap between dots', _ok,
+      f'dot {_dot.group(1) if _dot else "?"}px, radius '
+      f'{int(_dot.group(1))//2 if _dot else "?"}px, trim '
+      f'{_trim.group(1) if _trim else "?"}px')
 
 # The flex trap that took the page sideways at every width under 900px.
 check('the scoped root can shrink inside a flex column',

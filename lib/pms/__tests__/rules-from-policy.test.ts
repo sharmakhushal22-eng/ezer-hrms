@@ -33,8 +33,43 @@ function walk(dir: string): string[] {
   return out
 }
 
+/**
+ * COMMENTS ARE NOT CODE PATHS, AND THIS TEST KEPT FORGETTING THAT.
+ *
+ * The scans below look for `DEFAULT_RULES.<field>` in source text. A comment
+ * EXPLAINING the rule — "reading DEFAULT_RULES.minKpi here is the bug" — is
+ * the most natural thing to write next to the fix, and it tripped this test
+ * as though it were the bug it describes. That has now happened often enough
+ * in this repo to be worth solving once: blanking comments before scanning,
+ * rather than asking every author to avoid naming the thing.
+ *
+ * Replaced with spaces rather than deleted, so byte offsets survive and the
+ * line numbers in the failure message still point at the real line.
+ */
+function blankComments(src: string): string {
+  return src
+    .replace(/\/\*[\s\S]*?\*\//g, m => m.replace(/[^\n]/g, ' '))
+    .replace(/(^|[^:])\/\/[^\n]*/g, (m, lead) => lead + ' '.repeat(m.length - lead.length))
+}
+
 const FILES = walk('components').concat(walk('app')).concat(walk('lib'))
-  .map(f => ({ f, src: readFileSync(f, 'utf8') }))
+  .map(f => ({ f, src: blankComments(readFileSync(f, 'utf8')) }))
+
+test('blanking comments does not blank code', () => {
+  // A scrubber that eats too much turns this whole file into a test that
+  // passes because it can no longer see anything.
+  assert.equal(blankComments('const a = 1 // DEFAULT_RULES.minKra\n').trimEnd(),
+    'const a = 1')
+  assert.match(blankComments('/* DEFAULT_RULES.minKra */\nconst a = DEFAULT_RULES.minKra'),
+    /const a = DEFAULT_RULES\.minKra$/)
+  // A URL is not a comment, and `https://x` contains `//`.
+  assert.match(blankComments("const u = 'https://example.com/x'"), /https:\/\/example/)
+  // Line count must survive, or the reported line numbers mislead.
+  const many = '// a\n// b\nconst c = 1\n/* d\n e */\n'
+  assert.equal(blankComments(many).split('\n').length, many.split('\n').length)
+  // And the scan still finds a real offender.
+  assert.ok(FILES.length > 100)
+})
 
 test('there are files to check', () => {
   assert.ok(FILES.length > 100, `only found ${FILES.length} source files — wrong path?`)
@@ -80,7 +115,8 @@ test('DEFAULT_RULES is still the documented fallback, and still 4/10/100/5', () 
   // If the seed ever changes these, the fallback should follow — but
   // deliberately, not by surprise. Pinned so a casual edit is visible.
   assert.deepEqual(DEFAULT_RULES,
-    { minKra: 4, maxKra: 10, totalWeightage: 100, minWeightagePerKra: 5 })
+    { minKra: 4, maxKra: 10, totalWeightage: 100, minWeightagePerKra: 5,
+      minKpi: 1, maxKpi: 5 })
   // And it must still be USED as a default somewhere, or the fallback has
   // quietly disappeared and a period with no policy would render NaN.
   const usedAsDefault = FILES.some(({ src }) => /=\s*DEFAULT_RULES\b/.test(src))
@@ -92,19 +128,85 @@ test('the policy columns behind these rules all exist in the schema', () => {
   // would otherwise fail silently at runtime via `Number(undefined) || 4`,
   // which lands back on the constant and looks exactly like the bug this file
   // is about.
+  //
+  // A COLUMN CAN ARRIVE BY ALTER, NOT ONLY BY CREATE. This used to read only
+  // the newest file containing `CREATE TABLE IF NOT EXISTS pms_policies` —
+  // which is 066 — so a column added later by `ALTER TABLE pms_policies ADD
+  // COLUMN` was reported missing even though it is in the live schema. Every
+  // policy column since 196 arrived that way, including 221's KPI pair. The
+  // fix is to read the whole migration directory, which is also what the
+  // database does.
   const dir = 'supabase/migrations'
-  const create = readdirSync(dir)
+  const files = readdirSync(dir)
     .filter(f => /^\d+_.*\.sql$/.test(f))
-    .filter(f => readFileSync(`${dir}/${f}`, 'utf8')
-      .includes('CREATE TABLE IF NOT EXISTS pms_policies'))
     .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
-    .pop()
-  assert.ok(create, 'nothing creates pms_policies')
-  const sql = readFileSync(`${dir}/${create}`, 'utf8')
-  for (const col of ['min_kra_count', 'max_kra_count',
-                     'total_weightage', 'min_weightage_per_kra']) {
-    assert.ok(new RegExp(`\\b${col}\\b`).test(sql),
+  const creates = files.filter(f =>
+    readFileSync(`${dir}/${f}`, 'utf8').includes('CREATE TABLE IF NOT EXISTS pms_policies'))
+  assert.ok(creates.length, 'nothing creates pms_policies')
+
+  // Only the statements that touch pms_policies, so a column name that
+  // happens to appear in an unrelated table cannot vouch for this one.
+  const schema = files.map(f => readFileSync(`${dir}/${f}`, 'utf8'))
+    .flatMap(sql => [
+      ...sql.matchAll(/CREATE TABLE IF NOT EXISTS pms_policies\b[\s\S]*?;/g),
+      ...sql.matchAll(/ALTER TABLE pms_policies\b[\s\S]*?;/g),
+    ].map(m => m[0]))
+    .join('\n')
+  assert.ok(schema.length > 500, 'no pms_policies statements found — wrong path?')
+
+  const COLS: Record<keyof typeof DEFAULT_RULES, string> = {
+    minKra: 'min_kra_count', maxKra: 'max_kra_count',
+    totalWeightage: 'total_weightage', minWeightagePerKra: 'min_weightage_per_kra',
+    minKpi: 'min_kpi_per_kra', maxKpi: 'max_kpi_per_kra',
+  }
+  // Every RULE needs a column. Driven off DEFAULT_RULES rather than a literal
+  // list so adding a rule without a column fails here instead of at runtime.
+  for (const field of Object.keys(DEFAULT_RULES)) {
+    const col = COLS[field as keyof typeof COLS]
+    assert.ok(col, `DEFAULT_RULES.${field} has no column mapped in this test`)
+    assert.ok(new RegExp(`\\b${col}\\b`).test(schema),
       `pms_policies has no ${col} — the rules mapping is broken`)
+  }
+})
+
+test('every rule reaches every read path, and the write path allows it', () => {
+  // FOUR SELECTS AND A WRITE ALLOWLIST, and a rule is inert if it misses any
+  // of them. 221 had to touch all five; the dashboard config tab, the ESS
+  // API, the employee screen and the cycle header each build their own
+  // `Rules` from their own select, and app/api/pms/admin/route.ts refuses to
+  // write a column it does not name.
+  //
+  // This is the test that was missing when "changing configuration from setup
+  // and control is not getting in effect" was reported: every individual
+  // mapping looked right, and one of them did not exist.
+  const READERS = [
+    'app/dashboard/pms/page.tsx',
+    'app/api/ess/pms/route.ts',
+    'components/ess/Performance.tsx',
+    'components/pms/CycleHeader.tsx',
+  ]
+  const KPI_COLS = ['min_kpi_per_kra', 'max_kpi_per_kra']
+  for (const f of READERS) {
+    const src = readFileSync(f, 'utf8')
+    for (const col of KPI_COLS) {
+      assert.ok(src.includes(col),
+        `${f} never selects ${col}, so its Rules will fall back to the `
+        + 'default and this screen will ignore the policy')
+    }
+  }
+  for (const key of ['minKpi', 'maxKpi']) {
+    for (const f of READERS) {
+      assert.ok(readFileSync(f, 'utf8').includes(key),
+        `${f} selects the column but never maps it to ${key}`)
+    }
+  }
+  const route = readFileSync('app/api/pms/admin/route.ts', 'utf8')
+  const allow = route.slice(route.indexOf('const POLICY_COLS'),
+                            route.indexOf('] as const', route.indexOf('const POLICY_COLS')))
+  for (const col of KPI_COLS) {
+    assert.ok(allow.includes(`'${col}'`),
+      `POLICY_COLS does not allow ${col}, so the admin screen will save it `
+      + 'into nothing and report success')
   }
 })
 

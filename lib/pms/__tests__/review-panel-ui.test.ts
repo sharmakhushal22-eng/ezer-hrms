@@ -198,13 +198,25 @@ test('the three totals are not shown twice on one screen', () => {
 
 // ── navigation ───────────────────────────────────────────────────────────
 
-test('there is one jump chip per KRA, coloured by state', () => {
+test('there is one jump chip per KRA, coloured by its measures', () => {
+  // STILL ONE PER KRA — a chip per measure would be eighteen chips on a
+  // real set, which is a progress bar nobody can read. What changed in 222
+  // is what colours it: a KRA is "done" when every measure under it is
+  // rated and explained, not when the KRA has a number against it.
   const n = PANEL.slice(PANEL.indexOf('className="ksteps"'),
-                        PANEL.indexOf('className="ksteps"') + 1200)
-  assert.match(n, /cmp\.lines\.map/, 'the chips are not one per KRA')
+                        PANEL.indexOf('className="ksteps"') + 1600)
+  assert.match(n, /\(lines \?\? \[\]\)\.map/, 'the chips are not one per KRA')
+  assert.match(n, /const own = cmp\.lines\.filter/,
+    'the chip state is not derived from the KRA\'s own measures')
+  assert.match(n, /rated === own\.length/,
+    'a KRA reads as done before all its measures are rated')
   assert.match(n, /kstep\$\{done \? ' done' : needs \? ' needs' : ''\}/,
     'the chips do not show which KRAs still need work')
-  assert.match(n, /onClick=\{\(\) => jump\(l\.goalId\)\}/, 'the chips do not navigate')
+  // 222: the chip IS the stepper's control. It used to scroll the flat card
+  // list; a rater sees one KRA at a time now, so it sets the step.
+  assert.match(n, /onClick=\{\(\) => setStepAt\(i\)\}/, 'the chips do not navigate')
+  assert.match(n, /aria-current=\{i === stepAt \? 'step' : undefined\}/,
+    'nothing says which chip is the current step')
 })
 
 test('jumping to a folded KRA unfolds it first', () => {

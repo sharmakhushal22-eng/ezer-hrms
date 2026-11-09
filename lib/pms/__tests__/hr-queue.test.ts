@@ -304,8 +304,11 @@ test('a decision writes the decision and never the proposal', () => {
   // A rater's words stay a rater's words. HR's agreement is its own column,
   // which is the reason 208 gave these rows a lifecycle instead of filing
   // them as awards.
+  // Sliced to the NEXT declaration, not to saveFeedback: 211 inserted
+  // settleFinal between the two, and that function legitimately calls
+  // load() — so the wider slice made this read as a failure.
   const fn = PAGE.slice(PAGE.indexOf('const decideAsk = useCallback'),
-                        PAGE.indexOf('const saveFeedback = useCallback'))
+                        PAGE.indexOf('const settleFinal = useCallback'))
   assert.ok(fn.length > 100, 'decideAsk is gone')
   assert.match(fn, /\.update\(\{/)
   for (const col of ['training_name', 'details', 'category', 'recommended_by']) {
@@ -323,8 +326,11 @@ test('accepting a proposal does not award anything', () => {
   // and publishing releases. If acceptance created a benefit row, one click
   // on a rater's proposal would put an award in front of an employee, and
   // there would be no way to accept the intent while wording it differently.
+  // Sliced to the NEXT declaration, not to saveFeedback: 211 inserted
+  // settleFinal between the two, and that function legitimately calls
+  // load() — so the wider slice made this read as a failure.
   const fn = PAGE.slice(PAGE.indexOf('const decideAsk = useCallback'),
-                        PAGE.indexOf('const saveFeedback = useCallback'))
+                        PAGE.indexOf('const settleFinal = useCallback'))
   assert.ok(!/pms_additional_benefits/.test(fn),
     'accepting a proposal writes an award')
   assert.ok(!/visible_to_employee/.test(fn),
@@ -351,8 +357,11 @@ test('a decision refetches, without closing the card HR is working in', () => {
   // a full reload UNMOUNTS the publish workspace — found by accepting a
   // proposal in the browser and landing back on the list with the card shut,
   // which would happen to HR after each of three decisions.
+  // Sliced to the NEXT declaration, not to saveFeedback: 211 inserted
+  // settleFinal between the two, and that function legitimately calls
+  // load() — so the wider slice made this read as a failure.
   const fn = PAGE.slice(PAGE.indexOf('const decideAsk = useCallback'),
-                        PAGE.indexOf('const saveFeedback = useCallback'))
+                        PAGE.indexOf('const settleFinal = useCallback'))
   assert.ok(fn.length > 100, 'decideAsk is gone')
   assert.match(fn, /await fetchChainAsks\(/, 'nothing refreshes after a decision')
   assert.ok(!/\n\s*load\(\)/.test(fn),
@@ -399,14 +408,13 @@ test('every column toConfig reads is named in the policy SELECT', () => {
   // column missing from the SELECT: the word was present, the fix was not.
   const i = PAGE.indexOf("let polQ = supabase.from('pms_policies')")
   assert.ok(i > 0, 'the policy query moved')
-  const open = PAGE.indexOf('.select(', i) + '.select('.length
-  let depth = 1, k = open
-  while (k < PAGE.length && depth > 0) {
-    if (PAGE[k] === '(') depth++
-    else if (PAGE[k] === ')') depth--
-    k++
-  }
-  const sel = PAGE.slice(open, k - 1)
+  // The list is a named constant now (211 hoisted it so the retry can drop
+  // one column from it), so the constant is what has to be read. Resolving
+  // the identifier rather than the call site is the difference between
+  // testing the columns and testing the variable name.
+  const a = PAGE.indexOf('const POLICY_SELECT =')
+  assert.ok(a > 0, 'the policy select list is no longer a named constant')
+  const sel = PAGE.slice(a, PAGE.indexOf('\n\n', a))
   assert.ok(sel.includes('policy_name') && !sel.includes('polQ.eq'),
     'the select list was not isolated, so this test proves nothing')
 

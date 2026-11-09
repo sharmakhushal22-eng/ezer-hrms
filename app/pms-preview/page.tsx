@@ -25,6 +25,7 @@ import { TeamTab, ApproveTab, RateTab, PipRequestTab, TeamAnalyticsTab,
 import { STAGES } from '@/lib/pms/cycle'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Kra } from '@/lib/pms/kra'
+import { shareOf } from '@/lib/pms/kpi'
 import { type Line } from '@/lib/pms/scoring'
 import { type Log } from '@/lib/pms/oneToOne'
 import Channel from '@/components/broadcast/Channel'
@@ -36,12 +37,37 @@ import '@/components/pms/pms.css'
 const TODAY = '2026-09-04'
 
 const KRAS: Kra[] = [
-  { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25 },
-  { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20 },
-  { seq_no: 3, kra_title: 'Query resolution', kpi_metric: 'Turnaround', target_value: 'under 2 days', category: 'CUSTOMER', weightage: 20 },
-  { seq_no: 4, kra_title: 'Report automation', kpi_metric: 'Reports automated', target_value: '4 of 4', category: 'BUSINESS', weightage: 20 },
+  // 220: a KRA is measured by its KPIs, each rated on its own.
+  // 221: how many it may hold is policy, default 1 to 5.
+  // 222: a KPI has NO weightage — it carries an equal share of its KRA's.
+  //
+  // The first carries FIVE — the shipped maximum — so the harness shows the
+  // state nothing else does: the + Add KPI button disabled, with its reason
+  // in the title and "5 of 5" beside it. The last carries one, which is how
+  // every KRA written before 220 was backfilled and which shows the × button
+  // disabled at the floor. Both ends of the range are therefore on screen.
+  { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25,
+    kpis: [
+      { seq_no: 1, kpi_metric: 'Error rate per run', target_value: 'under 0.2%' },
+      { seq_no: 2, kpi_metric: 'Reruns caused by input error', target_value: 'zero' },
+      { seq_no: 3, kpi_metric: 'Payslips issued on the 1st', target_value: '100%' },
+      { seq_no: 4, kpi_metric: 'Arrears cleared within the cycle', target_value: '100%' },
+      { seq_no: 5, kpi_metric: 'Full-and-final within 45 days', target_value: '100%' },
+    ] },
+  { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20,
+    kpis: [
+      { seq_no: 1, kpi_metric: 'Filings on time', target_value: '100%' },
+      { seq_no: 2, kpi_metric: 'Challans reconciled same month', target_value: '100%' },
+    ] },
+  { seq_no: 3, kra_title: 'Query resolution', kpi_metric: 'Turnaround', target_value: 'under 2 days', category: 'CUSTOMER', weightage: 20,
+    kpis: [{ seq_no: 1, kpi_metric: 'Turnaround', target_value: 'under 2 days' }] },
+  { seq_no: 4, kra_title: 'Report automation', kpi_metric: 'Reports automated', target_value: '4 of 4', category: 'BUSINESS', weightage: 20,
+    kpis: [{ seq_no: 1, kpi_metric: 'Reports automated', target_value: '4 of 4' }] },
   // Deliberately below the per-KRA minimum, so the thin-row treatment shows.
-  { seq_no: 5, kra_title: 'Audit readiness', kpi_metric: 'Observations', target_value: 'zero', category: 'COMPLIANCE', weightage: 3 },
+  // There is no longer an unbalanced state to show alongside it: since 222 a
+  // KRA's KPIs always total it exactly, because they each take an equal cut.
+  { seq_no: 5, kra_title: 'Audit readiness', kpi_metric: 'Observations', target_value: 'zero', category: 'COMPLIANCE', weightage: 3,
+    kpis: [{ seq_no: 1, kpi_metric: 'Observations', target_value: 'zero' }] },
 ]
 
 const LINES: Line[] = [
@@ -150,12 +176,32 @@ const CASES: [string, React.ReactNode][] = [
       actionLabel="Your self rating" actionNote="Rate every KRA, then submit — it locks" />],
   ['emp-kras', <KraTab key="ek" kras={KRAS} onChange={() => {}} locked={false}
       lockGate={{ open: false, because: 'Neither side has acknowledged this yet.' }}
+      // 220: self rating happens per KPI, inside each measure's row. Passed
+      // here so the harness actually shows that path — without onSelfChange
+      // the whole assessment block is hidden, and it was invisible before.
+      // Two of the eight measures left unrated, so the rated and unrated
+      // treatments are both on screen.
+      self={Object.fromEntries(KRAS.flatMap(k => (k.kpis ?? []).map(x => [
+        `${k.seq_no}.${x.seq_no}`,
+        { achievement: x.seq_no === 1 ? '0.11% across 3 runs' : '',
+          rating: (k.seq_no + x.seq_no) % 4 === 0 ? null : 4,
+          comment: x.seq_no === 1 ? 'Pre-run validation checklist introduced' : '' },
+      ])))}
+      onSelfChange={() => {}}
       onSubmit={() => {}} />],
   ['emp-o2o',  <OneToOneTab key="eo" logs={LOGS} managerName="Priya Nair (RM L1)" />],
   ['emp-self', <SelfRatingTab key="es" submitted={false} onSubmit={() => {}} onChange={() => {}}
-      rows={LINES.map(l => ({ goalId: l.goalId, title: l.title, weightage: l.weightage,
-        category: l.category, achievement: '0.11% across 3 runs', rating: l.self ?? null,
-        comment: 'Pre-run validation checklist introduced' }))} />],
+      // 220: one row per KPI. Built from the KRA fixtures so the harness
+      // shows the real shape — a KRA with three measures produces three rows.
+      rows={KRAS.flatMap(k => (k.kpis ?? []).map(x => ({
+        goalId: String(k.seq_no), kpiId: `${k.seq_no}.${x.seq_no}`,
+        title: `${k.kra_title} · ${x.kpi_metric}`,
+        // 222: a KPI has no weightage — it carries an equal share of
+        // its KRA's, which is what the row shows.
+        weightage: shareOf(k.weightage, (k.kpis ?? []).length), category: k.category,
+        achievement: '0.11% across 3 runs',
+        rating: LINES.find(l => l.goalId === String(k.seq_no))?.self ?? null,
+        comment: 'Pre-run validation checklist introduced' })))} />],
   ['emp-result', <ResultTab key="er" published lines={LINES} finalRating={4}
       finalisedBy="Anil Kapoor (HOD)" finalisedOn="2026-08-30" deptAverage={3.24}
       appreciation="Took the payroll checklist from an idea to something the whole department now runs."
@@ -241,16 +287,39 @@ function KraDetailReviewPreview() {
   const [overall, setOverall] = useState('')
   return (
     <KraDetail member={TEAM[0]} myRung="RM_L1" finalises
+      /* 222: THE CASE THE OLD PANEL COULD NOT EXPRESS. The first KRA carries
+         THREE measures, which the goal-keyed version collapsed to one — and
+         the save silently wrote nothing for. Each measure carries an equal
+         share of its KRA: 60/3 = 20 and 40/2 = 20. One is left unrated so
+         the review step has something to complain about. */
       lines={[
         { goalId: 'g1', seqNo: 1, title: 'Close the month-end books within three working days',
-          kpi: 'Days to signed-off trial balance', target: '<=3 working days',
           category: 'BUSINESS', weightage: 60, status: 'LOCKED', source: 'CARRIED_FORWARD',
-          achievement: 'Closed in 2.6 days on average across the quarter.',
-          selfRating: 4, selfComment: 'Held the commitment through the ERP migration.' },
+          kpis: [
+            { kpiId: 'k1', seqNo: 1, metric: 'Days to signed-off trial balance',
+              target: '<=3 working days', share: 20,
+              achievement: 'Closed in 2.6 days on average across the quarter.',
+              selfRating: 4, selfComment: 'Held the commitment through the ERP migration.' },
+            { kpiId: 'k2', seqNo: 2, metric: 'Inter-company eliminations cleared',
+              target: '100% before day 3', share: 20,
+              achievement: 'All twelve entities cleared on day two.',
+              selfRating: 5, selfComment: 'No carry-over into the next period.' },
+            { kpiId: 'k3', seqNo: 3, metric: 'Late journal entries after close',
+              target: 'zero', share: 20,
+              achievement: 'Two late entries in October.',
+              selfRating: 3, selfComment: 'Both were the migration cutover.' },
+          ] },
         { goalId: 'g2', seqNo: 2, title: 'Reconciliation automation, phase two',
-          kpi: 'Breaks closed within SLA', target: '>=98%',
           category: 'PROCESS', weightage: 40, status: 'LOCKED', source: 'MANUAL',
-          achievement: '97.2% across all ledgers.', selfRating: 3, selfComment: 'Short of target.' },
+          kpis: [
+            { kpiId: 'k4', seqNo: 1, metric: 'Breaks closed within SLA',
+              target: '>=98%', share: 20,
+              achievement: '97.2% across all ledgers.',
+              selfRating: 3, selfComment: 'Short of target.' },
+            { kpiId: 'k5', seqNo: 2, metric: 'Ledgers migrated to the new engine',
+              target: '8 of 8', share: 20,
+              achievement: null, selfRating: null, selfComment: null },
+          ] },
       ]}
       rate={rate}
       onRate={(gid, patch) => setRate(p => {

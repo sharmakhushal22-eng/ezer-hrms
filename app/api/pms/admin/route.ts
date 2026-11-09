@@ -29,6 +29,9 @@ import { NextRequest, NextResponse } from 'next/server'
 import { rmsServiceClient as sb, grantForRequest, actorFromRequest } from '@/lib/rms/server'
 import { companyFilter } from '@/lib/rms/resolve'
 import { canManage } from '@/lib/rms/resolve'
+import { isHrRole, pmsRoleOf } from '@/lib/pms/postFinal'
+import { authorityOf, authorityFromRow } from '@/lib/pms/authority'
+import { chainFault, normaliseRungs, usedBy, RUNG_CHOICES } from '@/lib/pms/chainBuilder'
 
 export const dynamic = 'force-dynamic'
 
@@ -54,6 +57,13 @@ const POLICY_COLS = [
   // — which is the right default for a table that decides how everybody is
   // rated, but it does mean the list has to be kept up.
   'carry_forward_kras',
+  // 211 and 217. What the HR Head may do, which until now was spread
+  // between two tabs and four files — see lib/pms/authority.ts. Listed
+  // here because the same rule applies: a policy column is inert until a
+  // caller is allowed to write it.
+  // post_final_owner and publish_scope are already listed below.
+  'hr_head_final_rating', 'hr_head_can_override', 'hr_head_can_direct',
+  'rating_upload_by',
   // 205. Same reason again: WHO the HR Head is, so the HOD's published-results
   // banner can name a person instead of saying "HR". Not a permission —
   // post_final_owner and §2's matrix still decide who may act.
@@ -65,6 +75,16 @@ const POLICY_COLS = [
   'post_final_owner',
   // 203. Inert until named here, same as every column above it.
   'publish_scope',
+  // 218. WHICH COMPOSED CHAIN THIS POLICY USES. Sits alongside approval_chain
+  // rather than replacing it: null here means fall back to the three presets,
+  // so a policy nobody has touched is appraised exactly as it was. Inert until
+  // named here, same as every column above it.
+  'chain_id',
+  // 221. HOW MANY KPIs ONE KRA MAY HOLD, default 1 to 5. The same kind of rule
+  // as min_kra_count/max_kra_count four lines up, and inert until named here.
+  // The pair CHECK pms_policies_kpi_range refuses min > max, so a bad pair is
+  // rejected by the database rather than saved and discovered later.
+  'min_kpi_per_kra', 'max_kpi_per_kra',
 ] as const
 
 /** A period's own windows, and its status.
@@ -93,6 +113,28 @@ const KRA_COLS = [
   'suggested_target', 'category', 'suggested_weightage', 'is_active',
 ] as const
 
+/**
+ * THE COURSE CATALOGUE (215). company_id is NOT here: a row either belongs
+ * to one company or to the whole group, and which it is gets decided on
+ * insert from the grant, exactly as a KRA does — not patched later by
+ * whatever the browser happened to send.
+ */
+const CATALOGUE_COLS = [
+  'course_name', 'provider', 'skill', 'category', 'level', 'url',
+  'duration_hours', 'notes', 'is_active',
+] as const
+
+/**
+ * A COMPOSED CHAIN (218). Only three fields are a caller's to set.
+ *
+ * `rungs` is NOT here: it never comes through pick() at all. It is rebuilt by
+ * normaliseRungs from what the browser sent, so what lands in the column is
+ * always the two fixed ends plus deduplicated, upper-cased, whitelisted
+ * approvers — never the array as posted. A pass-through would let a caller
+ * store a rung the builder cannot draw and the engine cannot resolve.
+ */
+const CHAIN_COLS = ['name', 'notes', 'is_active'] as const
+
 const SCALE_COLS = [
   'policy_id', 'rating_value', 'rating_code', 'rating_label',
   'score_from', 'score_to', 'min_comment_chars',
@@ -109,10 +151,118 @@ function pick(body: Record<string, unknown>, cols: readonly string[]) {
   return out
 }
 
-async function gate(req: NextRequest) {
+/**
+ * ACTIONS HR MAY TAKE WITHOUT MANAGING THE MODULE.
+ *
+ * Everything else behind this route is admin CONFIGURATION — the policy, the
+ * KRA library, the rating scale, generating and opening periods — and HR does
+ * not configure the module.
+ *
+ * The bulk rating upload is not configuration. It is HR's own job: §2 grants
+ * bulk_upload_ratings to HR Manager, HR Head and Admin, and to nobody else.
+ * It shared this route only because the route happened to be where the RPC
+ * was called from, and so inherited a gate meant for the editor — which left
+ * HR able to open Final Rating Upload, parse a file and build a validated
+ * batch, only to be refused at the commit.
+ */
+const HR_ACTIONS = new Set(['upload_commit'])
+
+/**
+ * WHY THE TEST IS pmsRoleOf AND NOT canSeeScreen('pms.upload').
+ *
+ * The screen key looks like the natural answer and is the wrong one: it is
+ * held by L1_MANAGER, L2_MANAGER and HOD as well, which is exactly how
+ * Publish Results became reachable by every line manager when it borrowed
+ * that key. Gating a bulk override on it would let any line manager rewrite
+ * final ratings for the whole period.
+ *
+ * pmsRoleOf is the reading the publish path already uses, so the two cannot
+ * drift into disagreeing about who counts as HR, and it maps an unknown role
+ * to EMPLOYEE rather than to anything privileged.
+ */
+/**
+ * 217: WHO MAY COMMIT A RATING UPLOAD IS A POLICY QUESTION NOW.
+ *
+ * Read per period, because the policy is per company and an HR Head spans
+ * three of them. Unreadable, or a period this request does not name, falls
+ * back to the behaviour before 217 — a permissions lookup that fails shut
+ * would close the route on a database hiccup, and the people it closes it
+ * on cannot fix it.
+ */
+async function uploadAllowed(grant: Awaited<ReturnType<typeof grantForRequest>>,
+                             periodId: string | null): Promise<boolean> {
+  const role = pmsRoleOf(grant.roles, grant.isSuperAdmin)
+  if (!periodId) return isHrRole(role)
+  const r = await sb.from('pms_periods')
+    .select('pms_policies!inner(hr_head_final_rating, hr_head_can_override,'
+          + ' hr_head_can_direct, rating_upload_by)')
+    .eq('id', periodId).limit(1).maybeSingle()
+  if (r.error || !r.data) return isHrRole(role)
+  const pol = (r.data as unknown as { pms_policies?: Record<string, unknown> }).pms_policies
+  return authorityOf(role, authorityFromRow(pol)).upload
+}
+
+/**
+ * HOW MANY EMPLOYEES HAVE SOMEBODY AT EACH RUNG (218).
+ *
+ * The chain builder shows this against each choice, because a rung nobody
+ * occupies is skipped rather than refused — so picking one blind is how
+ * somebody builds a chain that silently does less than it looks like it does.
+ * Measured 2026-11-05, 398 active employees: hod_id 398, l1_manager_id 395,
+ * site_hr_id 395, l2_manager_id 261 — deliberately absent where L1 and L2 are
+ * the same person — and regional_head_id 0.
+ *
+ * COUNTS, NOT ROWS. `head: true` with an exact count asks Postgres for the
+ * number and transfers no rows, so this is six cheap reads rather than 398
+ * employees' relationship columns crossing the wire to be counted in JS.
+ *
+ * NON-FATAL, and chainWarnings treats an absent count as "say nothing" rather
+ * than as zero — inventing "nobody has one" out of a failed read would raise a
+ * false alarm about every rung at once.
+ */
+async function rungCoverage(): Promise<Record<string, { have: number; of: number }> | null> {
+  const live = () => sb.from('employees')
+    .select('id', { count: 'exact', head: true }).is('date_of_leaving', null)
+  const cols = RUNG_CHOICES.map(c => [c.stage, c.column] as const)
+  const [total, ...each] = await Promise.all([
+    live(), ...cols.map(([, col]) => live().not(col, 'is', null)),
+  ])
+  if (total.error || total.count == null) {
+    console.error('[pms] rung coverage unreadable:', total.error)
+    return null
+  }
+  const out: Record<string, { have: number; of: number }> = {}
+  each.forEach((r, i) => {
+    if (r.error || r.count == null) {
+      /**
+       * A FAILED RUNG IS LOGGED, NOT ONLY SKIPPED.
+       *
+       * Silence here hid a real bug for a whole commit: RUNG_CHOICES named
+       * rm_l1_id and rm_l2_id, which do not exist on employees, so both reads
+       * failed and the builder showed no coverage for the two rungs most of
+       * the company actually uses. "This rung says nothing" and "this rung
+       * cannot be read" look identical on screen, and only one of them is
+       * somebody's mistake.
+       */
+      console.error(`[pms] rung coverage failed for ${cols[i][0]} `
+                  + `(employees.${cols[i][1]}):`, r.error)
+      return
+    }
+    out[cols[i][0]] = { have: r.count, of: total.count! }
+  })
+  return out
+}
+
+async function gate(req: NextRequest, action?: string, periodId?: string | null) {
   const grant = await grantForRequest(req)
-  if (!canManage(grant, 'Performance')) {
-    return { error: bad('You need full access to Performance to change this.', 403) } as const
+  const manages = canManage(grant, 'Performance')
+  const hrMay = !!action && HR_ACTIONS.has(action)
+             && await uploadAllowed(grant, periodId ?? null)
+  if (!manages && !hrMay) {
+    return { error: bad(action && HR_ACTIONS.has(action)
+      ? 'A bulk rating upload is HR\'s to commit. This account is not an HR '
+        + 'Manager, HR Head or Admin.'
+      : 'You need full access to Performance to change this.', 403) } as const
   }
   const actor = await actorFromRequest(req)
   return { grant, actor } as const
@@ -123,7 +273,8 @@ export async function GET(req: NextRequest) {
   const g = await gate(req)
   if ('error' in g) return g.error
 
-  const [policies, kras, scale, periods, companies, people] = await Promise.all([
+  const [policies, kras, scale, periods, companies, people, catalogue,
+         chains] = await Promise.all([
     sb.from('pms_policies').select('*').order('policy_name'),
     sb.from('pms_kra_master').select('*').order('kra_title').limit(500),
     sb.from('pms_rating_scale').select('*').order('sort_order'),
@@ -143,11 +294,25 @@ export async function GET(req: NextRequest) {
     // still renders and the HR Head field simply has nobody to offer.
     sb.from('employees').select('id,emp_code,full_name,company_id')
       .is('date_of_leaving', null).order('emp_code').limit(5000),
+    // 215. Non-fatal too, and for a sharper reason than the others: this
+    // table may not exist yet on a database where 215 has not run, and the
+    // rest of Setup & Controls has nothing to do with it.
+    sb.from('pms_training_catalogue').select('*')
+      .order('course_name').limit(1000),
+    // 218. Non-fatal for the same reason as the catalogue.
+    sb.from('pms_chain').select('*').order('name').limit(200),
   ])
   const firstError = [policies, kras, scale, periods].find(r => r.error)?.error
   if (firstError) return bad(firstError.message, 500)
   if (companies.error) console.error('[pms] could not read company names:', companies.error)
   if (people.error) console.error('[pms] could not read the employee list:', people.error)
+  if (catalogue.error) console.error('[pms] training catalogue unreadable:', catalogue.error)
+  if (chains.error) console.error('[pms] chain library unreadable:', chains.error)
+
+  // After the batch above rather than inside it: six count reads that only the
+  // chain builder uses should not sit in the path that decides whether the
+  // whole editor renders.
+  const coverage = chains.error ? null : await rungCoverage()
 
   return NextResponse.json({
     policies: policies.data ?? [],
@@ -156,6 +321,9 @@ export async function GET(req: NextRequest) {
     periods:  periods.data ?? [],
     companies: companies.data ?? [],
     people: people.data ?? [],
+    catalogue: catalogue.data ?? [],
+    chains:    chains.data ?? [],
+    coverage,
     // The UI hides attribution-only actions when there is no employee behind
     // the session, rather than letting the button fail on click.
     actor: { employeeId: g.actor.employeeId, name: g.actor.name, legacy: g.actor.legacy },
@@ -164,12 +332,20 @@ export async function GET(req: NextRequest) {
 
 // ─── POST: one write ─────────────────────────────────────────────────────
 export async function POST(req: NextRequest) {
-  const g = await gate(req)
+  // READ BEFORE GATING, because the gate depends on WHICH action is being
+  // asked for — the upload is HR's, the rest is admin configuration.
+  // Parsing JSON has no side effects, and an unparseable body yields an
+  // empty action, which matches no case and is refused as admin-only.
+  const body = await req.json().catch(() => ({})) as Record<string, unknown>
+  const action = String(body.action ?? '')
+
+  // The period is read from the body for the gate, because 217 makes the
+  // answer depend on which company's policy the upload lands in.
+  const g = await gate(req, action,
+    typeof body.period_id === 'string' ? body.period_id : null)
   if ('error' in g) return g.error
   const { actor } = g
 
-  const body = await req.json().catch(() => ({})) as Record<string, unknown>
-  const action = String(body.action ?? '')
   const str = (k: string) => (typeof body[k] === 'string' && (body[k] as string).trim())
     ? (body[k] as string).trim() : null
 
@@ -208,6 +384,141 @@ export async function POST(req: NextRequest) {
       if (!id) return bad('Which KRA?')
       const r = await sb.from('pms_kra_master')
         .update({ is_active: body.is_active === true }).eq('id', id).select().single()
+      return r.error ? bad(r.error.message) : okay(r.data)
+    }
+
+    // ── the training catalogue (215) ───────────────────────────────────
+    //
+    // The corpus the AI suggestion retrieves from. Until it has rows every
+    // suggestion is a skill area, because the model is not allowed to name
+    // a course it cannot vouch for.
+    case 'catalogue_upsert': {
+      const id = str('id')
+      const fields = pick(body, CATALOGUE_COLS)
+      if (!id && !fields.course_name) return bad('A course needs a name.')
+      // THE SKILL IS NOT OPTIONAL. Retrieval scores it three times higher
+      // than the title, so a row without one is a course the suggestion
+      // engine can never find — present in the catalogue and invisible in
+      // practice, which is worse than absent.
+      if (!id && !String(fields.skill ?? '').trim()) {
+        return bad('Say what this course teaches, in the words a manager '
+                 + 'would use in a review. It is what the suggestion '
+                 + 'matches on \u2014 a course with no skill is one the AI '
+                 + 'can never surface.')
+      }
+      if (id) {
+        const r = await sb.from('pms_training_catalogue')
+          .update(fields).eq('id', id).select().single()
+        return r.error ? bad(r.error.message) : okay(r.data)
+      }
+      /**
+       * NULL COMPANY MEANS THE WHOLE GROUP, and that is a deliberate
+       * choice rather than a missing value — so it is only honoured when
+       * the person actually works across companies. For everybody else
+       * companyFilter pins it to theirs.
+       */
+      const wantsGroup = body.company_id === null
+      const company = wantsGroup && g.grant.crossCompany
+        ? null : companyFilter(g.grant, str('company_id'))
+      if (!company && !wantsGroup) return bad('Which company is this course for?')
+      const r = await sb.from('pms_training_catalogue')
+        .insert({ ...fields, company_id: company }).select().single()
+      return r.error ? bad(r.error.message) : okay(r.data)
+    }
+
+    // Retired, not deleted: a suggestion already in somebody's bin points
+    // at this row, and removing it would leave them holding a reference to
+    // a course nobody can look up.
+    case 'catalogue_set_active': {
+      const id = str('id')
+      if (!id) return bad('Which course?')
+      const r = await sb.from('pms_training_catalogue')
+        .update({ is_active: body.is_active === true }).eq('id', id).select().single()
+      return r.error ? bad(r.error.message) : okay(r.data)
+    }
+
+    // ── the chain library (218) ────────────────────────────────────────
+    //
+    // chainFault runs HERE as well as in the browser, and that is not
+    // belt-and-braces: the browser copy exists to explain, this one exists
+    // to refuse. A posted body never reached the browser's validation.
+    case 'chain_upsert': {
+      const id = str('id')
+      const fields = pick(body, CHAIN_COLS)
+      const posted = Array.isArray(body.rungs) ? body.rungs.map(String) : null
+
+      // An edit that changes only the notes leaves the rungs alone. An edit
+      // that sends them has to survive the same check a new chain does.
+      if (posted || !id) {
+        const fault = chainFault({
+          name: (fields.name as string | undefined) ?? (id ? 'unchanged' : ''),
+          rungs: posted ?? [],
+        })
+        if (fault) return bad(fault)
+      }
+      const patch: Record<string, unknown> = { ...fields }
+      if (posted) patch.rungs = normaliseRungs(posted)
+
+      if (id) {
+        /**
+         * AN EDIT DOES NOT REACH APPRAISALS ALREADY RUNNING.
+         *
+         * pms_overall_rating.chain_shape and chain_snapshot_at freeze the
+         * chain per appraisal when it starts, so nobody mid-review finds a
+         * rung has appeared or vanished beneath them — which is what the
+         * user chose when asked ("keep the chain they started on"). Nothing
+         * here has to enforce that; it is worth saying because the opposite
+         * assumption is the natural one.
+         */
+        const r = await sb.from('pms_chain')
+          .update({ ...patch, updated_at: new Date().toISOString() })
+          .eq('id', id).select().single()
+        return r.error ? bad(r.error.message) : okay(r.data)
+      }
+      // NULL COMPANY MEANS THE WHOLE GROUP, honoured only for somebody who
+      // actually works across companies — same rule as a KRA or a course.
+      const wantsGroup = body.company_id === null
+      const company = wantsGroup && g.grant.crossCompany
+        ? null : companyFilter(g.grant, str('company_id'))
+      if (!company && !wantsGroup) return bad('Which company is this chain for?')
+      const r = await sb.from('pms_chain')
+        .insert({ ...patch, company_id: company }).select().single()
+      return r.error
+        ? bad(r.error.message.includes('pms_chain_company_id_name_key')
+            ? 'There is already a chain with that name here. Pick another name '
+              + 'so the two can be told apart on a policy.'
+            : r.error.message)
+        : okay(r.data)
+    }
+
+    /**
+     * Retired, not deleted — and REFUSED while a policy still points at it.
+     *
+     * Deactivating a chain in use would leave the policy's chain_id pointing
+     * at it and the chain still deciding, so the switch would read as off and
+     * behave as on. Naming the policies is the only useful response: the fix
+     * is to move them first, and nobody can do that without knowing which.
+     */
+    case 'chain_set_active': {
+      const id = str('id')
+      if (!id) return bad('Which chain?')
+      const off = body.is_active !== true
+      if (off) {
+        const pol = await sb.from('pms_policies')
+          .select('id,policy_name,chain_id').eq('chain_id', id)
+        if (pol.error) return bad(pol.error.message, 500)
+        const names = usedBy(id, pol.data ?? [])
+        if (names.length) {
+          return bad(`${names.join(', ')} ${names.length === 1 ? 'is' : 'are'} `
+            + 'still using this chain. Point '
+            + `${names.length === 1 ? 'it' : 'them'} at another chain first — `
+            + 'switching this off while it is in use would leave it running '
+            + 'and look as though it had stopped.')
+        }
+      }
+      const r = await sb.from('pms_chain')
+        .update({ is_active: !off, updated_at: new Date().toISOString() })
+        .eq('id', id).select().single()
       return r.error ? bad(r.error.message) : okay(r.data)
     }
 
