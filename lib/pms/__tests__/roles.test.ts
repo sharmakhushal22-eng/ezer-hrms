@@ -268,7 +268,9 @@ test('each row names the ONE next thing, in the order the flow requires', () => 
     [{ totalWeightage: 80 }, /total 80.*not 100|totals? 80/i],
     [{ oneToOneDone: false }, /one-to-one/i],
     [{ selfSubmitted: false, selfScore: null }, /self rating/i],
-    [{ rmL1Score: null }, /your rating is owed/i],
+    // No viewer is passed below, so this is the impersonal default. Who
+    // gets the personal wording is the test that follows.
+    [{ rmL1Score: null }, /waiting on rm l1/i],
     [{ rmL1Score: 4, rmL2Score: null, rmL2Id: 'm2' }, /rm l2/i],
     [{ rmL1Score: 4, rmL2Score: 4, rmL2Id: 'm2' }, /finalis/i],
   ]
@@ -276,6 +278,43 @@ test('each row names the ONE next thing, in the order the flow requires', () => 
     const r = teamQueue([member({ employeeId: 'e', name: 'E', ...patch })], TODAY)[0]
     assert.match(r.next, want, `wrong next step for ${JSON.stringify(patch)}`)
   }
+})
+
+test('"your rating is owed" is said only to the rung that owes it', () => {
+  // IT USED TO BE SAID TO EVERYONE. nextForRm returned it on rmL1Score ===
+  // null alone, so an HOD looking at a reportee whose RM L1 had not rated
+  // them was told the rating was theirs — on a row where they could do
+  // nothing, because the approval card correctly showed the appraisal only
+  // to the L1.
+  //
+  // MEASURED: SRS9043's RM L1 is SRS9016 and their HOD is SRS9010. Signed in
+  // as SRS9010 the dashboard said "Your rating is owed." That sentence cost
+  // an hour hunting a missing screen that was behaving correctly.
+  const m = member({ employeeId: 'e', name: 'E', rmL1Score: null,
+                     rmL1Id: 'the-l1', rmL2Id: null, hodId: 'the-hod' })
+  const asL1  = teamQueue([m], TODAY, undefined, undefined, 'the-l1')[0]
+  const asHod = teamQueue([m], TODAY, undefined, undefined, 'the-hod')[0]
+  const asNobody = teamQueue([m], TODAY)[0]
+
+  assert.match(asL1.next, /your rating is owed/i,
+    'the rung that owes the rating is no longer told so')
+  assert.match(asHod.next, /waiting on rm l1/i)
+  assert.ok(!/your rating/i.test(asHod.next),
+    'the HOD is still told a rating is theirs when it is their L1\'s')
+  // The default is impersonal rather than wrong: true from every seat.
+  assert.match(asNobody.next, /waiting on rm l1/i)
+})
+
+test('the "rating owed" stat counts only the viewer\'s own', () => {
+  // teamStats.pendingWithMe matches the sentence, so it was wrong wherever
+  // the sentence was — an HOD saw a count of ratings that were not theirs.
+  const mine  = member({ employeeId: 'a', name: 'A', rmL1Score: null,
+                         rmL1Id: 'me', hodId: 'other' })
+  const notMine = member({ employeeId: 'b', name: 'B', rmL1Score: null,
+                           rmL1Id: 'someone-else', hodId: 'me' })
+  const rows = teamQueue([mine, notMine], TODAY, undefined, undefined, 'me')
+  assert.equal(teamStats(rows).pendingWithMe, 1,
+    'the stat counts rows the viewer cannot act on')
 })
 
 test('a chain with no second rung does not wait for a rating nobody can give', () => {

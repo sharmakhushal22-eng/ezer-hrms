@@ -353,7 +353,7 @@ const EMPTY_TEAM =
 
 // ── §4.1 Team Dashboard ──────────────────────────────────────────────────
 
-export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES, flagRules}: {
+export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES, flagRules, viewerId}: {
   /**
    * The policy's eligibility rules, chiefly new_joiner_cutoff_days.
    *
@@ -368,8 +368,11 @@ export function TeamTab({ members, today, managerName, rules = DEFAULT_RULES, fl
    *  same thresholds the employee was held to. */
   rules?: Rules
   members: TeamMember[]; today: string; managerName: string
+  /** WHO IS LOOKING. The "Your rating is owed" stat and every row's `next`
+   *  are about this person; without it they describe the RM L1 instead. */
+  viewerId?: string
 }) {
-  const rows = teamQueue(members, today, flagRules)
+  const rows = teamQueue(members, today, flagRules, undefined, viewerId)
   const s = teamStats(rows)
   return (
     <>
@@ -624,34 +627,26 @@ export function ApproveTab({ members, today, onSendBack, onAcknowledge,
   /** Which rows have opened the send-back box. See the cell below. */
   const [backing, setBacking] = useState<Record<string, boolean>>({})
   /**
-   * THE RATING PANEL WAS UNREACHABLE FOR EXACTLY THE PEOPLE WHO NEEDED IT.
+   * PEOPLE WHO STILL OWE A SELF RATING OR A ONE-TO-ONE. Not people whose
+   * rating is owed by a manager — those belong to ChainApprovals above,
+   * which matches on `chainStage === rungFor(member, viewerId)` and so shows
+   * each appraisal to the one rung whose move it actually is.
    *
-   * This filter was `!selfSubmitted || !oneToOneDone` — people who still owe
-   * their self rating or their one-to-one. "Review, rate & approve" is the
-   * ONLY way into the rating panel, and it lives on these rows.
-   *
-   * So the moment a manager acknowledged the one-to-one on a set that had
-   * already been self-submitted, the employee dropped out of this queue and
-   * the button went with them — while the Team Dashboard went on saying
-   * "Your rating is owed." about the same person. There was no way to open
-   * the panel and rate them at all.
-   *
-   * FOUND BY WALKING THE CHAIN on live data: acknowledge and lock, then look
-   * for somewhere to rate, and there is nowhere. Every screen agreed a rating
-   * was owed and none of them would take one.
-   *
-   * `r.next` is the canonical sentence teamQueue already computes and
-   * teamStats already counts on — using it here means the queue and the
-   * dashboard cannot disagree about who is waiting.
+   * I widened this filter once, to include `next === 'Your rating is owed.'`,
+   * on the strength of that sentence appearing for somebody with nowhere to
+   * rate them. The sentence was the bug: it was written from the RM L1's seat
+   * and shown to every seat, so an HOD was told a rating was theirs when it
+   * was their L1's. Fixed in lib/pms/team.ts; this card is back to the two
+   * states it is about, and the widened version only added rows nobody
+   * viewing them could act on.
    */
-  const rows = teamQueue(members, today, flagRules)
-    .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone
-              || r.next === 'Your rating is owed.')
+  const rows = teamQueue(members, today, flagRules, undefined, viewerId)
+    .filter(r => !r.member.selfSubmitted || !r.member.oneToOneDone)
   // Logged by the employee, still waiting on this manager's half. Not merged
   // into the card above: that one is about getting a KRA set locked before
   // the period runs, this one is the last thing standing between a rated
   // employee and a settled rating. Same table, opposite ends of the cycle.
-  const finalRows = teamQueue(members, today, flagRules)
+  const finalRows = teamQueue(members, today, flagRules, undefined, viewerId)
     .filter(r => r.member.finalReviewLogged && !r.member.finalReviewDone)
 
   return (

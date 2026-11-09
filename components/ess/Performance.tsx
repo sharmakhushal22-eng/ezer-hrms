@@ -2662,7 +2662,7 @@ function TeamSide({ employeeId, tab }: { employeeId: string; tab: MgrTab }) {
   return (
     <>
       {msg && <div className="banner b-blue"><span aria-hidden="true">ℹ️</span><div>{msg}</div></div>}
-      {tab === 'team' && <TeamTab flagRules={flagRules} rules={rules} members={rows} today={today} managerName="your team" />}
+      {tab === 'team' && <TeamTab flagRules={flagRules} rules={rules} members={rows} today={today} managerName="your team" viewerId={employeeId} />}
       {tab === 'approve' && <ApproveTab flagRules={flagRules} rules={rules} members={rows} today={today}
                                         onAcknowledge={acknowledge} onSendBack={sendBack}
                                         onAcknowledgeFinalReview={acknowledgeFinalReview}

@@ -466,33 +466,56 @@ test('the read-only ratings table rolls up, it does not pick one measure', () =>
     'two of three comments are dropped on the floor')
 })
 
-test('the rating panel is reachable for everyone whose rating is owed', () => {
-  // THE BUG THAT MADE THE STEPPER UNREACHABLE IN PRODUCTION.
+test('the approval card shows an appraisal to the ONE rung whose move it is', () => {
+  // THIS TEST REPLACES A WRONG ONE, AND THE STORY IS THE POINT.
   //
-  // "Review, rate & approve" is the only entry to the rating panel, and it
-  // renders on ApproveTab's first queue. That queue filtered to people who
-  // still owed a self rating or a one-to-one — so the moment a manager
-  // acknowledged the one-to-one on an already-submitted set, the employee
-  // left the queue and took the button with them, while the Team Dashboard
-  // went on saying "Your rating is owed" about the same person.
+  // I widened ApproveTab's first queue to include `next === 'Your rating is
+  // owed.'`, because that sentence appeared for an employee I could find
+  // nowhere to rate. I had the diagnosis backwards.
   //
-  // Found by walking a real chain: acknowledge and lock, then look for
-  // anywhere to rate. There was nowhere.
+  // The probe settled it: SRS9043 sits at RM_L1, their RM L1 is SRS9016, and
+  // I was signed in as SRS9010 — their HOD. ChainApprovals matched on
+  // `chainStage === rungFor(member, viewerId)`, got 'RM_L1' === 'HOD', and
+  // correctly showed nothing. The screen was right; the SENTENCE was wrong,
+  // and it was wrong because it was written from the RM L1's seat and shown
+  // to every seat.
+  //
+  // So the queue is back to the two states it is about, and what actually
+  // needed fixing is in lib/pms/team.ts.
   const mgr = read('components/pms/ManagerTabs.tsx')
-  // SCOPED TO ApproveTab. TeamTab opens with the same `const rows =
-  // teamQueue(...)` line, so an unscoped indexOf finds the wrong component
-  // and the assertion passes or fails for reasons unrelated to this queue.
   const body = mgr.slice(mgr.indexOf('export function ApproveTab'))
   const q = body.slice(body.indexOf('const rows = teamQueue('),
                        body.indexOf('const finalRows = teamQueue('))
-  assert.ok(q.length > 50 && q.length < 1200, 'the ApproveTab queue moved')
-  assert.match(q, /r\.next === 'Your rating is owed\.'/,
-    'the approval queue excludes people whose rating is owed, which is the '
-    + 'only place the rating panel can be opened from')
-  // The entry point itself still exists and still opens the panel.
+  assert.ok(!/r\.next === 'Your rating is owed\.'/.test(q),
+    'the approval queue is widened on a sentence again — it describes the '
+    + 'RM L1, not the reader, so it pulls in rows the viewer cannot act on')
+
+  // The real entry point, unchanged and correct: one rung, one appraisal.
+  assert.match(mgr, /r\.member\.chainStage === rungFor\(r\.member, viewerId\)/)
   assert.match(mgr, /onClick=\{\(\) => onOpenKras\?\.\(id\)\}/)
   assert.match(mgr, /'Review & send on' : 'Review, rate & approve'/)
-  // And the sentence is the one teamQueue actually produces, so the queue
-  // and the dashboard cannot disagree about who is waiting.
-  assert.match(read('lib/pms/team.ts'), /return 'Your rating is owed\.'/)
+})
+
+test('every queue the manager reads knows who is reading it', () => {
+  // teamQueue's `next` and teamStats' count both describe the viewer. A call
+  // site that omits the viewer gets the impersonal fallback, which is true
+  // but less useful — and the two surfaces that say "your" must not.
+  const mgr = read('components/pms/ManagerTabs.tsx')
+  // THE SPECIFIC ASSIGNMENT, not "somewhere in this component". Matching
+  // anywhere in the body let a mutation through: ApproveTab builds two
+  // queues, so blanking the viewer on `rows` still matched the one on
+  // `finalRows` a few lines below.
+  for (const comp of ['TeamTab', 'ApproveTab']) {
+    const at = mgr.indexOf(`export function ${comp}`)
+    const body = mgr.slice(at, at + 4000)
+    const call = body.slice(body.indexOf('const rows = teamQueue('))
+      .slice(0, 120)
+    assert.match(call, /teamQueue\(members, today, flagRules, undefined, viewerId\)/,
+      `${comp} builds its row queue without a viewer, so every row's "next" `
+      + 'describes the RM L1 regardless of who is looking')
+  }
+  // And the viewer actually reaches TeamTab from the page.
+  assert.match(read('components/ess/Performance.tsx'),
+    /<TeamTab[^>]*viewerId=\{employeeId\}/,
+    'TeamTab accepts a viewer and the page never passes one')
 })
