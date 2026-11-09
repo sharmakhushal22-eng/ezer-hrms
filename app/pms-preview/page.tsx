@@ -1,4 +1,5 @@
 'use client'
+import { useState } from 'react'
 // app/pms-preview/page.tsx — a test harness, not a product screen.
 //
 // The real PMS sits behind auth and behind migration 066, so neither a
@@ -20,10 +21,11 @@ import { ConfigTab, PolicyTab, FillTab, UploadTab, PipTab, ReportsTab,
 import { DashboardTab, KraTab, OneToOneTab, SelfRatingTab, ResultTab,
          AnalyticsTab } from '@/components/pms/EmployeeTabs'
 import { TeamTab, ApproveTab, RateTab, PipRequestTab, TeamAnalyticsTab,
-         FinaliseTab, FeedbackTab } from '@/components/pms/ManagerTabs'
+         FinaliseTab, FeedbackTab, KraDetail } from '@/components/pms/ManagerTabs'
 import { STAGES } from '@/lib/pms/cycle'
 import { type TeamMember } from '@/lib/pms/team'
 import { type Kra } from '@/lib/pms/kra'
+import { shareOf } from '@/lib/pms/kpi'
 import { type Line } from '@/lib/pms/scoring'
 import { type Log } from '@/lib/pms/oneToOne'
 import Channel from '@/components/broadcast/Channel'
@@ -35,12 +37,37 @@ import '@/components/pms/pms.css'
 const TODAY = '2026-09-04'
 
 const KRAS: Kra[] = [
-  { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25 },
-  { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20 },
-  { seq_no: 3, kra_title: 'Query resolution', kpi_metric: 'Turnaround', target_value: 'under 2 days', category: 'CUSTOMER', weightage: 20 },
-  { seq_no: 4, kra_title: 'Report automation', kpi_metric: 'Reports automated', target_value: '4 of 4', category: 'BUSINESS', weightage: 20 },
+  // 220: a KRA is measured by its KPIs, each rated on its own.
+  // 221: how many it may hold is policy, default 1 to 5.
+  // 222: a KPI has NO weightage — it carries an equal share of its KRA's.
+  //
+  // The first carries FIVE — the shipped maximum — so the harness shows the
+  // state nothing else does: the + Add KPI button disabled, with its reason
+  // in the title and "5 of 5" beside it. The last carries one, which is how
+  // every KRA written before 220 was backfilled and which shows the × button
+  // disabled at the floor. Both ends of the range are therefore on screen.
+  { seq_no: 1, kra_title: 'Payroll accuracy', kpi_metric: 'Error rate per run', target_value: 'under 0.2%', category: 'PROCESS', weightage: 25,
+    kpis: [
+      { seq_no: 1, kpi_metric: 'Error rate per run', target_value: 'under 0.2%' },
+      { seq_no: 2, kpi_metric: 'Reruns caused by input error', target_value: 'zero' },
+      { seq_no: 3, kpi_metric: 'Payslips issued on the 1st', target_value: '100%' },
+      { seq_no: 4, kpi_metric: 'Arrears cleared within the cycle', target_value: '100%' },
+      { seq_no: 5, kpi_metric: 'Full-and-final within 45 days', target_value: '100%' },
+    ] },
+  { seq_no: 2, kra_title: 'Statutory compliance', kpi_metric: 'Filings on time', target_value: '100%', category: 'COMPLIANCE', weightage: 20,
+    kpis: [
+      { seq_no: 1, kpi_metric: 'Filings on time', target_value: '100%' },
+      { seq_no: 2, kpi_metric: 'Challans reconciled same month', target_value: '100%' },
+    ] },
+  { seq_no: 3, kra_title: 'Query resolution', kpi_metric: 'Turnaround', target_value: 'under 2 days', category: 'CUSTOMER', weightage: 20,
+    kpis: [{ seq_no: 1, kpi_metric: 'Turnaround', target_value: 'under 2 days' }] },
+  { seq_no: 4, kra_title: 'Report automation', kpi_metric: 'Reports automated', target_value: '4 of 4', category: 'BUSINESS', weightage: 20,
+    kpis: [{ seq_no: 1, kpi_metric: 'Reports automated', target_value: '4 of 4' }] },
   // Deliberately below the per-KRA minimum, so the thin-row treatment shows.
-  { seq_no: 5, kra_title: 'Audit readiness', kpi_metric: 'Observations', target_value: 'zero', category: 'COMPLIANCE', weightage: 3 },
+  // There is no longer an unbalanced state to show alongside it: since 222 a
+  // KRA's KPIs always total it exactly, because they each take an equal cut.
+  { seq_no: 5, kra_title: 'Audit readiness', kpi_metric: 'Observations', target_value: 'zero', category: 'COMPLIANCE', weightage: 3,
+    kpis: [{ seq_no: 1, kpi_metric: 'Observations', target_value: 'zero' }] },
 ]
 
 const LINES: Line[] = [
@@ -149,12 +176,32 @@ const CASES: [string, React.ReactNode][] = [
       actionLabel="Your self rating" actionNote="Rate every KRA, then submit — it locks" />],
   ['emp-kras', <KraTab key="ek" kras={KRAS} onChange={() => {}} locked={false}
       lockGate={{ open: false, because: 'Neither side has acknowledged this yet.' }}
+      // 220: self rating happens per KPI, inside each measure's row. Passed
+      // here so the harness actually shows that path — without onSelfChange
+      // the whole assessment block is hidden, and it was invisible before.
+      // Two of the eight measures left unrated, so the rated and unrated
+      // treatments are both on screen.
+      self={Object.fromEntries(KRAS.flatMap(k => (k.kpis ?? []).map(x => [
+        `${k.seq_no}.${x.seq_no}`,
+        { achievement: x.seq_no === 1 ? '0.11% across 3 runs' : '',
+          rating: (k.seq_no + x.seq_no) % 4 === 0 ? null : 4,
+          comment: x.seq_no === 1 ? 'Pre-run validation checklist introduced' : '' },
+      ])))}
+      onSelfChange={() => {}}
       onSubmit={() => {}} />],
   ['emp-o2o',  <OneToOneTab key="eo" logs={LOGS} managerName="Priya Nair (RM L1)" />],
   ['emp-self', <SelfRatingTab key="es" submitted={false} onSubmit={() => {}} onChange={() => {}}
-      rows={LINES.map(l => ({ goalId: l.goalId, title: l.title, weightage: l.weightage,
-        category: l.category, achievement: '0.11% across 3 runs', rating: l.self ?? null,
-        comment: 'Pre-run validation checklist introduced' }))} />],
+      // 220: one row per KPI. Built from the KRA fixtures so the harness
+      // shows the real shape — a KRA with three measures produces three rows.
+      rows={KRAS.flatMap(k => (k.kpis ?? []).map(x => ({
+        goalId: String(k.seq_no), kpiId: `${k.seq_no}.${x.seq_no}`,
+        title: `${k.kra_title} · ${x.kpi_metric}`,
+        // 222: a KPI has no weightage — it carries an equal share of
+        // its KRA's, which is what the row shows.
+        weightage: shareOf(k.weightage, (k.kpis ?? []).length), category: k.category,
+        achievement: '0.11% across 3 runs',
+        rating: LINES.find(l => l.goalId === String(k.seq_no))?.self ?? null,
+        comment: 'Pre-run validation checklist introduced' })))} />],
   ['emp-result', <ResultTab key="er" published lines={LINES} finalRating={4}
       finalisedBy="Anil Kapoor (HOD)" finalisedOn="2026-08-30" deptAverage={3.24}
       appreciation="Took the payroll checklist from an idea to something the whole department now runs."
@@ -167,12 +214,25 @@ const CASES: [string, React.ReactNode][] = [
   // RM
   ['rm-team',     <TeamTab key="rt" members={TEAM} today={TODAY} managerName="Priya Nair (RM L1)" />],
   ['rm-approve',  <ApproveTab key="ra" members={TEAM} today={TODAY} />],
-  ['rm-rate',     <RateTab key="rr" member={TEAM[0]} overallComment="" onOverallComment={() => {}}
-      onChange={() => {}} onSubmit={() => {}}
-      rows={LINES.map(l => ({ goalId: l.goalId, title: l.title, category: l.category,
-        weightage: l.weightage, achievement: '0.11% across 3 runs', selfRating: l.self ?? null,
-        selfComment: 'Checklist introduced', myRating: l.rmL1 ?? null,
-        myComment: '' }))} />],
+  /**
+   * READ-ONLY NOW. Rating happens once, while approving the KRA set; this
+   * tab is the record of what each rung scored. The case carries a chain
+   * mid-flight — RM L1 and RM L2 have rated, the HOD has not — because the
+   * blank column is the state most worth looking at.
+   */
+  ['rm-rate',     <RateTab key="rr" member={{ ...TEAM[0],
+        // A CHAIN THE MEMBER HOLDS. Without these the screen renders a Self
+        // column and nothing else — which is correct behaviour for somebody
+        // with no chain, and useless as a preview of the thing being built.
+        rmL1Id: 'rm1', rmL2Id: 'rm2', hodId: 'hod' }}
+      rows={LINES.map((l, i) => ({ goalId: l.goalId, title: l.title, category: l.category,
+        weightage: l.weightage, achievement: '0.11% across 3 runs',
+        by: {
+          SELF:  { rating: l.self ?? null, comment: 'Checklist introduced and held all quarter.' },
+          RM_L1: { rating: l.rmL1 ?? null, comment: i === 0 ? 'Agreed — the run rate held through the migration.' : '' },
+          RM_L2: { rating: l.rmL2 ?? null, comment: i === 1 ? 'Scope moved in September; scored against what was agreed.' : '' },
+        },
+      }))} />],
   ['rm-pip',      <PipRequestTab key="rp" members={TEAM} today={TODAY} />],
   ['rm-analytics',<TeamAnalyticsTab key="rn" members={TEAM} today={TODAY} lines={LINES}
       deptAverage={3.24} companyAverage={3.41} scopeLabel="your team" />],
@@ -181,7 +241,97 @@ const CASES: [string, React.ReactNode][] = [
       chain="SELF_RM1_RM2_HOD" whoCanFinalise="RM1_RM2_HOD" deptName="Finance & Accounts" />],
   ['hod-feedback', <FeedbackTab key="hb" member={TEAM[0]} rating={2}
       appreciation="" improvement="" benefits={[]} logs={LOGS} onChange={() => {}} />],
+  /**
+   * The detailed KRA form, with DELIBERATELY LONG CONTENT.
+   *
+   * A preview case is only worth having if it is harder than the real data.
+   * The live rows top out around a 48-character field, which is comfortably
+   * inside any sane column — so an overflow bug would not show here on
+   * realistic text. These lines carry a long unbroken token, a long sentence,
+   * and a long self comment, which is where the layout actually gives way.
+   */
+  ['kra-detail', <KraDetail key="kd" member={TEAM[0]} onClose={() => {}}
+      lines={[
+        { goalId: 'g1', seqNo: 1, title: 'Close the month-end books within three working days of period end, including inter-company eliminations',
+          kpi: 'Days from period end to signed-off trial balance, measured against the group reporting calendar',
+          target: '<=3 working days every month for the whole quarter, no exceptions',
+          category: 'BUSINESS', weightage: 40, status: 'LOCKED', source: 'CARRIED_FORWARD',
+          achievement: 'Closed in 2.6 days on average across the quarter, with the October close landing on day two despite the ERP migration running in parallel.',
+          selfRating: 4,
+          selfComment: 'The ERP migration overlapped the September close and we still held the three-day commitment, which I think is the strongest single result of the quarter.' },
+        { goalId: 'g2', seqNo: 2, title: 'Reconciliation_automation_programme_phase_two_deliverables_and_signoff',
+          kpi: 'ReconciliationBreaksClosedWithinSLAPercentageAcrossAllLedgers',
+          target: '>=98%', category: 'PROCESS', weightage: 35, status: 'LOCKED', source: 'MANUAL',
+          achievement: 'https://internal.example.com/reports/reconciliation/q2-fy2026-27/breaks-by-ledger-and-age?view=summary',
+          selfRating: 3, selfComment: 'Short note.' },
+        { goalId: 'g3', seqNo: 3, title: 'Mentoring', kpi: 'Sessions', target: '6', category: 'PEOPLE',
+          weightage: 25, status: 'DRAFT', source: 'MANUAL',
+          achievement: null, selfRating: null, selfComment: null },
+      ]} />],
+  /**
+   * The same panel as the rung HOLDING the appraisal sees it: read the KRAs,
+   * score each one, confirm the one-to-one, approve. Rating and approving
+   * used to be two tabs and the chain stalled on its own rule, so this is the
+   * case that matters — the read-only one above is what everybody else gets.
+   */
+  ['kra-review', <KraDetailReviewPreview key="kr" />],
 ]
+
+/** Holds the draft so the preview behaves like the real thing. */
+function KraDetailReviewPreview() {
+  const [rate, setRate] = useState<Record<string, { rating: number | null; comment: string }>>({})
+  const [confirmed, setConfirmed] = useState(false)
+  const [finalRating, setFinalRating] = useState('')
+  /** The RM's one piece of prose about the whole appraisal. It used to be
+   *  collected on the rating tab, which is a read-only record now. */
+  const [overall, setOverall] = useState('')
+  return (
+    <KraDetail member={TEAM[0]} myRung="RM_L1" finalises
+      /* 222: THE CASE THE OLD PANEL COULD NOT EXPRESS. The first KRA carries
+         THREE measures, which the goal-keyed version collapsed to one — and
+         the save silently wrote nothing for. Each measure carries an equal
+         share of its KRA: 60/3 = 20 and 40/2 = 20. One is left unrated so
+         the review step has something to complain about. */
+      lines={[
+        { goalId: 'g1', seqNo: 1, title: 'Close the month-end books within three working days',
+          category: 'BUSINESS', weightage: 60, status: 'LOCKED', source: 'CARRIED_FORWARD',
+          kpis: [
+            { kpiId: 'k1', seqNo: 1, metric: 'Days to signed-off trial balance',
+              target: '<=3 working days', share: 20,
+              achievement: 'Closed in 2.6 days on average across the quarter.',
+              selfRating: 4, selfComment: 'Held the commitment through the ERP migration.' },
+            { kpiId: 'k2', seqNo: 2, metric: 'Inter-company eliminations cleared',
+              target: '100% before day 3', share: 20,
+              achievement: 'All twelve entities cleared on day two.',
+              selfRating: 5, selfComment: 'No carry-over into the next period.' },
+            { kpiId: 'k3', seqNo: 3, metric: 'Late journal entries after close',
+              target: 'zero', share: 20,
+              achievement: 'Two late entries in October.',
+              selfRating: 3, selfComment: 'Both were the migration cutover.' },
+          ] },
+        { goalId: 'g2', seqNo: 2, title: 'Reconciliation automation, phase two',
+          category: 'PROCESS', weightage: 40, status: 'LOCKED', source: 'MANUAL',
+          kpis: [
+            { kpiId: 'k4', seqNo: 1, metric: 'Breaks closed within SLA',
+              target: '>=98%', share: 20,
+              achievement: '97.2% across all ledgers.',
+              selfRating: 3, selfComment: 'Short of target.' },
+            { kpiId: 'k5', seqNo: 2, metric: 'Ledgers migrated to the new engine',
+              target: '8 of 8', share: 20,
+              achievement: null, selfRating: null, selfComment: null },
+          ] },
+      ]}
+      rate={rate}
+      onRate={(gid, patch) => setRate(p => {
+        const cur = p[gid] ?? { rating: null, comment: '' }
+        return { ...p, [gid]: { ...cur, ...patch } }
+      })}
+      confirmed={confirmed} onConfirm={setConfirmed}
+      finalRating={finalRating} onFinalRating={setFinalRating}
+      overallComment={overall} onOverallComment={setOverall}
+      onApprove={() => {}} onClose={() => {}} />
+  )
+}
 
 export default function PmsPreview() {
   if (process.env.NODE_ENV === 'production') return null

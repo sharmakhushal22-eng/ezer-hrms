@@ -383,11 +383,11 @@ export default function LwfConfig() {
               <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap' }}>
                 <div style={box}>
                   <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employee contribution</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${ee}` : '-'}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `${ee}` : '-'}</div>
                 </div>
                 <div style={box}>
                   <div style={{ fontSize: 10, color: C.muted, textTransform: 'uppercase', letterSpacing: '.04em' }}>Employer contribution</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `₹${er}` : '-'}</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: found ? C.green : C.amber }}>{found ? `${er}` : '-'}</div>
                 </div>
               </div>
               <div style={{ fontSize: 12, color: found ? '#047857' : TK.warning, marginTop: 8 }}>{why}</div>

@@ -379,6 +379,8 @@ export const PERM_MODULES = [
   'Company Profile', 'Holidays',
   // Letter & email templates. VIEW reads, EDIT edits — own company only (lib/config/access.ts).
   'Configuration',
+  // EZER Learn: content, assignment and reporting are separate jobs (lib/lms/caps.ts).
+  'Learning Content', 'Learning Assignment', 'Learning Reports',
 ] as const
 
 // The 9 approval workflows. `live` = a request of this type is actually created

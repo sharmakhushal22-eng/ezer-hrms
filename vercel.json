@@ -1,5 +1,7 @@
 {
-  "regions": ["bom1"],
+  "regions": [
+    "bom1"
+  ],
   "crons": [
     {
       "path": "/api/cron/offer-followup",
@@ -20,6 +22,10 @@
     {
       "path": "/api/cron/offboarding-daily",
       "schedule": "0 19 * * *"
+    },
+    {
+      "path": "/api/cron/lms-daily",
+      "schedule": "30 0 * * *"
     }
   ]
 }

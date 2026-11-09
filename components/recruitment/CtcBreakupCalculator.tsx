@@ -26,7 +26,9 @@ const T = {
 const ADD_FREQS = ['One-time','Monthly','Quarterly','Half-yearly','Yearly']
 const lakh = (v:number) => `₹${(v/100000).toFixed(2)}L`
 
-export default function CtcBreakupCalculator() {
+/** `bare` drops the calculator's own title strip, for a host that already titles it
+ *  (Payroll → Dashboard → Salary calculator). */
+export default function CtcBreakupCalculator({ bare = false }: { bare?: boolean } = {}) {
   const [form, setForm] = useState({ ctc:'', varAmt:'', joining_bonus:'', joining_freq:'With Salary', retention_bonus:'', retention_freq:'After 3 Months', esop:'', esop_plan:'', terms:'',
     state:DEFAULT_STATE, category:DEFAULT_CATEGORY as string, metro:'no', gratuity:'yes', bonusPct:'8.33', bonusMode:'salary' })
   const F_ = (k:string, v:any) => setForm(f=>({ ...f, [k]:v }))
@@ -103,13 +105,13 @@ export default function CtcBreakupCalculator() {
   return (
     <div style={{ minWidth:0 }}>
       {/* header strip */}
-      <div style={{ ...T.card, display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:12, position:'sticky', top:0, zIndex:Z.sticky + 1 }}>
+      {!bare && <div style={{ ...T.card, display:'flex', alignItems:'center', gap:12, padding:'12px 16px', marginBottom:12, position:'sticky', top:0, zIndex:Z.sticky + 1 }}>
         <div style={{ width:40, height:40, borderRadius:12, background:C.brand, color:C.onAccent, display:'grid', placeItems:'center', fontSize:17, fontWeight:800, flexShrink:0, boxShadow:'0 8px 20px rgba(124,58,237,.30)' }}>₹</div>
         <div style={{ flex:1, minWidth:0 }}>
           <div style={{ fontSize:15, fontWeight:700, color:C.ink }}>Automated CTC Calculator</div>
           <div style={{ fontSize:11, color:C.muted, marginTop:2 }}>EPF ceiling ₹{EPF_WAGE_CEILING.toLocaleString('en-IN')} • Gratuity • Statutory bonus • Pan-India minimum wages · only a calculator, nothing here is saved</div>
         </div>
-      </div>
+      </div>}
 
       <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit, minmax(min(100%, 380px), 1fr))', gap:12, alignItems:'start' }}>
         {/* ── Inputs & Rules Selection ── */}

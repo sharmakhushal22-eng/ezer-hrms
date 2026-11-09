@@ -103,7 +103,7 @@ function EmpRow({ r, checked, onToggle, isGroup }: {
 }
 
 // ── Screen ─────────────────────────────────────────────────────────────────
-export default function LockUnlock({ companyId, fy }: { companyId: string; fy: string }) {
+export default function LockUnlock({ companyId, fy, month }: { companyId: string; fy: string; month?: number }) {
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [monthVal, setMonthVal] = useState('')
   const [monthRuns, setMonthRuns] = useState<PayrollRun[]>([])
@@ -128,6 +128,9 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
   const [viewed, setViewed] = useState(false)
 
   const isGroup = !companyId
+
+  // The header's Month (Payroll → Month) leads; a month not created here yet leaves the pick alone.
+  useEffect(() => { if (month && runs.some(r => r.month === month)) setMonthVal(String(month)) }, [month, runs])   // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     let live = true
@@ -296,7 +299,7 @@ export default function LockUnlock({ companyId, fy }: { companyId: string; fy: s
             <div>
               <label style={fieldLbl}>Company</label>
               <select style={inp} value={filter.company} onChange={e => setFilter({ ...filter, company: e.target.value })}>
-                <option value="">All companies</option>
+                <option value="">Group Companies (all)</option>
                 {companies.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             </div>

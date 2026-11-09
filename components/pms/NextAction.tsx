@@ -18,7 +18,7 @@
 // confusion this component exists to remove.
 
 import type { Action, Urgency } from '@/lib/pms/cycle'
-import { C, F, W, R, S } from '@/lib/ui'
+import { C, F, W, R, S, IconCheck, IconClock, IconAlert, IconChevron } from '@/lib/ui'
 
 export interface NextActionProps {
   action: Action | null
@@ -34,10 +34,16 @@ export interface NextActionProps {
 // underneath it and moves it TOWARDS the ink, so a chip meant to make the
 // deadline stand out was the least legible thing on the card. A near-opaque
 // chip carrying the card's own colour as ink inverts that and lands above 8.
+// Edition 2: a gradient fill per urgency, and on-accent text that FOLLOWS
+// THE THEME. The previous sub-line and chip were white literals, which on
+// the dark theme's light-blue brand dropped to about 2.5:1.
 const TONE: Record<Urgency, { bg: string; ink: string; sub: string; chip: string; chipInk: string }> = {
-  overdue: { bg: C.critical, ink: C.onAccent, sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.critical },
-  due:     { bg: C.brand,    ink: C.onAccent, sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
-  info:    { bg: C.brand,    ink: C.onAccent, sub: 'rgba(255,255,255,.90)', chip: 'rgba(255,255,255,.94)', chipInk: C.brand },
+  overdue: { bg: `linear-gradient(135deg, ${C.critical}, color-mix(in oklab, ${C.critical} 78%, black))`,
+             ink: C.onAccent, sub: C.onAccentSoft, chip: C.onAccent, chipInk: C.critical },
+  due:     { bg: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
+             ink: C.onAccent, sub: C.onAccentSoft, chip: C.onAccent, chipInk: C.brand },
+  info:    { bg: `linear-gradient(135deg, ${C.brand}, ${C.brandDeep})`,
+             ink: C.onAccent, sub: C.onAccentSoft, chip: C.onAccent, chipInk: C.brand },
   none:    { bg: C.surface,  ink: C.ink,     sub: C.muted,                chip: C.sunken,                chipInk: C.inkSoft },
 }
 
@@ -55,19 +61,20 @@ export default function NextAction({ action, onGo, restingTitle, restingWhy }: N
   if (!action) {
     return (
       <div style={{
-        background: C.positiveTint, border: `1px solid ${C.positive}33`,
-        borderRadius: R.sm, padding: `${S.md}px ${S.lg}px`, display: 'flex',
-        alignItems: 'center', gap: S.sm,
+        background: `linear-gradient(90deg, ${C.positiveTint}, ${C.surface})`,
+        border: `1px solid ${C.positiveEdge}`,
+        borderRadius: 16, padding: `${S.md}px ${S.lg}px`, display: 'flex',
+        alignItems: 'center', gap: S.md,
       }}>
         <span aria-hidden style={{
-          width: 22, height: 22, borderRadius: '50%', background: C.positive, color: C.onAccent,
+          width: 36, height: 36, borderRadius: 12, background: C.positive, color: C.onAccent,
           display: 'grid', placeItems: 'center', flexShrink: 0,
+          boxShadow: `0 6px 14px -8px ${C.positive}`,
         }}>
-          <svg width="12" height="12" viewBox="0 0 16 16" fill="none" stroke="currentColor"
-               strokeWidth="2.6" strokeLinecap="round" strokeLinejoin="round"><path d="M3.5 8.5l3 3 6-6.5" /></svg>
+          <IconCheck size={18} strokeWidth={2.2} />
         </span>
         <div>
-          <div style={{ fontSize: F.body, fontWeight: W.semi, color: C.ink }}>
+          <div style={{ fontSize: F.body, fontWeight: W.bold, color: C.ink }}>
             {restingTitle ?? 'Nothing needs you right now'}
           </div>
           <div style={{ fontSize: F.small, color: C.muted, marginTop: 2 }}>
@@ -81,68 +88,84 @@ export default function NextAction({ action, onGo, restingTitle, restingWhy }: N
   const t = TONE[action.urgency]
   const when = deadline(action.daysLeft)
   const blocked = Boolean(action.blockedBy)
+  const Lead = blocked ? IconClock : action.urgency === 'overdue' ? IconAlert : IconChevron
 
   return (
     <div style={{
-      background: blocked ? C.warningTint : t.bg,
-      border: blocked ? `1px solid ${C.warning}44` : 'none',
-      borderRadius: R.sm, padding: `${S.md}px ${S.lg}px`,
+      position: 'relative', overflow: 'hidden',
+      background: blocked ? `linear-gradient(90deg, ${C.warningTint}, ${C.surface})` : t.bg,
+      border: blocked ? `1px solid ${C.warningEdge}` : '1px solid transparent',
+      borderRadius: 16, padding: `${S.md + 2}px ${S.lg + 2}px`,
       display: 'flex', flexWrap: 'wrap', gap: S.md,
       alignItems: 'center', justifyContent: 'space-between',
-      boxShadow: blocked ? 'none' : '0 6px 18px -8px rgba(6,17,58,.45)',
+      boxShadow: blocked ? 'none' : `0 14px 30px -18px ${action.urgency === 'overdue' ? C.critical : C.brandDeep}`,
     }}>
-      <div style={{ minWidth: 0, flex: '1 1 320px' }}>
-        <div style={{
-          fontSize: F.micro, fontWeight: W.bold, letterSpacing: '.12em', textTransform: 'uppercase',
-          color: blocked ? C.warning : t.sub, marginBottom: 5,
+      <div style={{ minWidth: 0, flex: '1 1 320px', display: 'flex', gap: S.md, alignItems: 'flex-start' }}>
+        <span aria-hidden style={{
+          width: 40, height: 40, borderRadius: 13, flexShrink: 0, display: 'grid', placeItems: 'center',
+          background: blocked ? C.surface : `color-mix(in oklab, ${C.onAccent} 18%, transparent)`,
+          color: blocked ? C.warning : t.ink,
+          boxShadow: blocked ? `inset 0 0 0 1px ${C.warningEdge}`
+                             : `inset 0 0 0 1px color-mix(in oklab, ${C.onAccent} 30%, transparent)`,
         }}>
-          {blocked ? 'Waiting' : action.urgency === 'overdue' ? 'Overdue' : 'Your next step'}
-        </div>
-        <div style={{
-          fontSize: F.lead, fontWeight: W.bold, color: blocked ? C.ink : t.ink,
-          lineHeight: 1.25, letterSpacing: '-.01em',
-        }}>
-          {action.title}
-        </div>
-        {/* The reason. Never optional — an instruction without one is an
-            order, and people work around orders they do not understand. */}
-        <div style={{
-          fontSize: F.small, color: blocked ? C.inkSoft : t.sub,
-          marginTop: 5, lineHeight: 1.5, maxWidth: '64ch',
-        }}>
-          {action.blockedBy ? <strong style={{ color: C.ink }}>{action.blockedBy} </strong> : null}
-          {action.why}
+          <Lead size={19} strokeWidth={2} />
+        </span>
+        <div style={{ minWidth: 0 }}>
+          <div style={{
+            fontSize: F.micro, fontWeight: W.bold, letterSpacing: 0, 
+            color: blocked ? C.warning : t.sub, marginBottom: 4,
+          }}>
+            {blocked ? 'Waiting' : action.urgency === 'overdue' ? 'Overdue' : 'Your next step'}
+          </div>
+          <div style={{
+            fontSize: F.title, fontWeight: W.bold, color: blocked ? C.ink : t.ink,
+            lineHeight: 1.2, letterSpacing: '-.015em',
+          }}>
+            {action.title}
+          </div>
+          {/* The reason, and on a blocked step WHO it is waiting on, first. */}
+          <div style={{
+            fontSize: F.small, color: blocked ? C.inkSoft : t.sub,
+            marginTop: 5, lineHeight: 1.5, maxWidth: '64ch',
+          }}>
+            {action.blockedBy ? <strong style={{ color: C.ink }}>{action.blockedBy} </strong> : null}
+            {action.why}
+          </div>
         </div>
       </div>
 
-      {/* flexShrink 0 on this group cost 47px of page overflow at 320px: the
-          chip and a button reading "Ask your manager to reopen it" cannot
-          both fit, and neither was allowed to give. It wraps now, and the
-          button is free to take two lines rather than push the page wide. */}
+      {/* The deadline and the button travel together. */}
       <div style={{ display: 'flex', alignItems: 'center', gap: S.sm,
                     flexWrap: 'wrap', minWidth: 0 }}>
         {when && (
           <span style={{
-            fontSize: F.micro, fontWeight: W.bold, padding: '5px 10px', borderRadius: 999,
+            display: 'inline-flex', alignItems: 'center', gap: 5,
+            fontSize: F.micro, fontWeight: W.bold, padding: '6px 11px', borderRadius: 999,
             background: blocked ? C.surface : t.chip, color: blocked ? C.warning : t.chipInk,
-            whiteSpace: 'nowrap',
+            whiteSpace: 'nowrap', boxShadow: blocked ? `inset 0 0 0 1px ${C.warningEdge}` : 'none',
           }}>
+            <IconClock size={12} strokeWidth={2} />
             {when}
           </span>
         )}
         <button
           type="button"
+          className="ez-cta"
           onClick={() => onGo?.(action.tab)}
           style={{
+            display: 'inline-flex', alignItems: 'center', gap: 8,
             fontFamily: 'inherit', fontSize: F.small, fontWeight: W.bold, cursor: 'pointer',
-            padding: '10px 16px', borderRadius: R.sm, maxWidth: '100%',
+            padding: '11px 18px', borderRadius: R.md, maxWidth: '100%',
             border: blocked ? `1px solid ${C.lineStrong}` : 'none',
             background: blocked ? C.surface : C.onAccent,
             color: blocked ? C.ink : (action.urgency === 'overdue' ? C.critical : C.brand),
-            boxShadow: blocked ? 'none' : '0 1px 2px rgba(6,17,58,.18)',
+            boxShadow: blocked ? 'none' : '0 8px 18px -10px rgba(6,17,58,.55)',
           }}
         >
           {action.cta}
+          <span className="ez-cta-arrow" aria-hidden style={{ display: 'inline-flex' }}>
+            <IconChevron size={14} strokeWidth={2.2} />
+          </span>
         </button>
       </div>
     </div>

@@ -34,12 +34,13 @@ export const THEME_AUDIT_BASELINE: Record<string, number> = {
   'app/dashboard/bulk-upload/page.tsx': 6,
   'app/dashboard/employees/page.tsx': 1,
   'app/dashboard/ess/page.tsx': 2,
-  'app/dashboard/flexi-claims/page.tsx': 8,
+  'app/dashboard/flexi-claims/page.tsx': 7,
   'app/dashboard/flexi-invoices/page.tsx': 17,
   'app/dashboard/holidays/page.tsx': 1,
   'app/dashboard/layout.tsx': 11,
   'app/dashboard/leave-upload/page.tsx': 2,
-  'app/dashboard/org-chart/page.tsx': 14,
+  // 14 → 0. The org chart moved onto theme tokens (subtle neutral cards, 01-Nov-2026).
+  'app/dashboard/org-chart/page.tsx': 0,
   'app/dashboard/page.tsx': 2,
   // 6 → 2. HRHeadApprovalDashboard converted onto the redesign frame: the
   // sub-tab pill border, the selected-request border and the approve/reject

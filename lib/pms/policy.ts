@@ -233,3 +233,51 @@ export function periodState(p: PeriodWindow, freq: Frequency, today: string): Pe
   if (today < p.start) return 'scheduled'
   return today > windowsFor(p, freq).finalise.end ? 'closed' : 'active'
 }
+
+// ── reading a policy from a database that may be behind the code ─────────
+//
+// Selecting a column PostgREST does not know about fails the WHOLE request,
+// not just that column. And the failure is not proportionate: every screen
+// here reacts to a policy read error by treating the policy as ABSENT, so one
+// unknown column costs the custom chain, the one-to-one rule, the finaliser,
+// the carry-forward choice and the eligibility cut-off all at once. The
+// screen then renders confidently against the shipped defaults.
+//
+// That happened: 221 added min_kpi_per_kra and the ESS performance screen
+// logged `column pms_policies.min_kpi_per_kra does not exist` and fell back
+// to DEFAULT_RULES for everything, in the window between deploying the code
+// and running the migration. There is always such a window.
+//
+// So a reader selects the full list, and on error retries without the young
+// columns. One extra round trip on the first failure, and nothing afterwards.
+
+/**
+ * Policy columns younger than some deployed databases.
+ *
+ * A column LEAVES this list once its migration is everywhere. Keeping one
+ * here costs a retry that never fires; removing one too early costs the
+ * whole policy on any database that is behind.
+ */
+export const FRESH_POLICY_COLS = [
+  'hr_head_final_rating',                 // 211
+  'min_kpi_per_kra', 'max_kpi_per_kra',   // 221
+] as const
+
+/**
+ * The same PostgREST select with the young columns removed.
+ *
+ * Takes the comma with the column, from whichever side it attaches, so a
+ * column that is first, last or in the middle of a list all come out as
+ * valid syntax — including inside an embedded `pms_policies(...)`, which is
+ * how the cycle header reads them.
+ */
+export function withoutFreshCols(select: string): string {
+  let out = select
+  for (const col of FRESH_POLICY_COLS) {
+    // Trailing comma first. Doing it the other way round would turn
+    // "a, col, b" into "a, b" correctly but "col, b" into ", b".
+    out = out.replace(new RegExp(`\\b${col}\\b\\s*,\\s*`, 'g'), '')
+    out = out.replace(new RegExp(`\\s*,\\s*\\b${col}\\b`, 'g'), '')
+  }
+  return out
+}

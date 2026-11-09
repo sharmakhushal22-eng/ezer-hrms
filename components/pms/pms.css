@@ -1,36 +1,41 @@
-/* components/pms/pms.css — the PMS design language.
+/* components/pms/pms.css — the PMS design language, edition 2 ("Clarity").
  *
- * WHAT THIS IS
+ * WHAT CHANGED IN EDITION 2
  *
- * A faithful port of EZER-PMS-Mockup-v2.html's layout, drawn in EZER's own
- * colours. The mockup's structure is kept to the pixel — 14px card radius,
- * 18px card padding, uppercase tracked labels, two-weight table rules, 20px
- * pills, the 26px stepper dot. What is NOT kept is the mockup's violet
- * palette (#7C3AED on #F5F3FF): every colour here resolves through --ez-*,
- * so PMS looks like the rest of the HRMS and follows the theme toggle.
+ * Look and layout only. Every class name the components emit is still here,
+ * every rule a test reads is still worded the way the test reads it, and no
+ * component's behaviour depends on anything in this file that it did not
+ * depend on before. The redesign is:
  *
- * That mapping, so a future edit does not have to re-derive it:
+ *   · a deep-blue gradient hero for both the HR dashboard and the ESS screen
+ *     (.pms-hero), with the period, its code and the live state in chips;
+ *   · an icon pill rail for the section tabs (.pms-nav), grouped by what the
+ *     HR team is doing — set up, run, release, look back;
+ *   · the old underline strip (.tabs) kept as the SECONDARY navigation, now a
+ *     segmented control — Setup & Controls' eight sub-panels use it;
+ *   · cards on a softer, two-layer shadow with an 18px radius and a brand
+ *     accent bar on every card heading;
+ *   · banners with a proper icon tile drawn from the tone (the emoji in the
+ *     markup is kept for screen readers' sake but is no longer what you see —
+ *     emoji render differently on every OS and sit on the wrong baseline);
+ *   · status pills with a leading dot, tables with more air, a sticky-feeling
+ *     header row, and buttons with a real primary/secondary hierarchy.
  *
- *   mockup            here                       role
- *   #7C3AED  violet   --ez-brand      #2563EB    accent, active tab, primary
- *   #3C3489  deep     --ez-brand-deep #1D4ED8    label ink, emphasis
- *   #1E1B4B  ink      --ez-ink                   headings, values
- *   #6B6796  muted    --ez-muted / --ez-faint    sub-lines, metadata
- *   #F5F3FF  ground   --ez-canvas / --ez-sunken  page, table heads, wells
- *   #E9E7F5  line     --ez-line                  card and control borders
- *   #F1EFFA  hairline --ez-line                  the softer of the two rules
- *   #16A34A  green    --ez-positive              done
- *   #F59E0B  amber    --ez-warning               waiting
- *   #DC2626  red      --ez-critical              wrong, and the payout lock
- *   #1D4ED8  blue     --ez-info                  scheduled, informational
+ * WHAT DID NOT CHANGE, AND MUST NOT
  *
- * TYPE SIZES ARE ROUNDED ON PURPOSE. The mockup sets 10.5 / 11.5 / 12.5px.
- * lib/ui/tokens.ts explains why this app does not: the UiScale zoom multiplies
- * every size, and a half-pixel lands on a quarter-pixel twice over. These use
- * the app scale — 11 / 12 / 13 / 14 — which survives zoom crisply.
+ *   · the .pms scope — without className="pms" on the root this whole file
+ *     is dead on the page;
+ *   · colour comes from --ez-* tokens or from a color-mix of them. The only
+ *     hex literals in this file are the ten local fills in the two token
+ *     blocks below, unchanged from edition 1 — the ratchet in lib/ui counts;
+ *   · every new class is prefixed pms- so Tailwind's utility layer cannot
+ *     claim it (that is how `rung fixed` once stacked three rows);
+ *   · the score ramp, the exit/notice row washes and the review panel's
+ *     sticky bars keep their exact semantics.
  *
- * Everything is scoped under .pms so none of these very generic class names
- * (.card, .stat, .pill, .btn) can leak into another module.
+ * TYPE SIZES stay on the app scale — 11 / 12 / 13 / 14 / 15 / 18 / 22 / 28 —
+ * because the UiScale zoom multiplies every size and a half pixel lands on a
+ * quarter pixel twice over.
  */
 
 .pms {
@@ -45,23 +50,56 @@
   --pms-exit-fg:         #9A3412;
   --pms-exit-bg:         #FFEDD5;
 
+  /* THE SCORE RAMP — worst red, middle yellow, best green. These are FILLS:
+   * card text sits on a 9% wash of them, never on the colour itself, so the
+   * middle stop is free to be the bright yellow a ramp needs (--ez-warning
+   * is a dark orange-brown picked for text, and reads brown here), and the
+   * top stop a bright green (--ez-positive is a desaturated teal that turns
+   * rating 4 khaki). Local tokens with their own dark values below. */
+  --pms-ramp-low:  var(--ez-critical);
+  --pms-ramp-mid:  #EAB308;
+  --pms-ramp-high: #16A34A;
+
+  /* Edition 2 shape and depth. Derived, never picked: every value below is a
+   * token or a mix of tokens, so both themes follow it. */
+  --pms-r-xl: 20px;
+  --pms-r-lg: 16px;
+  --pms-r-md: 12px;
+  --pms-r-sm: 9px;
+  --pms-card-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 5%, transparent),
+                     0 8px 24px -14px color-mix(in oklab, var(--ez-brand-deep) 22%, transparent);
+  --pms-card-lift:   0 2px 4px color-mix(in oklab, var(--ez-ink) 6%, transparent),
+                     0 16px 34px -16px color-mix(in oklab, var(--ez-brand-deep) 32%, transparent);
+  /* USE THESE AS `background: <colour> var(--pms-grad-…)`, never alone.
+     A gradient sets only background-image; background-color stays
+     transparent, so a contrast audit (and forced-colours mode, and a print)
+     reads through to the surface beneath and sees white text on white. */
+  --pms-grad-brand:  linear-gradient(135deg, var(--ez-brand) 0%, var(--ez-brand-deep) 100%);
+  --pms-grad-good:   linear-gradient(135deg, var(--ez-positive) 0%, color-mix(in oklab, var(--ez-positive) 72%, var(--ez-info)) 100%);
+  /* The hero. Navy into the brand blue in daylight; at night the brand stop
+   * is held back (see the dark blocks) so white text still clears AA on the
+   * brightest part of the sweep. */
+  --pms-hero-a: var(--ez-dark-mid);
+  --pms-hero-b: var(--ez-dark-accent);
+  --pms-hero-c: color-mix(in oklab, var(--ez-brand) 82%, var(--ez-dark-accent));
+  --pms-hero-ink: var(--ez-on-dark);
+  --pms-hero-soft: var(--ez-on-dark-muted);
+  --pms-hero-line: color-mix(in oklab, var(--ez-on-dark) 18%, transparent);
+  --pms-hero-chip: color-mix(in oklab, var(--ez-on-dark) 12%, transparent);
+
   font-size: 13px;
   line-height: 1.5;
   color: var(--ez-ink);
 
   /* This is a flex item on the dashboard, and a flex item's min-width is auto
    * — it refuses to shrink below its own min-content width. With a wide table
-   * inside, that pushed the whole page sideways at every width under 900px,
-   * and no amount of overflow-x:auto on the table wrapper could help: the
-   * wrapper was already being handed more width than the viewport had. */
-  /* width:100% matters as much as min-width:0 here. The page container uses
-   * `margin: 0 auto` to centre itself, and an auto cross-axis margin on a flex
-   * item switches OFF the stretch that would otherwise size it to the
-   * container — leaving it fit-content sized, which is min-content when the
-   * viewport is narrower than the content. So it grew to 806px inside a 352px
-   * viewport and took the whole page sideways with it. */
+   * inside, that pushed the whole page sideways at every width under 900px.
+   * width:100% matters as much as min-width:0: the page container centres
+   * itself with an auto margin, which switches off the stretch that would
+   * otherwise size it to the container. */
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -72,6 +110,12 @@
     --pms-row-notice-hover:rgba(234,179,8,.16);
     --pms-exit-fg:         #FDBA74;
     --pms-exit-bg:         rgba(249,115,22,.18);
+  /* Brighter on a dark ground, as every other state token is. */
+  --pms-ramp-mid:        #FBBF24;
+  --pms-ramp-high:       #34D399;
+    --pms-hero-c: color-mix(in oklab, var(--ez-brand) 34%, var(--ez-dark-accent));
+    --pms-card-shadow: 0 1px 2px rgba(0,0,0,.34), 0 10px 26px -16px rgba(0,0,0,.6);
+    --pms-card-lift:   0 2px 4px rgba(0,0,0,.4), 0 18px 36px -16px rgba(0,0,0,.7);
   }
 }
 :root[data-ez-theme="dark"] .pms {
@@ -81,37 +125,763 @@
   --pms-row-notice-hover:rgba(234,179,8,.16);
   --pms-exit-fg:         #FDBA74;
   --pms-exit-bg:         rgba(249,115,22,.18);
+  /* Brighter on a dark ground, as every other state token is. */
+  --pms-ramp-mid:        #FBBF24;
+  --pms-ramp-high:       #34D399;
+  --pms-hero-c: color-mix(in oklab, var(--ez-brand) 34%, var(--ez-dark-accent));
+  --pms-card-shadow: 0 1px 2px rgba(0,0,0,.34), 0 10px 26px -16px rgba(0,0,0,.6);
+  --pms-card-lift:   0 2px 4px rgba(0,0,0,.4), 0 18px 36px -16px rgba(0,0,0,.7);
 }
 
-/* ── tabs ─────────────────────────────────────────────────────────────── */
+.pms *, .pms *::before, .pms *::after { box-sizing: border-box; }
+.pms ::selection { background: var(--ez-brand-tint); color: var(--ez-ink); }
+.pms code {
+  font-family: ui-monospace, Menlo, Consolas, monospace; font-size: 11px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  padding: 1px 6px; border-radius: 6px; color: var(--ez-ink-soft);
+}
 
+/* Visually hidden, still read aloud. EmployeeTabs labels its remove column
+ * with it, and edition 1 never defined it — the word "Remove" sat in the
+ * column head in full view. */
+.pms .sr-only {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip: rect(0,0,0,0); white-space: nowrap; border: 0;
+}
+
+/* ── the hero ─────────────────────────────────────────────────────────────
+ *
+ * One band at the top of each surface that says what this is, which period
+ * is running and whether the module is live — on a surface that cannot be
+ * mistaken for a card. Navy-to-blue in both themes; the text tokens are the
+ * on-dark set, which is what they were made for.
+ */
+.pms .pms-hero {
+  position: relative; overflow: hidden; isolation: isolate;
+  display: flex; flex-wrap: wrap; gap: 18px 28px; align-items: flex-end;
+  justify-content: space-between;
+  padding: 22px 26px; margin-bottom: 14px;
+  border-radius: var(--pms-r-xl);
+  color: var(--pms-hero-ink);
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in oklab, var(--ez-brand) 38%, transparent) 0%, transparent 55%),
+    radial-gradient(80% 120% at 0% 100%, color-mix(in oklab, var(--ez-info) 22%, transparent) 0%, transparent 60%),
+    linear-gradient(120deg, var(--pms-hero-a) 0%, var(--pms-hero-b) 48%, var(--pms-hero-c) 100%);
+  box-shadow: 0 18px 40px -22px color-mix(in oklab, var(--ez-brand-deep) 70%, transparent),
+              inset 0 1px 0 color-mix(in oklab, var(--ez-on-dark) 14%, transparent);
+}
+.pms .pms-hero-main { min-width: 0; flex: 1 1 360px; }
+.pms .pms-hero-eyebrow {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-size: 13px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--pms-hero-soft); margin-bottom: 10px;
+}
+.pms .pms-hero-eyebrow .pms-hero-ico {
+  width: 26px; height: 26px; border-radius: 8px; display: grid; place-items: center;
+  background: var(--pms-hero-chip); color: var(--pms-hero-ink);
+  box-shadow: inset 0 0 0 1px var(--pms-hero-line);
+}
+.pms .pms-hero h1, .pms .pms-hero h2 {
+  margin: 0; font-size: 34px; line-height: 1.08; font-weight: 600;
+  /* The one display face in the module, as on ESS Today and the Wall of
+   * Fame: Fraunces through --wof-serif where the app loads it, a book serif
+   * where it does not. Only the hero title wears it. */
+  font-family: var(--wof-serif, 'Fraunces', 'Iowan Old Style', Georgia, serif);
+  letter-spacing: -.02em; color: var(--pms-hero-ink); text-wrap: balance;
+}
+.pms .pms-hero h2 { font-size: 30px; }
+.pms .pms-hero-sub {
+  margin-top: 6px; font-size: 14px; color: var(--pms-hero-soft); max-width: 72ch; line-height: 1.55;
+}
+.pms .pms-hero-sub strong { color: var(--pms-hero-ink); font-weight: 700; }
+.pms .pms-hero-chips { display: flex; flex-wrap: wrap; gap: 8px; margin-top: 14px; }
+.pms .pms-hero-chip {
+  display: inline-flex; align-items: center; gap: 6px; white-space: nowrap;
+  padding: 5px 11px; border-radius: 999px; font-size: 12px; font-weight: 600;
+  background: var(--pms-hero-chip); color: var(--pms-hero-ink);
+  box-shadow: inset 0 0 0 1px var(--pms-hero-line);
+  backdrop-filter: blur(6px);
+}
+.pms .pms-hero-chip.pms-live::before {
+  content: ''; width: 8px; height: 8px; border-radius: 50%;
+  background: var(--ez-positive);
+  box-shadow: 0 0 0 0 color-mix(in oklab, var(--ez-positive) 60%, transparent);
+  animation: pmsLive 2.2s ease-out infinite;
+}
+@keyframes pmsLive {
+  0%   { box-shadow: 0 0 0 0 color-mix(in oklab, var(--ez-positive) 55%, transparent); }
+  70%  { box-shadow: 0 0 0 7px transparent; }
+  100% { box-shadow: 0 0 0 0 transparent; }
+}
+/* The numbers on the right of the band. Glass tiles: legible on the sweep,
+ * and plainly a summary rather than something to click. */
+.pms .pms-hero-kpis {
+  display: grid; grid-template-columns: repeat(4, minmax(92px, 1fr)); gap: 8px;
+  flex: 0 1 520px; min-width: 0;
+}
+.pms .pms-hero-kpi {
+  padding: 10px 12px; border-radius: 14px;
+  background: var(--pms-hero-chip); box-shadow: inset 0 0 0 1px var(--pms-hero-line);
+  backdrop-filter: blur(8px); min-width: 0;
+}
+.pms .pms-hero-kpi .pms-hk-v {
+  font-size: 22px; font-weight: 700; line-height: 1.1; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; color: var(--pms-hero-ink);
+}
+.pms .pms-hero-kpi .pms-hk-l {
+  margin-top: 3px; font-size: 11px; font-weight: 600; color: var(--pms-hero-soft);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.pms .pms-hero-kpi .pms-hk-bar {
+  margin-top: 8px; height: 4px; border-radius: 4px; overflow: hidden;
+  background: color-mix(in oklab, var(--ez-on-dark) 16%, transparent);
+}
+.pms .pms-hero-kpi .pms-hk-bar > span {
+  display: block; height: 100%; border-radius: 4px; background: var(--pms-hero-ink);
+}
+@media (max-width: 900px) {
+  .pms .pms-hero { padding: 20px 18px; }
+  .pms .pms-hero h1 { font-size: 24px; }
+  .pms .pms-hero-kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); flex-basis: 100%; }
+}
+
+/* ── the section rail ─────────────────────────────────────────────────────
+ *
+ * Eleven tabs as one underline strip read as eleven competing words. As a
+ * rail of icon pills, grouped by what HR is doing, the eye finds the group
+ * first and the tab second. Still <button>s with aria-current, so nothing
+ * about how a tab is chosen changed.
+ */
+.pms .pms-nav {
+  display: flex; gap: 6px; align-items: stretch; flex-wrap: wrap;
+  padding: 6px; margin: 0 0 8px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: var(--pms-r-lg); box-shadow: var(--pms-card-shadow);
+}
+.pms .pms-nav-group {
+  display: flex; gap: 2px; align-items: center; flex-wrap: wrap;
+  padding-right: 10px;
+}
+.pms .pms-nav-group:last-child { padding-right: 0; }
+.pms .pms-nav-label {
+  font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--ez-faint); padding: 0 6px 0 8px; white-space: nowrap;
+}
+.pms .pms-nav button {
+  display: inline-flex; align-items: center; gap: 7px;
+  height: 36px; padding: 0 12px; border: 0;
+  border-radius: 999px !important;
+  background: transparent; color: var(--ez-muted);
+  font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.pms .pms-nav button svg { opacity: .8; }
+.pms .pms-nav button:hover { background: var(--ez-sunken); color: var(--ez-ink); }
+.pms .pms-nav button.on {
+  background: var(--ez-brand); color: var(--ez-on-accent);
+  box-shadow: 0 4px 12px -6px var(--ez-brand);
+}
+.pms .pms-nav button.on svg { opacity: 1; }
+.pms .pms-nav .pms-nav-count {
+  min-width: 20px; height: 20px; padding: 0 6px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
+  background: var(--ez-brand-tint); color: var(--ez-brand-deep);
+  font-variant-numeric: tabular-nums;
+}
+.pms .pms-nav button.on .pms-nav-count {
+  background: color-mix(in oklab, var(--ez-on-accent) 22%, transparent); color: var(--ez-on-accent);
+}
+@media (max-width: 900px) {
+  .pms .pms-nav { flex-wrap: nowrap; overflow-x: auto; scrollbar-width: none; }
+  .pms .pms-nav::-webkit-scrollbar { display: none; }
+  .pms .pms-nav-group { flex-wrap: nowrap; }
+  .pms .pms-nav-label { display: none; }
+}
+
+/* What the tab is FOR, on the page rather than in a tooltip: a title
+ * attribute is invisible to touch and to anyone not hovering. */
+.pms .pms-tabhint {
+  display: block; font-size: 12px; color: var(--ez-muted); margin: 2px 4px 16px;
+}
+.pms .pms-tabhint::first-letter { text-transform: uppercase; }
+
+
+/* The scope switch on the employee side — Me / My team / My department.
+ * A segmented track, because the three are one choice, not three buttons. */
+.pms .pms-switch {
+  display: inline-flex; gap: 3px; padding: 4px; margin: 4px 0 12px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  border-radius: 999px; max-width: 100%; overflow-x: auto;
+}
+.pms .pms-switch .chip {
+  display: inline-flex; align-items: center; gap: 7px; min-width: 0;
+  height: 34px; padding: 0 16px; border: 0; border-radius: 999px !important;
+  background: transparent; color: var(--ez-muted); box-shadow: none;
+  font: inherit; font-size: 13px; font-weight: 600; white-space: nowrap; cursor: pointer;
+  transition: background .16s ease, color .16s ease, box-shadow .16s ease;
+}
+.pms .pms-switch .chip:hover:not(.sel) { color: var(--ez-ink); background: transparent; border: 0; }
+.pms .pms-switch .chip.sel {
+  background: var(--ez-surface); color: var(--ez-brand-deep);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 10%, transparent),
+              0 4px 10px -4px color-mix(in oklab, var(--ez-brand-deep) 30%, transparent);
+}
+
+/* A short outcome line from the page shell — published, refused, committed.
+ * A toast-shaped card so it reads as news about the last action, not as one
+ * more section of the page. */
+.pms .pms-toast {
+  display: flex; gap: 12px; align-items: flex-start;
+  padding: 12px 14px; margin-bottom: 14px; border-radius: var(--pms-r-md);
+  background: var(--ez-surface); border: 1px solid var(--ez-brand-edge);
+  box-shadow: var(--pms-card-lift);
+  animation: pmsToastIn .28s cubic-bezier(.22,1,.36,1) both;
+}
+.pms .pms-toast .pms-toast-ico {
+  width: 28px; height: 28px; border-radius: 9px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--ez-brand) var(--pms-grad-brand); color: var(--ez-on-accent);
+}
+.pms .pms-toast .pms-toast-body { flex: 1 1 auto; min-width: 0; font-size: 13px; line-height: 1.55; color: var(--ez-ink-soft); padding-top: 3px; }
+.pms .pms-toast .pms-toast-x {
+  flex: 0 0 auto; height: 28px; padding: 0 10px; border: 1px solid var(--ez-line);
+  background: var(--ez-surface); color: var(--ez-muted); font: inherit; font-size: 12px;
+  font-weight: 600; cursor: pointer;
+}
+.pms .pms-toast .pms-toast-x:hover { color: var(--ez-ink); border-color: var(--ez-line-strong); }
+@keyframes pmsToastIn { from { opacity: 0; transform: translateY(-6px) } to { opacity: 1; transform: none } }
+
+/* The employee's cycle header: the hero, with the stage track on a white
+ * panel that overlaps its lower edge — so the two read as one object, the
+ * period and where you are in it. */
+.pms .pms-cycle { margin-bottom: 16px; }
+.pms .pms-hero.pms-hero-cycle { padding-bottom: 54px; margin-bottom: 0; align-items: flex-start; }
+.pms .pms-cycle-track {
+  position: relative; margin: -40px 14px 12px; padding: 16px 18px 14px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: var(--pms-r-lg); box-shadow: var(--pms-card-lift);
+}
+.pms .pms-cycle-track-head {
+  display: flex; justify-content: space-between; align-items: baseline; gap: 10px;
+  flex-wrap: wrap; margin-bottom: 14px;
+}
+.pms .pms-cycle-track-t {
+  font-size: 12px; font-weight: 600; letter-spacing: 0; text-transform: none;
+  color: var(--ez-muted);
+}
+@media (max-width: 720px) {
+  .pms .pms-cycle-track { margin: -40px 8px 12px; padding: 14px; }
+}
+
+/* Loading, shaped like what is coming rather than the word "Loading…". */
+.pms .pms-skel {
+  display: grid; gap: 10px; padding: 18px; margin-bottom: 14px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line); border-radius: var(--pms-r-lg);
+}
+.pms .pms-skel > i {
+  display: block; height: 12px; border-radius: 6px;
+  background: linear-gradient(90deg, var(--ez-sunken) 25%, var(--ez-brand-tint) 50%, var(--ez-sunken) 75%);
+  background-size: 200% 100%; animation: ezShimmer 1.2s infinite;
+}
+.pms .pms-skel > i:nth-child(1) { width: 34%; height: 16px; }
+.pms .pms-skel > i:nth-child(2) { width: 82%; }
+.pms .pms-skel > i:nth-child(3) { width: 64%; }
+
+/* A plain-surface notice card used by the shell (no period, module pending,
+ * coverage). Tone sets the edge and the icon tile. */
+.pms .pms-note {
+  position: relative; display: flex; gap: 14px; align-items: flex-start;
+  padding: 18px 20px; margin-bottom: 14px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: var(--pms-r-lg); box-shadow: var(--pms-card-shadow);
+}
+.pms .pms-note.pms-warn { border-color: var(--ez-warning-edge); background: linear-gradient(180deg, var(--ez-warning-tint), var(--ez-surface) 70%); }
+.pms .pms-note.pms-crit { border-color: var(--ez-critical-edge); background: linear-gradient(180deg, var(--ez-critical-tint), var(--ez-surface) 70%); }
+.pms .pms-note-ico {
+  width: 38px; height: 38px; border-radius: 12px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--ez-brand-tint); color: var(--ez-brand-deep);
+  box-shadow: inset 0 0 0 1px var(--ez-brand-edge);
+}
+.pms .pms-note.pms-warn .pms-note-ico { background: var(--ez-warning-tint); color: var(--ez-warning); box-shadow: inset 0 0 0 1px var(--ez-warning-edge); }
+.pms .pms-note.pms-crit .pms-note-ico { background: var(--ez-critical-tint); color: var(--ez-critical); box-shadow: inset 0 0 0 1px var(--ez-critical-edge); }
+.pms .pms-note-t { font-size: 15px; font-weight: 700; color: var(--ez-ink); letter-spacing: -.01em; }
+.pms .pms-note-d { font-size: 13px; color: var(--ez-muted); margin-top: 4px; line-height: 1.6; max-width: 76ch; }
+
+/* Coverage rows on the Flow & Hierarchy tab and the pending screen. */
+.pms .pms-cov { display: grid; gap: 10px; margin-top: 12px; }
+.pms .pms-cov-row {
+  display: grid; grid-template-columns: 70px minmax(140px, 1fr) 96px minmax(180px, 1.2fr);
+  gap: 12px; align-items: center;
+  padding: 10px 12px; border-radius: var(--pms-r-md);
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+}
+.pms .pms-cov-row .pms-cov-k { font-size: 13px; font-weight: 700; color: var(--ez-ink); }
+.pms .pms-cov-row .pms-cov-bar { height: 8px; border-radius: 99px; background: var(--ez-surface); overflow: hidden; box-shadow: inset 0 0 0 1px var(--ez-line); }
+.pms .pms-cov-row .pms-cov-bar > span { display: block; height: 100%; border-radius: 99px; }
+.pms .pms-cov-row .pms-cov-n { font-size: 13px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.pms .pms-cov-row .pms-cov-m { font-size: 11px; color: var(--ez-faint); }
+@media (max-width: 720px) {
+  .pms .pms-cov-row { grid-template-columns: 60px 1fr 80px; }
+  .pms .pms-cov-row .pms-cov-m { grid-column: 1 / -1; }
+}
+
+/* The open tab's own header on the HR dashboard: what this screen is and
+ * what it is for, said once at the top rather than in a tooltip. */
+.pms .pms-pagehead {
+  display: flex; gap: 14px; align-items: center; margin: 20px 2px 18px;
+}
+.pms .pms-pagehead-ico {
+  width: 44px; height: 44px; border-radius: 14px; flex: 0 0 auto;
+  display: grid; place-items: center;
+  background: var(--ez-brand-tint); color: var(--ez-brand-deep);
+  box-shadow: inset 0 0 0 1px var(--ez-brand-edge);
+}
+.pms .pms-pagehead-t {
+  margin: 0; font-size: 22px; font-weight: 700; letter-spacing: -.02em; color: var(--ez-ink); line-height: 1.2;
+}
+.pms .pms-pagehead-d { font-size: 13px; color: var(--ez-muted); margin-top: 2px; }
+.pms .pms-pagehead-d::first-letter { text-transform: uppercase; }
+
+/* The admin panels' own result line (Note in AdminEditor). Edition 1 never
+ * styled .note, so "Saved" and a refusal looked like the text around them. */
+/* THE DOT IS POSITIONED, NOT A FLEX ITEM.
+   A first version made this a flex row so the dot could sit beside the text.
+   But `Note` takes arbitrary inline children, and flex turns every one of
+   them into a flex item: the chain builder's empty state —
+   "…build a chain <i>and</i> select it on a policy — see <b>Policy rules</b>."
+   — came out as four columns with 10px gutters and the full stop orphaned at
+   the far right. Absolute positioning keeps the dot where it was and lets
+   the sentence flow as a sentence. */
+.pms .note.good, .pms .note.bad, .pms .note.warn {
+  position: relative; display: block;
+  margin-top: 12px; padding: 10px 14px 10px 32px; border-radius: 12px;
+  font-size: 13px; line-height: 1.55; border: 1px solid var(--ez-line);
+}
+.pms .note.good::before, .pms .note.bad::before, .pms .note.warn::before {
+  content: ''; position: absolute; left: 14px; top: 16px;
+  width: 8px; height: 8px; border-radius: 50%; background: currentColor;
+}
+.pms .note.good { background: var(--ez-positive-tint); border-color: var(--ez-positive-edge); color: var(--ez-positive); }
+.pms .note.bad  { background: var(--ez-critical-tint); border-color: var(--ez-critical-edge); color: var(--ez-critical); }
+.pms .note.warn { background: var(--ez-warning-tint);  border-color: var(--ez-warning-edge);  color: var(--ez-warning); }
+
+/* ── Setup & Controls, as a settings page ─────────────────────────────────
+ *
+ * Eight sections in one strip made the admin side read as eight equal tabs.
+ * As a rail down the left, grouped into rules, libraries and operations,
+ * each with a line on what it controls and how many rows it holds, the HR
+ * team finds the section by what they want to change.
+ */
+.pms .pms-settings {
+  display: grid; grid-template-columns: 284px minmax(0, 1fr); gap: 20px; align-items: start;
+}
+.pms .pms-settings-rail {
+  position: sticky; top: 12px;
+  display: grid; gap: 14px; padding: 12px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: var(--pms-r-lg); box-shadow: var(--pms-card-shadow);
+}
+.pms .pms-settings-group { display: grid; gap: 2px; }
+.pms .pms-settings-glabel {
+  font-size: 12px; font-weight: 600; color: var(--ez-faint); padding: 4px 10px 6px;
+}
+.pms .pms-settings-rail button {
+  display: grid; grid-template-columns: 34px 1fr auto; gap: 10px; align-items: center;
+  width: 100%; padding: 9px 10px; border: 0; text-align: left; cursor: pointer;
+  background: transparent; color: var(--ez-ink-soft); font: inherit;
+  border-radius: 12px !important;
+  transition: background .15s ease, color .15s ease;
+}
+.pms .pms-settings-rail button:hover { background: var(--ez-sunken); color: var(--ez-ink); }
+.pms .pms-settings-rail button.on { background: var(--ez-brand-tint); color: var(--ez-brand-deep); }
+.pms .pms-settings-ico {
+  width: 34px; height: 34px; border-radius: 10px; display: grid; place-items: center;
+  background: var(--ez-sunken); color: var(--ez-muted);
+}
+.pms .pms-settings-rail button.on .pms-settings-ico { background: var(--ez-brand); color: var(--ez-on-accent); }
+.pms .pms-settings-txt { display: grid; min-width: 0; }
+.pms .pms-settings-name { font-size: 13px; font-weight: 600; line-height: 1.3; }
+.pms .pms-settings-blurb {
+  font-size: 11px; color: var(--ez-muted); line-height: 1.4; margin-top: 2px;
+}
+.pms .pms-settings-n {
+  min-width: 24px; height: 22px; padding: 0 7px; border-radius: 999px;
+  display: inline-grid; place-items: center; font-size: 11px; font-weight: 700;
+  font-variant-numeric: tabular-nums; background: var(--ez-sunken); color: var(--ez-muted);
+}
+.pms .pms-settings-rail button.on .pms-settings-n { background: var(--ez-surface); color: var(--ez-brand-deep); }
+.pms .pms-settings-body { min-width: 0; }
+.pms .pms-settings-head {
+  display: flex; gap: 14px; align-items: center; margin: 2px 2px 16px;
+}
+.pms .pms-settings-head-ico {
+  width: 44px; height: 44px; border-radius: 14px; flex: 0 0 auto; display: grid; place-items: center;
+  background: var(--ez-brand); color: var(--ez-on-accent); box-shadow: 0 8px 18px -10px var(--ez-brand);
+}
+.pms .pms-settings-head-t { font-size: 20px; font-weight: 700; letter-spacing: -.015em; color: var(--ez-ink); }
+.pms .pms-settings-head-d { font-size: 13px; color: var(--ez-muted); margin-top: 1px; }
+@media (max-width: 1000px) {
+  .pms .pms-settings { grid-template-columns: 1fr; }
+  .pms .pms-settings-rail {
+    position: static; display: flex; gap: 6px; overflow-x: auto; padding: 8px;
+  }
+  .pms .pms-settings-group { display: flex; gap: 4px; }
+  .pms .pms-settings-glabel, .pms .pms-settings-blurb { display: none; }
+  .pms .pms-settings-rail button { grid-template-columns: 28px auto auto; white-space: nowrap; width: auto; }
+  .pms .pms-settings-ico { width: 28px; height: 28px; }
+}
+
+/* The employee's own card on My Dashboard: who they are, where they stand,
+ * and who reviews them, in place of a second copy of the cycle track. */
+.pms .pms-profile { padding: 18px 20px; }
+.pms .pms-profile-main {
+  display: grid; grid-template-columns: auto 1fr minmax(180px, 240px); gap: 16px; align-items: center;
+}
+.pms .pms-profile-ava { width: 52px; height: 52px; border-radius: 16px; font-size: 17px; }
+.pms .pms-profile-name { font-size: 18px; font-weight: 700; color: var(--ez-ink); letter-spacing: -.015em; }
+.pms .pms-profile-name span { font-size: 13px; font-weight: 600; color: var(--ez-muted); margin-left: 6px; letter-spacing: 0; }
+.pms .pms-profile-now { display: grid; gap: 3px; }
+.pms .pms-profile-now-t { font-size: 13px; font-weight: 700; color: var(--ez-brand-deep); }
+.pms .pms-profile-now .bar { margin-top: 4px; }
+.pms .pms-profile-line {
+  display: flex; flex-wrap: wrap; align-items: center; gap: 6px;
+  margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--ez-line);
+}
+.pms .pms-profile-line-k { font-size: 12px; color: var(--ez-muted); margin-right: 4px; }
+.pms .pms-profile-step { display: inline-flex; align-items: center; gap: 6px; }
+.pms .pms-profile-sep { color: var(--ez-faint); font-weight: 700; }
+.pms .pms-profile-chip {
+  display: inline-flex; gap: 6px; align-items: center; padding: 4px 11px; border-radius: 999px;
+  font-size: 12px; color: var(--ez-ink-soft); background: var(--ez-sunken); border: 1px solid var(--ez-line);
+}
+.pms .pms-profile-chip b { font-weight: 700; color: var(--ez-muted); font-size: 11px; }
+.pms .pms-profile-chip.pms-you { background: var(--ez-brand-tint); color: var(--ez-brand-deep); border-color: var(--ez-brand-edge); font-weight: 700; }
+@media (max-width: 720px) {
+  .pms .pms-profile-main { grid-template-columns: auto 1fr; }
+  .pms .pms-profile-now { grid-column: 1 / -1; }
+}
+
+/* ── the KRA form ─────────────────────────────────────────────────────────
+ *
+ * The set is written one KRA at a time, so each KRA is a card: its number,
+ * the objective at full width, the measure under it, and — when the stage
+ * asks — the employee's own assessment in a tinted band at its foot. The
+ * header above shows where the 100 points of weightage went.
+ */
+.pms .pms-kmeter {
+  display: grid; grid-template-columns: auto minmax(0, 1fr) auto; gap: 20px; align-items: center;
+  padding: 16px 20px; margin-bottom: 16px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: var(--pms-r-lg); box-shadow: var(--pms-card-shadow);
+}
+.pms .pms-kmeter-total {
+  width: 92px; height: 92px; border-radius: 50%; display: grid; place-content: center; text-align: center;
+  background: var(--ez-sunken); box-shadow: inset 0 0 0 6px var(--ez-warning-tint);
+}
+.pms .pms-kmeter.is-good .pms-kmeter-total { box-shadow: inset 0 0 0 6px var(--ez-positive-tint); }
+.pms .pms-kmeter.is-bad  .pms-kmeter-total { box-shadow: inset 0 0 0 6px var(--ez-critical-tint); }
+.pms .pms-kmeter-n {
+  font-size: 28px; font-weight: 700; line-height: 1; letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; color: var(--ez-warning);
+}
+.pms .pms-kmeter.is-good .pms-kmeter-n { color: var(--ez-positive); }
+.pms .pms-kmeter.is-bad  .pms-kmeter-n { color: var(--ez-critical); }
+.pms .pms-kmeter-n span { font-size: 13px; font-weight: 600; color: var(--ez-faint); letter-spacing: 0; }
+.pms .pms-kmeter-l { font-size: 11px; color: var(--ez-muted); margin-top: 4px; }
+.pms .pms-kmeter-mid { min-width: 0; }
+.pms .pms-kmeter-bar {
+  display: flex; gap: 3px; height: 30px; padding: 3px; border-radius: 10px;
+  background: var(--ez-sunken); box-shadow: inset 0 0 0 1px var(--ez-line); overflow: hidden;
+}
+.pms .pms-kmeter-bar > span {
+  min-width: 18px; border-radius: 7px; display: grid; place-items: center;
+  transition: flex-grow .3s cubic-bezier(.22,1,.36,1);
+}
+.pms .pms-kmeter-bar > span i {
+  font-style: normal; font-size: 11px; font-weight: 700; color: var(--ez-on-accent);
+  font-variant-numeric: tabular-nums; white-space: nowrap; overflow: hidden; padding: 0 4px;
+}
+.pms .pms-kmeter-bar > span.pms-kmeter-gap {
+  background: repeating-linear-gradient(135deg, transparent 0 6px, var(--ez-line) 6px 7px);
+}
+.pms .pms-kmeter-says { display: flex; flex-wrap: wrap; gap: 4px 12px; margin-top: 9px; font-size: 13px; }
+.pms .pms-kmeter-says b { color: var(--ez-ink); font-weight: 700; }
+.pms .pms-kmeter-says span { color: var(--ez-muted); }
+.pms .pms-kmeter-says .pms-kmeter-rated {
+  padding: 1px 10px; border-radius: 999px; font-weight: 600; font-size: 12px;
+  background: var(--ez-warning-tint); color: var(--ez-warning);
+}
+.pms .pms-kmeter-says .pms-kmeter-rated.is-done { background: var(--ez-positive-tint); color: var(--ez-positive); }
+@media (max-width: 720px) {
+  .pms .pms-kmeter { grid-template-columns: auto 1fr; }
+  .pms .pms-kmeter > .btn { grid-column: 1 / -1; }
+  .pms .pms-kmeter-total { width: 76px; height: 76px; }
+}
+
+.pms .pms-klist { display: grid; gap: 12px; }
+/* Locked, the KRA is a record rather than a form: the values print as text
+ * on the card, with no field boxes inviting a click that will do nothing. */
+.pms .pms-kra.is-locked .pms-kra-top input[readonly],
+.pms .pms-kra.is-locked .pms-kra-fields input[readonly],
+.pms .pms-kra.is-locked .pms-kra-fields select:disabled {
+  background: transparent; border-color: transparent; padding-left: 0; min-height: 0;
+  color: var(--ez-ink); cursor: default; box-shadow: none; opacity: 1;
+  background-image: none;
+}
+.pms .pms-kra.is-locked .pms-kra-wbox input[readonly] { padding-right: 22px; }
+.pms .pms-kra.is-locked .pms-kra-wbox > span { right: 2px; }
+.pms .pms-kra {
+  position: relative; padding: 16px 18px 16px; overflow: hidden;
+  background: var(--ez-surface); border: 1px solid var(--ez-line); border-radius: 14px;
+  transition: border-color .15s ease, box-shadow .15s ease;
+}
+.pms .pms-kra:focus-within { border-color: var(--ez-brand-edge); box-shadow: 0 0 0 4px color-mix(in oklab, var(--ez-brand) 8%, transparent); }
+.pms .pms-kra::before {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--kra-c, var(--ez-brand));
+}
+.pms .pms-kra.is-thin { border-color: var(--ez-critical-edge); background: color-mix(in oklab, var(--ez-critical-tint) 40%, var(--ez-surface)); }
+.pms .pms-kra label, .pms .pms-kra .pms-kra-flabel {
+  display: block; font-size: 12px; font-weight: 600; color: var(--ez-muted); margin-bottom: 5px;
+}
+.pms .pms-kra-top {
+  display: grid; grid-template-columns: 36px minmax(0, 1fr) 112px 32px; gap: 14px; align-items: end;
+}
+.pms .pms-kra.is-locked .pms-kra-top { grid-template-columns: 36px minmax(0, 1fr) 112px; }
+.pms .pms-kra-no {
+  width: 36px; height: 36px; border-radius: 11px; display: grid; place-items: center; margin-bottom: 3px;
+  /* The KRA's own shade — the same one its segment wears in the bar above. */
+  background: var(--kra-c, var(--ez-brand)); color: var(--ez-on-accent); font-weight: 700; font-size: 14px;
+  box-shadow: 0 6px 14px -8px var(--kra-c, var(--ez-brand)); font-variant-numeric: tabular-nums;
+}
+.pms .pms-kra-title input { font-size: 15px; font-weight: 600; min-height: 42px; }
+.pms .pms-kra-wbox { position: relative; }
+.pms .pms-kra-wbox input {
+  padding-right: 30px; text-align: right; font-size: 15px; font-weight: 700; min-height: 42px;
+  font-variant-numeric: tabular-nums;
+}
+.pms .pms-kra-wbox > span {
+  position: absolute; right: 12px; top: 50%; transform: translateY(-50%);
+  font-size: 13px; font-weight: 600; color: var(--ez-faint); pointer-events: none;
+}
+.pms .pms-kra-x {
+  width: 32px; height: 32px; padding: 0; margin-bottom: 5px; cursor: pointer;
+  border: 1px solid var(--ez-line); background: var(--ez-surface); color: var(--ez-muted);
+  font: inherit; font-size: 17px; line-height: 1; border-radius: 50% !important;
+  transition: background .15s ease, color .15s ease, border-color .15s ease;
+}
+.pms .pms-kra-x:hover:not(:disabled) { background: var(--ez-critical-tint); color: var(--ez-critical); border-color: var(--ez-critical-edge); }
+.pms .pms-kra-x:disabled { opacity: .4; cursor: not-allowed; }
+.pms .pms-kra-fields {
+  display: grid; grid-template-columns: 1.3fr 1fr 180px; gap: 12px; margin-top: 12px; padding-left: 50px;
+}
+.pms .pms-kra-self {
+  margin: 14px -18px -16px; padding: 14px 18px 16px 68px;
+  background: linear-gradient(180deg, var(--ez-sunken), color-mix(in oklab, var(--ez-sunken) 40%, var(--ez-surface)));
+  border-top: 1px dashed var(--ez-line-strong); border-radius: 0 0 13px 13px;
+}
+.pms .pms-kra-self-h {
+  display: flex; justify-content: space-between; align-items: center; gap: 10px; margin-bottom: 10px;
+  font-size: 13px; font-weight: 700; color: var(--ez-ink);
+}
+.pms .pms-kra-self-g { display: grid; grid-template-columns: 1fr 1.4fr auto; gap: 12px; align-items: start; }
+.pms .pms-kra-self-g textarea { min-height: 40px; height: 40px; padding: 9px 12px; resize: vertical; line-height: 1.45; }
+.pms .pms-kra.is-rated .pms-kra-self { background: linear-gradient(180deg, color-mix(in oklab, var(--ez-brand-tint) 70%, var(--ez-surface)), var(--ez-surface)); }
+/* Locked, the measure is a line of facts under the objective, not a row of
+ * captioned boxes: less to read, and the self assessment below it is what
+ * is left to do. */
+.pms .pms-kra.is-locked .pms-kra-fields { margin-top: 6px; gap: 6px 24px; }
+.pms .pms-kra.is-locked .pms-kra-fields > div { display: flex; align-items: baseline; gap: 8px; min-width: 0; }
+.pms .pms-kra.is-locked .pms-kra-fields label { margin: 0; white-space: nowrap; color: var(--ez-faint); }
+.pms .pms-kra.is-locked .pms-kra-fields input,
+.pms .pms-kra.is-locked .pms-kra-fields select { font-size: 13px; height: auto; padding-top: 0; padding-bottom: 0; }
+.pms .pms-kra.is-locked .pms-kra-title input { font-size: 16px; font-weight: 700; }
+.pms .pms-kra.is-locked .pms-kra-top label { margin-bottom: 0; }
+
+/* The send row stays in reach while a long set is being worked through —
+ * pinned to the foot of the viewport inside the card, as the review panel's
+ * action bar is. */
+.pms .pms-klist ~ .btnrow {
+  position: sticky; bottom: 0; z-index: var(--ez-z-local-1);
+  margin: 16px -20px -20px; padding: 14px 20px;
+  background: color-mix(in oklab, var(--ez-surface) 97%, transparent);
+  backdrop-filter: blur(8px); border-top: 1px solid var(--ez-line);
+  border-radius: 0 0 15px 15px;
+  box-shadow: 0 -10px 24px -18px color-mix(in oklab, var(--ez-brand-deep) 40%, transparent);
+}
+.pms .pms-kra-rate { display: flex; gap: 5px; }
+.pms .pms-kra-rate .btn.sm { min-width: 38px; min-height: 40px; padding: 0 10px; font-size: 14px; }
+.pms .pms-kempty {
+  text-align: center; padding: 34px 20px; border-radius: 14px;
+  border: 1px dashed var(--ez-line-strong); background: var(--ez-sunken);
+}
+.pms .pms-kempty-t { font-size: 15px; font-weight: 700; color: var(--ez-ink); margin-bottom: 4px; }
+@media (max-width: 900px) {
+  .pms .pms-kra-fields { grid-template-columns: 1fr 1fr; padding-left: 0; }
+  .pms .pms-kra-self { padding-left: 18px; }
+  .pms .pms-kra-self-g { grid-template-columns: 1fr; }
+}
+@media (max-width: 560px) {
+  .pms .pms-kra-top { grid-template-columns: 36px minmax(0, 1fr) 32px; }
+  .pms .pms-kra-top .pms-kra-w { grid-column: 2 / 3; }
+  .pms .pms-kra-fields { grid-template-columns: 1fr; }
+}
+
+/* ── the employee screen: sides and workspace ─────────────────────────────
+ *
+ * Each side of the review has a colour of its own, used only for its card,
+ * its workspace header and its active tab: Me in brand blue, My team in the
+ * info teal, My department in the positive green. The colour tells you which
+ * side you are on without reading a word.
+ */
+.pms .pms-scope-me,   .pms .pms-ws-me   { --scope-c: var(--ez-brand);    --scope-ink: var(--ez-brand-deep); --scope-tint: var(--ez-brand-tint);    --scope-edge: var(--ez-brand-edge); }
+.pms .pms-scope-team, .pms .pms-ws-team { --scope-c: var(--ez-info);     --scope-ink: var(--ez-info);       --scope-tint: var(--ez-info-tint);     --scope-edge: var(--ez-info-edge); }
+.pms .pms-scope-dept, .pms .pms-ws-dept { --scope-c: var(--ez-positive); --scope-ink: var(--ez-positive);   --scope-tint: var(--ez-positive-tint); --scope-edge: var(--ez-positive-edge); }
+
+.pms .pms-scopes { display: grid; gap: 12px; margin-bottom: 16px; }
+.pms .pms-scopes-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.pms .pms-scopes-3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+.pms .pms-scope {
+  position: relative; display: grid; grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 14px; align-items: center; text-align: left; cursor: pointer;
+  padding: 16px 18px; font: inherit; color: var(--ez-ink);
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 18px !important; box-shadow: var(--pms-card-shadow);
+  transition: border-color .18s ease, box-shadow .18s ease, background .18s ease, transform .18s ease;
+}
+.pms .pms-scope:hover { border-color: var(--scope-edge); box-shadow: var(--pms-card-lift); }
+.pms .pms-scope:active { transform: translateY(1px); }
+.pms .pms-scope-ico {
+  width: 46px; height: 46px; border-radius: 14px; display: grid; place-items: center;
+  background: var(--scope-tint); color: var(--scope-ink); box-shadow: inset 0 0 0 1px var(--scope-edge);
+}
+.pms .pms-scope-txt { display: grid; gap: 3px; min-width: 0; }
+.pms .pms-scope-t { font-size: 17px; font-weight: 700; letter-spacing: -.015em; line-height: 1.2; }
+.pms .pms-scope-d { font-size: 12px; color: var(--ez-muted); line-height: 1.4; }
+.pms .pms-scope-n {
+  align-self: start; white-space: nowrap; padding: 3px 10px; border-radius: 999px;
+  font-size: 12px; font-weight: 700; background: var(--ez-sunken); color: var(--ez-muted);
+}
+/* The chosen side: filled in its own colour, with a notch pointing down at
+ * the screen it opens. */
+.pms .pms-scope.on {
+  color: var(--ez-on-accent); border-color: transparent;
+  background:
+    radial-gradient(120% 140% at 100% 0%, color-mix(in oklab, var(--ez-on-accent) 16%, transparent), transparent 55%),
+    linear-gradient(135deg, var(--scope-c), color-mix(in oklab, var(--scope-c) 72%, var(--ez-dark-accent)));
+  box-shadow: 0 14px 30px -18px var(--scope-c);
+}
+.pms .pms-scope.on::after {
+  content: ''; position: absolute; left: 32px; bottom: -7px; width: 14px; height: 14px;
+  transform: rotate(45deg); border-radius: 3px;
+  background: color-mix(in oklab, var(--scope-c) 86%, var(--ez-dark-accent));
+}
+.pms .pms-scope.on .pms-scope-ico {
+  background: color-mix(in oklab, var(--ez-on-accent) 18%, transparent); color: var(--ez-on-accent);
+  box-shadow: inset 0 0 0 1px color-mix(in oklab, var(--ez-on-accent) 30%, transparent);
+}
+.pms .pms-scope.on .pms-scope-d { color: var(--ez-on-accent-soft); }
+.pms .pms-scope.on .pms-scope-n { background: color-mix(in oklab, var(--ez-on-accent) 20%, transparent); color: var(--ez-on-accent); }
+@media (max-width: 860px) {
+  .pms .pms-scopes-2, .pms .pms-scopes-3 { grid-template-columns: 1fr; }
+  .pms .pms-scope.on::after { display: none; }
+}
+
+/* The workspace header: the side's name, what the open tab is for, and the
+ * tabs along its lower edge — so the tabs read as belonging to that side. */
+.pms .pms-ws {
+  position: relative; overflow: hidden; margin: 4px 0 18px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: var(--pms-r-lg); box-shadow: var(--pms-card-shadow);
+}
+.pms .pms-ws::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 4px;
+  background: linear-gradient(90deg, var(--scope-c), color-mix(in oklab, var(--scope-c) 30%, transparent));
+}
+.pms .pms-ws-top { display: flex; gap: 14px; align-items: center; padding: 18px 20px 14px; }
+.pms .pms-ws-ico {
+  width: 44px; height: 44px; border-radius: 14px; flex: 0 0 auto; display: grid; place-items: center;
+  background: var(--scope-tint); color: var(--scope-ink); box-shadow: inset 0 0 0 1px var(--scope-edge);
+}
+.pms .pms-ws-t { margin: 0; font-size: 20px; font-weight: 700; letter-spacing: -.015em; color: var(--ez-ink); line-height: 1.2; }
+.pms .pms-ws-d { display: block; font-size: 13px; color: var(--ez-muted); margin-top: 2px; }
+.pms .pms-ws-d::first-letter { text-transform: uppercase; }
+.pms .pms-ws-n {
+  white-space: nowrap; padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 700;
+  background: var(--scope-tint); color: var(--scope-ink);
+}
+.pms .pms-ws-tabs {
+  display: flex; gap: 4px; padding: 0 12px; overflow-x: auto; scrollbar-width: none;
+  border-top: 1px solid var(--ez-line); background: color-mix(in oklab, var(--ez-sunken) 55%, var(--ez-surface));
+}
+.pms .pms-ws-tabs::-webkit-scrollbar { display: none; }
+.pms .pms-ws-tabs button {
+  position: relative; display: inline-flex; align-items: center; gap: 8px; white-space: nowrap;
+  height: 50px; padding: 0 14px; border: 0; background: transparent; cursor: pointer;
+  font: inherit; font-size: 13px; font-weight: 600; color: var(--ez-muted);
+  border-radius: 0 !important; transition: color .15s ease;
+}
+.pms .pms-ws-tabs button svg { opacity: .75; }
+.pms .pms-ws-tabs button::after {
+  content: ''; position: absolute; left: 10px; right: 10px; bottom: 0; height: 3px;
+  border-radius: 3px 3px 0 0; background: transparent; transition: background .15s ease;
+}
+.pms .pms-ws-tabs button:hover { color: var(--ez-ink); }
+.pms .pms-ws-tabs button:hover::after { background: var(--ez-line-strong); }
+.pms .pms-ws-tabs button.on { color: var(--scope-ink); }
+.pms .pms-ws-tabs button.on svg { opacity: 1; }
+.pms .pms-ws-tabs button.on::after { background: var(--scope-c); }
+@media (max-width: 720px) {
+  .pms .pms-ws-top { padding: 16px; }
+  .pms .pms-ws-n { display: none; }
+}
+
+/* ── tabs (secondary navigation) ──────────────────────────────────────────
+ *
+ * Under a hero and a rail, a second row of the same weight would compete.
+ * So the sub-navigation is a segmented control: a sunken track with the
+ * chosen segment raised onto the surface.
+ */
 .pms .tabs {
-  display: flex; gap: 4px; overflow-x: auto;
-  border-bottom: 1px solid var(--ez-line);
-  margin: 16px 0 18px;
+  display: flex; gap: 3px; overflow-x: auto;
+  padding: 4px; margin: 6px 0 18px;
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+  border-radius: 14px; scrollbar-width: thin;
 }
 .pms .tabs button {
-  background: transparent; border: 0; border-bottom: 2px solid transparent;
-  padding: 10px 13px; font: inherit; font-size: 13px; font-weight: 600;
+  background: transparent; border: 0;
+  padding: 8px 14px; font: inherit; font-size: 13px; font-weight: 600;
   color: var(--ez-muted); cursor: pointer; white-space: nowrap;
+  border-radius: 10px;
+  transition: background .15s ease, color .15s ease, box-shadow .15s ease;
 }
-.pms .tabs button:hover { color: var(--ez-ink); }
-.pms .tabs button.on { color: var(--ez-brand); border-bottom-color: var(--ez-brand); }
+.pms .tabs button:hover { color: var(--ez-ink); background: color-mix(in oklab, var(--ez-surface) 60%, transparent); }
+.pms .tabs button.on {
+  color: var(--ez-brand-deep); background: var(--ez-surface);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 10%, transparent),
+              0 4px 12px -6px color-mix(in oklab, var(--ez-brand-deep) 35%, transparent);
+}
 
 /* ── card ─────────────────────────────────────────────────────────────── */
 
 .pms .card {
   background: var(--ez-surface); border: 1px solid var(--ez-line);
-  border-radius: 14px; padding: 18px; margin-bottom: 16px; min-width: 0;
+  border-radius: var(--pms-r-lg); padding: 20px; margin-bottom: 16px; min-width: 0;
+  box-shadow: var(--pms-card-shadow);
 }
-.pms .card h3 { font-size: 14px; font-weight: 700; margin: 0 0 4px; }
-.pms .card .sub { font-size: 12px; color: var(--ez-muted); margin-bottom: 14px; }
-.pms .divider { height: 1px; background: var(--ez-line); margin: 14px 0; }
-.pms .k { font-size: 11px; color: var(--ez-muted); }
+.pms .card h3 {
+  font-size: 16px; font-weight: 700; margin: 0 0 4px; letter-spacing: -.01em;
+  color: var(--ez-ink); line-height: 1.4;
+}
+
+.pms .card .sub { font-size: 13px; color: var(--ez-muted); margin-bottom: 18px; line-height: 1.55; max-width: 88ch; }
+.pms .card > * + h3 { margin-top: 24px; padding-top: 20px; border-top: 1px solid var(--ez-line); }
+.pms .divider { height: 1px; background: var(--ez-line); margin: 16px 0; border: 0; }
+.pms .k { font-size: 12px; color: var(--ez-muted); line-height: 1.55; }
 
 /* ── grid ─────────────────────────────────────────────────────────────── */
 
-.pms .grid { display: grid; gap: 12px; }
+.pms .grid { display: grid; gap: 14px; }
 .pms .g6 { grid-template-columns: repeat(6, minmax(0,1fr)); }
 .pms .g5 { grid-template-columns: repeat(5, minmax(0,1fr)); }
 .pms .g4 { grid-template-columns: repeat(4, minmax(0,1fr)); }
@@ -130,22 +900,49 @@
 /* ── stat ─────────────────────────────────────────────────────────────── */
 
 .pms .stat {
+  position: relative; overflow: hidden;
   background: var(--ez-surface); border: 1px solid var(--ez-line);
-  border-radius: 12px; padding: 14px; min-width: 0;
+  border-radius: 14px; padding: 15px 16px 14px; min-width: 0;
+  box-shadow: var(--pms-card-shadow);
+  transition: transform .18s cubic-bezier(.22,1,.36,1), box-shadow .18s ease;
 }
+/* The tone stripe along the top edge. Neutral tiles get a hairline of the
+ * brand so a row of them still reads as one family. */
+.pms .stat::before {
+  content: ''; position: absolute; left: 0; right: 0; top: 0; height: 3px;
+  background: linear-gradient(90deg, var(--ez-brand-edge), transparent);
+}
+
 .pms .stat .lbl {
-  font-size: 11px; text-transform: uppercase; letter-spacing: .6px;
-  color: var(--ez-muted); font-weight: 700;
+  font-size: 12px; text-transform: none; letter-spacing: 0;
+  color: var(--ez-muted); font-weight: 600;
 }
 .pms .stat .val {
-  font-size: 21px; font-weight: 800; margin-top: 6px; color: var(--ez-ink);
-  font-variant-numeric: tabular-nums;
+  font-size: 28px; font-weight: 700; margin-top: 6px; color: var(--ez-ink);
+  font-variant-numeric: tabular-nums; letter-spacing: -.02em; line-height: 1.15;
 }
-.pms .stat .note { font-size: 11px; color: var(--ez-muted); margin-top: 3px; }
-.pms .stat.accent { background: var(--ez-brand); border-color: var(--ez-brand); }
+.pms .stat .note { font-size: 11px; color: var(--ez-muted); margin-top: 4px; line-height: 1.45; }
+.pms .stat.accent {
+  /* A SOLID COLOUR UNDER THE GRADIENT, not only the gradient.
+     Two reasons, and the second is the one that bit. If the gradient fails
+     to paint — an old engine, a forced-colours mode, a print — the tile
+     falls back to the brand fill and the on-accent text stays readable
+     rather than landing on the card surface beneath it. And a contrast
+     checker reads `background-color`, never `background-image`: without
+     this the audit walked past the gradient to the surface below, compared
+     white text against white, and reported 1.09:1 on text that is in fact
+     perfectly legible. A false failure that hid the real ones. */
+  background-color: var(--ez-brand);
+  background-image:
+    radial-gradient(90% 120% at 100% 0%, color-mix(in oklab, var(--ez-on-accent) 18%, transparent), transparent 60%),
+    var(--pms-grad-brand);
+  border-color: transparent; box-shadow: var(--ez-shadow-brand);
+}
+.pms .stat.accent::before { background: color-mix(in oklab, var(--ez-on-accent) 35%, transparent); }
 .pms .stat.accent .lbl { color: var(--ez-on-accent-soft); }
 .pms .stat.accent .val, .pms .stat.accent .note { color: var(--ez-on-accent); }
-.pms .stat.warn { background: var(--ez-warning-tint); border-color: var(--ez-warning); }
+.pms .stat.warn { background: linear-gradient(180deg, var(--ez-warning-tint), var(--ez-surface)); border-color: var(--ez-warning-edge); }
+.pms .stat.warn::before { background: var(--ez-warning); }
 .pms .val.good { color: var(--ez-positive); }
 .pms .val.wait { color: var(--ez-warning); }
 .pms .val.bad  { color: var(--ez-critical); }
@@ -153,65 +950,83 @@
 
 /* ── stepper ──────────────────────────────────────────────────────────── */
 
-.pms .stepper { display: flex; overflow-x: auto; padding: 6px 0; }
-.pms .step { flex: 1; min-width: 100px; text-align: center; position: relative; }
+.pms .stepper { display: flex; overflow-x: auto; padding: 8px 0 4px; }
+.pms .step { flex: 1; min-width: 104px; text-align: center; position: relative; }
 /* The connector is trimmed to the gap BETWEEN dots rather than run under
  * them. Full width means later siblings paint over earlier dots and the line
  * strikes through the numerals — 84 crossings, and z-index cannot fix it
  * because the overlap is between separate stacking siblings. */
 .pms .step::after {
-  content: ''; position: absolute; top: 13px; height: 2px;
-  left: calc(50% + 18px); right: calc(-50% + 18px);
+  content: ''; position: absolute; top: 14px; height: 3px; border-radius: 3px;
+  left: calc(50% + 20px); right: calc(-50% + 20px);
   background: var(--ez-line); z-index: 0;
 }
 .pms .step:last-child::after { display: none; }
 .pms .dot {
-  width: 26px; height: 26px; border-radius: 50%;
-  background: var(--ez-sunken); color: var(--ez-muted);
+  width: 30px; height: 30px; border-radius: 50%;
+  background: var(--ez-surface); color: var(--ez-muted);
   display: flex; align-items: center; justify-content: center;
-  margin: 0 auto 7px; font-size: 11px; font-weight: 800;
-  position: relative; z-index: 1; border: 2px solid var(--ez-canvas);
+  margin: 0 auto 8px; font-size: 12px; font-weight: 700;
+  position: relative; z-index: 1;
+  box-shadow: inset 0 0 0 2px var(--ez-line-strong);
 }
-.pms .step.done .dot { background: var(--ez-positive); color: var(--ez-on-accent); }
+.pms .step.done .dot { background: var(--ez-positive) var(--pms-grad-good); color: var(--ez-on-accent); box-shadow: 0 4px 10px -4px var(--ez-positive); }
 .pms .step.done::after { background: var(--ez-positive); }
 .pms .step.now .dot {
-  background: var(--ez-brand); color: var(--ez-on-accent);
-  box-shadow: 0 0 0 4px var(--ez-brand-tint);
+  background: var(--ez-brand) var(--pms-grad-brand); color: var(--ez-on-accent);
+  box-shadow: 0 0 0 5px var(--ez-brand-tint), 0 6px 14px -6px var(--ez-brand);
 }
-.pms .step .t { font-size: 11px; font-weight: 700; line-height: 1.3; }
-.pms .step .d { font-size: 10px; color: var(--ez-muted); margin-top: 2px; }
+.pms .step .t { font-size: 12px; font-weight: 700; line-height: 1.3; color: var(--ez-ink-soft); }
+.pms .step.now .t { color: var(--ez-brand-deep); }
+.pms .step .d { font-size: 11px; color: var(--ez-muted); margin-top: 2px; }
 
 /* ── table ────────────────────────────────────────────────────────────── */
 
 .pms .tblwrap {
-  overflow-x: auto; border: 1px solid var(--ez-line); border-radius: 12px;
-  min-width: 0; max-width: 100%;
+  overflow-x: auto; border: 1px solid var(--ez-line); border-radius: 14px;
+  min-width: 0; max-width: 100%; background: var(--ez-surface);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 4%, transparent);
+  /* The containing block for the .sr-only labels in the cells. Without it they are
+   * placed against the page instead, escape this scroller, and on a phone pushed
+   * the document out to the table's full width (~770px). */
+  position: relative;
 }
-.pms table { width: 100%; border-collapse: collapse; font-size: 12px; }
+.pms table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .pms th {
-  background: var(--ez-sunken); color: var(--ez-ink-soft); text-align: left;
-  padding: 9px 10px; font-size: 11px; text-transform: uppercase;
-  letter-spacing: .5px; border-bottom: 1px solid var(--ez-line-strong);
-  font-weight: 800; white-space: nowrap;
+  background: linear-gradient(180deg, var(--ez-sunken), color-mix(in oklab, var(--ez-sunken) 60%, var(--ez-surface)));
+  color: var(--ez-muted); text-align: left;
+  padding: 11px 14px; font-size: 12px; text-transform: none;
+  letter-spacing: 0; border-bottom: 1px solid var(--ez-line);
+  font-weight: 600; white-space: nowrap;
 }
 .pms td {
-  padding: 8px 10px; border-bottom: 1px solid var(--ez-line);
+  padding: 12px 14px; border-bottom: 1px solid var(--ez-line);
   vertical-align: middle; color: var(--ez-ink-soft);
 }
 .pms tbody tr:last-child td { border-bottom: 0; }
-.pms tbody tr:hover { background: var(--ez-brand-tint); }
-.pms tr.currentrow { background: var(--ez-brand-tint); }
-.pms tr.exitrow { background: var(--pms-row-exit); }
+.pms tbody tr { transition: background .12s ease; }
+.pms tbody tr:hover { background: color-mix(in oklab, var(--ez-brand-tint) 45%, transparent); }
+.pms tr.currentrow { background: var(--ez-brand-tint); box-shadow: inset 3px 0 0 var(--ez-brand); }
+.pms tr.exitrow { background: var(--pms-row-exit); box-shadow: inset 3px 0 0 var(--pms-exit-fg); }
 .pms tr.exitrow:hover { background: var(--pms-row-exit-hover); }
-.pms tr.noticerow { background: var(--pms-row-notice); }
+.pms tr.noticerow { background: var(--pms-row-notice); box-shadow: inset 3px 0 0 var(--pms-ramp-mid); }
 .pms tr.noticerow:hover { background: var(--pms-row-notice-hover); }
 .pms .num { text-align: right; font-variant-numeric: tabular-nums; }
+.pms td strong, .pms td b { color: var(--ez-ink); }
 
 /* ── pill ─────────────────────────────────────────────────────────────── */
 
+/* A leading dot in the pill's own colour, so the state reads at a glance
+ * even in a column of twelve. The word is still the signal; the dot is the
+ * shape the eye scans for. */
 .pms .pill {
-  display: inline-block; padding: 3px 9px; border-radius: 20px;
-  font-size: 11px; font-weight: 700; white-space: nowrap;
+  display: inline-flex; align-items: center; gap: 0;
+  padding: 3px 10px 3px 8px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap; line-height: 1.5;
+}
+.pms .pill::before {
+  content: ''; width: 6px; height: 6px; border-radius: 50%; flex: 0 0 auto;
+  margin-right: 6px; background: currentColor; opacity: .9;
 }
 .pms .p-green  { background: var(--ez-positive-tint); color: var(--ez-positive); }
 .pms .p-brand  { background: var(--ez-brand-tint);    color: var(--ez-brand-deep); }
@@ -223,8 +1038,9 @@
 
 .pms .rbadge {
   display: inline-flex; align-items: center; justify-content: center;
-  width: 26px; height: 26px; border-radius: 8px;
-  font-weight: 800; font-size: 12px; color: var(--ez-on-accent);
+  width: 28px; height: 28px; border-radius: 9px;
+  font-weight: 700; font-size: 12px; color: var(--ez-on-accent);
+  box-shadow: inset 0 -2px 0 color-mix(in oklab, black 14%, transparent);
 }
 .pms .r5 { background: var(--ez-positive); }
 .pms .r4 { background: var(--ez-brand); }
@@ -235,96 +1051,177 @@
 /* ── form ─────────────────────────────────────────────────────────────── */
 
 .pms label {
-  display: block; font-size: 11px; font-weight: 700; color: var(--ez-ink-soft);
-  text-transform: uppercase; letter-spacing: .5px; margin-bottom: 5px;
+  display: block; font-size: 12px; font-weight: 600; color: var(--ez-ink-soft);
+  text-transform: none; letter-spacing: 0; margin-bottom: 6px;
 }
+/* A CHECKBOX IS NOT A TEXT FIELD, and the field rule further down is written
+ * for text fields. Full width made the box eat its whole row, leaving about
+ * one character for the label beside it, broken one letter per line. This
+ * exemption comes first so the narrower rule wins at equal specificity. */
+.pms input[type="checkbox"], .pms input[type="radio"] {
+  width: auto; min-width: 0; flex: 0 0 auto;
+  padding: 0; margin: 0; border: 0; border-radius: 0;
+  accent-color: var(--ez-brand);
+  inline-size: 16px; block-size: 16px; margin-top: 2px; cursor: pointer;
+}
+
+/* A label that captions a control sits ABOVE it, small and tracked — that is
+ * what .pms label above is for. A label that WRAPS a checkbox is a sentence
+ * the person is agreeing to, and it has to read like one. */
+.pms label.checkline {
+  display: flex; gap: 10px; align-items: flex-start;
+  font-size: 13px; font-weight: 400; letter-spacing: normal;
+  text-transform: none; color: var(--ez-ink-soft);
+  margin-bottom: 0; line-height: 1.55; cursor: pointer;
+}
+.pms label.checkline > span, .pms label.checkline > div { min-width: 0; }
+.pms label.checkline b { font-weight: 700; color: var(--ez-ink); }
+
 .pms input, .pms select, .pms textarea {
-  width: 100%; padding: 8px 10px; border: 1px solid var(--ez-line);
-  border-radius: 9px; font-size: 13px; font-family: inherit;
+  width: 100%; min-height: 40px; padding: 9px 12px; border: 1px solid var(--ez-line-strong);
+  border-radius: 10px; font-size: 13px; font-family: inherit;
   background: var(--ez-surface); color: var(--ez-ink);
+  transition: border-color .15s ease, box-shadow .15s ease, background .15s ease;
+}
+.pms input::placeholder, .pms textarea::placeholder { color: var(--ez-faint); }
+.pms input:hover:not(:disabled), .pms select:hover:not(:disabled), .pms textarea:hover:not(:disabled) {
+  border-color: color-mix(in oklab, var(--ez-brand) 40%, var(--ez-line-strong));
+}
+.pms input:focus, .pms select:focus, .pms textarea:focus {
+  outline: none; border-color: var(--ez-brand);
+  box-shadow: 0 0 0 4px color-mix(in oklab, var(--ez-brand) 16%, transparent);
+}
+.pms input:disabled, .pms select:disabled, .pms textarea:disabled {
+  background: var(--ez-sunken); color: var(--ez-muted); cursor: not-allowed;
 }
 .pms input:focus-visible, .pms select:focus-visible, .pms textarea:focus-visible,
 .pms button:focus-visible {
   outline: 2px solid var(--ez-brand); outline-offset: 2px;
 }
-.pms textarea { resize: vertical; min-height: 62px; }
+.pms select {
+  appearance: none; -webkit-appearance: none; padding-right: 34px; cursor: pointer;
+  background-image: linear-gradient(45deg, transparent 50%, var(--ez-muted) 50%),
+                    linear-gradient(135deg, var(--ez-muted) 50%, transparent 50%);
+  background-position: calc(100% - 17px) 52%, calc(100% - 12px) 52%;
+  background-size: 5px 5px, 5px 5px; background-repeat: no-repeat;
+}
+.pms textarea { resize: vertical; min-height: 64px; line-height: 1.5; }
 
-/* A value that cannot be edited yet.
- *
- * Rendering these as <input readOnly> was the first attempt and it was wrong:
- * a bordered white box with a caret is a promise that you can type in it. An
- * admin clicks, types, nothing happens, and nothing on screen explains why.
- * This reads as a value — sunken, no field border — so the eye files it with
- * the label above it rather than with the controls beside it. */
+/* A read-only field reads as a value, not as a box waiting for typing. */
+.pms input[readonly], .pms textarea[readonly] {
+  background: var(--ez-sunken); border-style: dashed; color: var(--ez-ink-soft);
+}
+
+/* THE KRA TABLE, given room. Nine columns crushed into the card cut every
+ * title to "Grow secondary sa…". The columns now hold a readable minimum and
+ * the table scrolls inside its own wrapper instead — keyed on the aria-labels
+ * the inputs already carry, so no markup changed. */
+.pms td input[aria-label$=" title"]   { min-width: 220px; }
+.pms td input[aria-label$=" metric"]  { min-width: 150px; }
+.pms td input[aria-label$=" target"]  { min-width: 110px; }
+.pms td select[aria-label$=" category"] { min-width: 130px; }
+.pms td input[aria-label^="Achievement for"],
+.pms td input[aria-label^="Comment for"] { min-width: 200px; }
+.pms td .chips[role="radiogroup"] { flex-wrap: nowrap; }
+
+/* A value that cannot be edited yet. Not an <input readOnly>: a bordered
+ * white box with a caret is a promise that you can type in it. This reads
+ * as a value — sunken, no field border. */
 .pms .ro {
-  padding: 8px 10px; border-radius: 9px;
-  background: var(--ez-sunken); border: 1px solid transparent;
-  font-size: 13px; color: var(--ez-ink); min-height: 35px;
+  padding: 9px 12px; border-radius: 10px;
+  background: var(--ez-sunken); border: 1px dashed var(--ez-line-strong);
+  font-size: 13px; color: var(--ez-ink); min-height: 38px;
 }
 .pms .fld.locked .ro {
   background: var(--ez-critical-tint);
-  border-color: var(--ez-critical);
+  border: 1px solid var(--ez-critical-edge);
   color: var(--ez-critical); font-weight: 600;
 }
-.pms .fld { margin-bottom: 12px; min-width: 0; }
+.pms .fld { margin-bottom: 14px; min-width: 0; }
 .pms .fld.locked label { color: var(--ez-critical); }
 .pms .fld.locked select, .pms .fld.locked input { border-color: var(--ez-critical); }
 .pms .fld.locked .k { color: var(--ez-critical); margin-top: 5px; }
 
 /* ── button ───────────────────────────────────────────────────────────── */
 
+/* The runtime sheet in lib/ui forces every <button> to a 10px radius with
+ * !important, which is the radius these want anyway. Only the round and
+ * pill-shaped controls in this file have to fight it. */
 .pms .btn {
-  background: var(--ez-brand); color: var(--ez-on-accent); border: 0;
-  padding: 9px 16px; border-radius: 9px; font-size: 12px; font-weight: 700;
-  font-family: inherit; cursor: pointer;
-}
-.pms .btn:hover { background: var(--ez-brand-deep); }
-.pms .btn.ghost {
-  background: var(--ez-surface); color: var(--ez-brand);
+  display: inline-flex; align-items: center; justify-content: center; gap: 7px;
+  min-height: 36px; padding: 8px 16px;
+  background: var(--ez-brand); color: var(--ez-on-accent);
   border: 1px solid var(--ez-brand);
+  border-radius: 10px; font-size: 13px; font-weight: 600; line-height: 1.2;
+  font-family: inherit; cursor: pointer; white-space: nowrap;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-brand-deep) 30%, transparent);
+  transition: box-shadow .14s ease, background .14s ease, border-color .14s ease;
 }
-.pms .btn.ghost:hover { background: var(--ez-brand-tint); }
-.pms .btn.dark { background: var(--ez-dark); color: var(--ez-on-dark); }
-.pms .btn.red  { background: var(--ez-critical); }
-.pms .btn.sm   { padding: 5px 11px; font-size: 11px; }
+.pms .btn:hover:not(:disabled) {
+  background: var(--ez-brand-deep); border-color: var(--ez-brand-deep);
+  box-shadow: 0 6px 16px -8px var(--ez-brand);
+}
+.pms .btn:active:not(:disabled) { transform: translateY(1px); }
+.pms .btn.ghost {
+  background: var(--ez-surface); color: var(--ez-brand-deep);
+  border: 1px solid var(--ez-brand-edge); box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 6%, transparent);
+}
+.pms .btn.ghost:hover:not(:disabled) { background: var(--ez-brand-tint); border-color: var(--ez-brand); color: var(--ez-brand-deep); box-shadow: none; }
+.pms .btn.dark {
+  background: var(--ez-dark) linear-gradient(135deg, var(--ez-dark-soft), var(--ez-dark));
+  color: var(--ez-on-dark); border-color: transparent;
+  box-shadow: 0 6px 14px -8px var(--ez-dark);
+}
+.pms .btn.red  {
+  background: var(--ez-critical) linear-gradient(135deg, var(--ez-critical), color-mix(in oklab, var(--ez-critical) 80%, black));
+  color: var(--ez-on-accent); border-color: transparent;
+  box-shadow: 0 6px 14px -8px var(--ez-critical);
+}
+.pms .btn.ghost.red {
+  background: var(--ez-surface); color: var(--ez-critical); border-color: var(--ez-critical-edge);
+}
+.pms .btn.sm   { min-height: 30px; padding: 5px 12px; font-size: 12px; gap: 5px; }
 .pms .btn:disabled {
   background: var(--ez-sunken); color: var(--ez-faint);
-  cursor: not-allowed; border: 0;
+  cursor: not-allowed; border: 1px solid var(--ez-line); box-shadow: none; transform: none; filter: none;
 }
-.pms .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 14px; }
+.pms .btnrow { display: flex; gap: 8px; flex-wrap: wrap; margin-top: 16px; align-items: center; }
 
-.pms .chips { display: flex; gap: 4px; flex-wrap: wrap; }
+.pms .chips { display: flex; gap: 5px; flex-wrap: wrap; }
 .pms .chip {
-  min-width: 27px; height: 27px; border-radius: 8px;
-  border: 1px solid var(--ez-line); background: var(--ez-surface);
-  font-weight: 800; font-size: 12px; color: var(--ez-muted);
-  font-family: inherit; cursor: pointer; padding: 0 8px;
+  min-width: 32px; height: 32px; border-radius: 10px;
+  border: 1px solid var(--ez-line-strong); background: var(--ez-surface);
+  font-weight: 700; font-size: 13px; color: var(--ez-muted);
+  font-family: inherit; cursor: pointer; padding: 0 10px;
+  font-variant-numeric: tabular-nums;
 }
 .pms .chip.sel {
-  background: var(--ez-brand); border-color: var(--ez-brand);
-  color: var(--ez-on-accent);
+  background: var(--ez-brand) var(--pms-grad-brand); border-color: transparent;
+  color: var(--ez-on-accent); box-shadow: var(--ez-shadow-brand);
 }
 
 /* ── meters ───────────────────────────────────────────────────────────── */
 
 .pms .bar {
   height: 8px; background: var(--ez-sunken); border-radius: 20px;
-  overflow: hidden;
+  overflow: hidden; box-shadow: inset 0 0 0 1px var(--ez-line);
 }
 .pms .bar span {
-  display: block; height: 100%; background: var(--ez-brand); border-radius: 20px;
+  display: block; height: 100%; background: var(--ez-brand) var(--pms-grad-brand); border-radius: 20px;
+  transition: width .4s cubic-bezier(.22,1,.36,1);
 }
-.pms .bar.green span { background: var(--ez-positive); }
+.pms .bar.green span { background: var(--ez-positive) var(--pms-grad-good); }
 .pms .bar.amber span { background: var(--ez-warning); }
 .pms .bar.red   span { background: var(--ez-critical); }
 
 .pms .wmeter {
-  display: flex; align-items: center; gap: 12px;
-  background: var(--ez-sunken); border: 1px solid var(--ez-line);
-  border-radius: 12px; padding: 12px 14px; margin-bottom: 12px; flex-wrap: wrap;
+  display: flex; align-items: center; gap: 16px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 16px; padding: 14px 18px; margin-bottom: 14px; flex-wrap: wrap;
+  box-shadow: var(--pms-card-shadow);
 }
 .pms .wmeter .big {
-  font-size: 26px; font-weight: 800; min-width: 74px;
+  font-size: 30px; font-weight: 700; min-width: 74px; letter-spacing: -.02em;
   font-variant-numeric: tabular-nums;
 }
 .pms .ok  { color: var(--ez-positive); }
@@ -332,45 +1229,1106 @@
 
 /* ── banner ───────────────────────────────────────────────────────────── */
 
+/* The tone is one custom property, so the edge, the stripe and the icon tile
+ * agree. The icon is drawn from the tone with a mask; the glyph in the markup
+ * stays in the DOM (aria-hidden as before) but is not what is painted. */
 .pms .banner {
-  border-radius: 11px; padding: 11px 14px; font-size: 12px;
-  margin-bottom: 14px; display: flex; gap: 9px; align-items: flex-start;
+  --pms-tone: var(--ez-info); --pms-tone-tint: var(--ez-info-tint); --pms-tone-edge: var(--ez-info-edge);
+  --pms-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round'%3E%3Ccircle cx='10' cy='10' r='7.5'/%3E%3Cpath d='M10 9v5M10 6.2v.1'/%3E%3C/svg%3E");
+  position: relative; overflow: hidden;
+  border-radius: 14px; padding: 12px 16px 12px 14px; font-size: 13px; line-height: 1.55;
+  margin-bottom: 14px; display: flex; gap: 12px; align-items: flex-start;
+  background: linear-gradient(90deg, var(--pms-tone-tint), color-mix(in oklab, var(--pms-tone-tint) 45%, var(--ez-surface)));
+  border: 1px solid var(--pms-tone-edge); color: var(--ez-ink-soft);
 }
-.pms .banner b { font-weight: 700; }
-.pms .b-amber { background: var(--ez-warning-tint);  border: 1px solid var(--ez-warning);  color: var(--ez-warning); }
-.pms .b-brand { background: var(--ez-brand-tint);    border: 1px solid var(--ez-brand-edge); color: var(--ez-brand-deep); }
-.pms .b-green { background: var(--ez-positive-tint); border: 1px solid var(--ez-positive); color: var(--ez-positive); }
-.pms .b-red   { background: var(--ez-critical-tint); border: 1px solid var(--ez-critical); color: var(--ez-critical); }
-.pms .b-blue  { background: var(--ez-info-tint);     border: 1px solid var(--ez-info);     color: var(--ez-info); }
+.pms .banner::after {
+  content: ''; position: absolute; left: 0; top: 0; bottom: 0; width: 3px; background: var(--pms-tone);
+}
+.pms .banner > span[aria-hidden="true"]:first-child {
+  flex: 0 0 auto; width: 26px; height: 26px; border-radius: 8px; margin-top: -1px;
+  display: grid; place-items: center; position: relative;
+  font-size: 0; color: transparent; overflow: hidden;
+  background: color-mix(in oklab, var(--pms-tone) 14%, var(--ez-surface));
+  box-shadow: inset 0 0 0 1px var(--pms-tone-edge);
+}
+.pms .banner > span[aria-hidden="true"]:first-child::before {
+  content: ''; width: 16px; height: 16px; background: var(--pms-tone);
+  -webkit-mask: var(--pms-icon) center / contain no-repeat; mask: var(--pms-icon) center / contain no-repeat;
+}
+.pms .banner > div { min-width: 0; padding-top: 2px; }
+.pms .banner b { font-weight: 700; color: var(--ez-ink); }
+.pms .b-amber {
+  --pms-tone: var(--ez-warning); --pms-tone-tint: var(--ez-warning-tint); --pms-tone-edge: var(--ez-warning-edge);
+  --pms-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 3.2 2.6 16.2h14.8z'/%3E%3Cpath d='M10 8.2v3.6M10 14v.1'/%3E%3C/svg%3E");
+}
+.pms .b-brand {
+  --pms-tone: var(--ez-brand); --pms-tone-tint: var(--ez-brand-tint); --pms-tone-edge: var(--ez-brand-edge);
+  --pms-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M10 2.8l1.9 4.6 4.9.4-3.7 3.2 1.1 4.8L10 13.3l-4.2 2.5 1.1-4.8-3.7-3.2 4.9-.4z'/%3E%3C/svg%3E");
+}
+.pms .b-green {
+  --pms-tone: var(--ez-positive); --pms-tone-tint: var(--ez-positive-tint); --pms-tone-edge: var(--ez-positive-edge);
+  --pms-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Ccircle cx='10' cy='10' r='7.5'/%3E%3Cpath d='M6.6 10.2l2.3 2.3 4.6-4.9'/%3E%3C/svg%3E");
+}
+.pms .b-red {
+  --pms-tone: var(--ez-critical); --pms-tone-tint: var(--ez-critical-tint); --pms-tone-edge: var(--ez-critical-edge);
+  --pms-icon: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 20 20' fill='none' stroke='black' stroke-width='1.8' stroke-linecap='round' stroke-linejoin='round'%3E%3Crect x='4.5' y='9' width='11' height='8' rx='2'/%3E%3Cpath d='M7 9V6.8a3 3 0 0 1 6 0V9'/%3E%3C/svg%3E");
+}
+.pms .b-blue  {
+  --pms-tone: var(--ez-info); --pms-tone-tint: var(--ez-info-tint); --pms-tone-edge: var(--ez-info-edge);
+}
+/* Information is the quietest tone. A screen with three blue washes reads as
+ * three alarms; on the surface with only the stripe and the tile in colour,
+ * the warnings and refusals are what stand out. */
+.pms .banner.b-blue, .pms .banner:not(.b-amber):not(.b-green):not(.b-red):not(.b-brand) {
+  background: var(--ez-surface); border-color: var(--ez-line);
+}
 
 .pms .flowbox {
-  background: var(--ez-sunken); border: 1px dashed var(--ez-brand-edge);
-  border-radius: 11px; padding: 12px 14px; font-size: 12px;
+  background: linear-gradient(180deg, var(--ez-sunken), var(--ez-surface));
+  border: 1px dashed var(--ez-brand-edge);
+  border-radius: 14px; padding: 14px 16px; font-size: 12px;
   color: var(--ez-ink-soft); font-family: ui-monospace, Menlo, Consolas, monospace;
-  white-space: pre; overflow-x: auto; line-height: 1.7;
+  white-space: pre; overflow-x: auto; line-height: 1.75;
 }
 
 /* ── analytics bars ───────────────────────────────────────────────────── */
 
-.pms .abar { display: flex; align-items: center; gap: 9px; margin-bottom: 7px; }
-.pms .abar .nm { width: 150px; font-size: 12px; font-weight: 600; flex-shrink: 0; }
+.pms .abar { display: flex; align-items: center; gap: 12px; margin-bottom: 9px; }
+.pms .abar .nm { width: 160px; font-size: 12px; font-weight: 600; flex-shrink: 0; color: var(--ez-ink); }
 .pms .abar .tr {
-  flex: 1; height: 16px; background: var(--ez-sunken);
-  border-radius: 5px; position: relative; overflow: hidden;
+  flex: 1; height: 18px; background: var(--ez-sunken);
+  border-radius: 7px; position: relative; overflow: hidden;
+  box-shadow: inset 0 0 0 1px var(--ez-line);
 }
 .pms .abar .s {
-  position: absolute; left: 0; top: 0; height: 8px;
-  background: var(--ez-brand-edge); border-radius: 5px 5px 0 0;
+  position: absolute; left: 0; top: 0; height: 9px;
+  background: color-mix(in oklab, var(--ez-brand) 35%, var(--ez-brand-tint)); border-radius: 7px 7px 0 0;
 }
 .pms .abar .m {
-  position: absolute; left: 0; bottom: 0; height: 8px;
-  background: var(--ez-brand); border-radius: 0 0 5px 5px;
+  position: absolute; left: 0; bottom: 0; height: 9px;
+  background: var(--ez-brand) var(--pms-grad-brand); border-radius: 0 0 7px 7px;
 }
 .pms .abar .vv {
-  width: 76px; text-align: right; font-size: 11px; font-weight: 700;
-  font-variant-numeric: tabular-nums;
+  width: 80px; text-align: right; font-size: 12px; font-weight: 700;
+  font-variant-numeric: tabular-nums; color: var(--ez-ink);
 }
 
 @media (prefers-reduced-motion: reduce) {
   .pms * { transition: none !important; animation: none !important; }
+}
+
+/* ── the approval queue, as cards ─────────────────────────────────────────
+ *
+ * WHY THIS IS NOT A TABLE. A table is the right shape for COMPARING rows and
+ * the wrong shape for ACTING on one: the person and the one thing owed are
+ * the only two things that matter, and in a table they sat five columns
+ * apart. These are read one at a time and acted on one at a time.
+ */
+.pms .qcard {
+  display: grid; gap: 14px; padding: 16px;
+  grid-template-columns: auto 1fr auto;
+  align-items: start;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  border-radius: 16px; margin-bottom: 10px; min-width: 0;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 4%, transparent);
+  transition: border-color .15s ease, box-shadow .15s ease, transform .15s ease;
+}
+.pms .qcard:hover {
+  border-color: var(--ez-brand-edge);
+  box-shadow: var(--pms-card-shadow);
+}
+.pms .qcard:last-child { margin-bottom: 0; }
+/* The row washes the table had, kept so employment state still reads at a
+ * glance on the surface that replaced it. */
+.pms .qcard.exit   { background: var(--pms-row-exit); box-shadow: inset 4px 0 0 var(--pms-exit-fg); }
+.pms .qcard.notice { background: var(--pms-row-notice); box-shadow: inset 4px 0 0 var(--pms-ramp-mid); }
+@media (max-width: 680px) {
+  /* The action column drops under the body rather than squeezing the name
+   * into two characters a line. */
+  .pms .qcard { grid-template-columns: auto 1fr; }
+  .pms .qcard .qact { grid-column: 1 / -1; }
+}
+
+/* Initials. A face-shaped anchor for the eye, so a queue of eight is scanned
+ * by person rather than read line by line. */
+.pms .ava {
+  width: 42px; height: 42px; border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(135deg, var(--ez-brand-tint), color-mix(in oklab, var(--ez-info) 18%, var(--ez-surface)));
+  color: var(--ez-brand-deep);
+  box-shadow: inset 0 0 0 1px var(--ez-brand-edge);
+  font-weight: 700; font-size: 14px; letter-spacing: .3px;
+  flex: 0 0 auto; user-select: none;
+}
+.pms .qcard .nm { font-size: 15px; font-weight: 700; color: var(--ez-ink); letter-spacing: -.01em; }
+.pms .qcard .meta {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 4px; font-size: 12px; color: var(--ez-muted);
+}
+.pms .qact { display: grid; gap: 7px; justify-items: stretch; min-width: 160px; }
+
+/* ── the readiness checks ─────────────────────────────────────────────────
+ *
+ * The four things that decide whether a set can move, as four marks instead
+ * of four columns. Each says what it IS, not merely that it is green.
+ */
+.pms .checks { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
+.pms .chk {
+  display: inline-flex; align-items: center; gap: 6px;
+  padding: 3px 10px 3px 6px; border-radius: 999px;
+  font-size: 11px; font-weight: 600; white-space: nowrap;
+  background: var(--ez-sunken); color: var(--ez-muted);
+  border: 1px solid var(--ez-line);
+}
+.pms .chk .m {
+  font-weight: 800; font-size: 10px; line-height: 1;
+  width: 16px; height: 16px; border-radius: 50%; display: inline-grid; place-items: center;
+  background: color-mix(in oklab, currentColor 16%, transparent);
+}
+/* TWO THINGS SHARE THIS CLASS, and only one of them is a pill.
+   The rules above describe a small chip — 11px, nowrap, fully rounded.
+   AdminEditor also puts `chk` on its full-width checkbox ROWS, which carry
+   a bold title and a sentence under it. The pill's `white-space: nowrap`
+   reached those and stopped them wrapping: "The HR Head can build an
+   appraisal…" ran 65px past the right edge of the card, measured on the
+   HR Head authority panel.
+
+   A label is always the row; the pills are spans and divs. Both get
+   min-width:0 as well, because a flex child defaults to min-width:auto and
+   refuses to shrink below its longest unbreakable run however it wraps. */
+.pms label.chk { white-space: normal; }
+.pms label.chk > span { min-width: 0; }
+
+.pms .chk.on  { background: var(--ez-positive-tint); color: var(--ez-positive); border-color: var(--ez-positive-edge); }
+.pms .chk.off { background: var(--ez-warning-tint);  color: var(--ez-warning); border-color: var(--ez-warning-edge); }
+.pms .chk.bad { background: var(--ez-critical-tint); color: var(--ez-critical); border-color: var(--ez-critical-edge); }
+
+/* ── where it sits in the chain ───────────────────────────────────────────
+ *
+ * A rung that says "you" between the rung it came from and the rung it goes
+ * to answers the two questions an approver has — who looked at this before
+ * me, and who gets it when I let go — without opening anything.
+ */
+.pms .track {
+  display: flex; align-items: center; gap: 0; flex-wrap: wrap;
+  margin-top: 10px; font-size: 10px;
+}
+.pms .track .n {
+  padding: 3px 9px; border-radius: 999px; font-weight: 700;
+  background: var(--ez-sunken); color: var(--ez-muted); white-space: nowrap;
+  text-transform: uppercase; letter-spacing: .05em;
+  border: 1px solid var(--ez-line);
+}
+.pms .track .n.done { background: var(--ez-positive-tint); color: var(--ez-positive); border-color: var(--ez-positive-edge); }
+.pms .track .n.now  { background: var(--ez-brand) var(--pms-grad-brand); color: var(--ez-on-accent); border-color: transparent; box-shadow: var(--ez-shadow-brand); }
+.pms .track .sep { color: var(--ez-faint); padding: 0 5px; font-weight: 800; }
+
+/* ── a group of rows that are all stuck on the same thing ────────────────
+ *
+ * Eight rows of the same sentence is the sentence printed eight times and
+ * read none. Said once, over the people it applies to, it is information.
+ */
+.pms .qgroup { margin-bottom: 16px; }
+.pms .qgroup:last-child { margin-bottom: 0; }
+.pms .qgroup > .ghead {
+  display: flex; gap: 10px; align-items: baseline; flex-wrap: wrap;
+  padding: 11px 14px; border-radius: 14px 14px 0 0;
+  background: linear-gradient(90deg, var(--ez-brand-tint), var(--ez-sunken));
+  border: 1px solid var(--ez-line);
+  border-bottom: 0;
+}
+.pms .qgroup > .ghead .gt { font-size: 13px; font-weight: 700; color: var(--ez-ink); }
+.pms .qgroup > .ghead .gn {
+  font-size: 11px; font-weight: 700; color: var(--ez-on-accent);
+  background: var(--ez-brand) var(--pms-grad-brand); border-radius: 999px; padding: 1px 9px;
+}
+.pms .qgroup > .ghead .gw { font-size: 12px; color: var(--ez-muted); flex: 1 1 220px; }
+.pms .qgroup > .tblwrap { border-radius: 0 0 14px 14px; }
+
+/* ── the rating flow ──────────────────────────────────────────────────── */
+
+/* One KRA being rated. The stripe is the progress indicator: a column of
+ * grey turning green as the set is worked through, visible without reading
+ * anything. */
+.pms .kcard {
+  border-left: 4px solid var(--ez-line);
+  /* border-COLOR, not border-left-color. The whole frame carries the score,
+   * and transitioning one edge meant the four sides briefly disagreed. */
+  transition: border-color .2s ease, background .2s ease;
+}
+
+/* ── THE SCORE, AS COLOUR ──────────────────────────────────────────────────
+ *
+ * Worst rating red, middle yellow, best green, blending through the values
+ * between — so a card answers "how did this go" before a word of it is read.
+ * The endpoints and the blend position arrive as custom properties from
+ * ratingTone(), normalised against the POLICY'S bands. oklab, not sRGB:
+ * sRGB dips through a dull brown around the midpoint.
+ */
+.pms .kcard.scored {
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  /* THE WHOLE BORDER, not just the stripe — the frame is what reads as "the
+   * colour of this KRA". The left edge stays heavier so the ramp is legible
+   * when the card is folded to one line. */
+  border-color: var(--kra-tone);
+  border-left-color: var(--kra-tone);
+  /* A WASH, NOT A FILL. 9% keeps every text token legible on top of it. */
+  background: color-mix(in oklab, var(--kra-tone) 9%, var(--ez-surface));
+}
+
+/* An unexplained difference stops the whole set, so it has to stay visible
+ * on a card already carrying a colour. The frame belongs to the score, so
+ * the blocked state marks THE FIELD THAT IS EMPTY instead. */
+.pms .kcard.needs {
+  background: color-mix(in oklab, var(--kra-tone) 9%, var(--ez-surface));
+}
+.pms .kcard.needs textarea.why {
+  border-color: var(--ez-info);
+  box-shadow: 0 0 0 4px var(--ez-info-tint);
+}
+.pms .kcard.needs textarea.why::placeholder { color: var(--ez-info); opacity: 1; }
+.pms .kcard.needs .khead .fold {
+  color: var(--ez-info); font-weight: 800;
+}
+/* Rated but not yet scored on the ramp — no goal id, so no rating can be
+ * written at all. Neutral rather than green: nothing was judged. */
+.pms .kcard.rated { border-left-color: var(--ez-positive); }
+
+/* The rating chips, coloured by what the number MEANS once chosen.
+ * Unselected they stay neutral — colouring all five turns the control into a
+ * traffic light and invites the eye to the green one. */
+.pms .chip { transition: transform .12s ease, background .12s ease, border-color .12s ease, box-shadow .12s ease; }
+.pms .chip:hover:not(.sel) { border-color: var(--ez-brand); color: var(--ez-brand-deep); background: var(--ez-brand-tint); }
+.pms .chip:active { transform: scale(.94); }
+/* THE CHOSEN CHIP TAKES THE SAME RAMP as the card it scores, so the control
+ * and its consequence are never two different colours. A tint and a ring,
+ * not a fill — the ramp passes through yellow, and white on yellow is about
+ * 1.9:1. inset box-shadow rather than a thicker border, so choosing a chip
+ * does not resize it and nudge the row. */
+.pms .chip.sel.ramp {
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  background: color-mix(in oklab, var(--kra-tone) 22%, var(--ez-surface));
+  border-color: var(--kra-tone);
+  box-shadow: inset 0 0 0 1px var(--kra-tone), 0 4px 10px -6px var(--kra-tone);
+  color: var(--ez-ink);
+}
+
+/* What the number you just picked actually means, in words, beside it. */
+.pms .bandname {
+  font-size: 12px; font-weight: 700; color: var(--ez-ink);
+  align-self: center; margin-left: 6px;
+}
+.pms .bandname .vs { font-weight: 600; color: var(--ez-muted); margin-left: 6px; }
+
+/* Progress through the set being rated, pinned to the top of the panel so it
+ * is still there at the fourth KRA. No z-index: a sticky element already
+ * paints above the non-positioned cards that scroll under it. */
+.pms .ratebar {
+  position: sticky; top: 0;
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding: 11px 14px; margin: -4px 0 14px;
+  background: color-mix(in oklab, var(--ez-surface) 92%, transparent);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--ez-line);
+  border-radius: 14px; box-shadow: var(--pms-card-shadow);
+}
+.pms .ratebar .bar { flex: 1 1 160px; }
+.pms .ratebar .lead { font-size: 12px; font-weight: 700; white-space: nowrap; }
+.pms .ratebar .lead .sm { font-weight: 600; color: var(--ez-muted); }
+
+/* ── the review panel ─────────────────────────────────────────────────────
+ *
+ * MEASURED BEFORE IT WAS CHANGED: 1900px of panel in a 722px viewport for
+ * four KRAs, with the only button 1900px below the start. Labels repeated,
+ * the two numbers being compared sat apart, and nothing could be put away.
+ */
+
+/* Who this is, which rung you hold, and how the two scores stand — before
+ * any of the KRAs. */
+.pms .phead {
+  display: flex; gap: 14px; align-items: flex-start; flex-wrap: wrap;
+  padding: 16px; margin-bottom: 14px;
+  background: linear-gradient(120deg, var(--ez-brand-tint), var(--ez-sunken));
+  border: 1px solid var(--ez-brand-edge);
+  border-radius: 16px;
+}
+.pms .phead .who { flex: 1 1 240px; min-width: 0; }
+.pms .phead .nm { font-size: 17px; font-weight: 700; color: var(--ez-ink); letter-spacing: -.01em; }
+.pms .phead .meta {
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  margin-top: 5px; font-size: 12px; color: var(--ez-muted);
+}
+/* The two scores, side by side, at the size of a thing you are meant to
+ * compare rather than a thing you are meant to find. */
+.pms .phead .scores { display: flex; gap: 10px; align-items: stretch; flex-wrap: wrap; }
+.pms .phead .sc {
+  min-width: 100px; padding: 9px 14px; border-radius: 12px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 5%, transparent);
+}
+.pms .phead .sc .l {
+  font-size: 12px; font-weight: 600; text-transform: none;
+  letter-spacing: 0; color: var(--ez-muted); white-space: nowrap;
+}
+.pms .phead .sc .v {
+  font-size: 22px; font-weight: 700; color: var(--ez-ink); letter-spacing: -.02em;
+  font-variant-numeric: tabular-nums; line-height: 1.25;
+}
+.pms .phead .sc.mine { border-color: var(--ez-brand); background: var(--ez-surface); box-shadow: 0 0 0 3px var(--ez-brand-tint); }
+.pms .phead .sc.gap  { border-color: var(--ez-warning-edge); background: var(--ez-warning-tint); }
+.pms .phead .sc.gap .v { color: var(--ez-warning); }
+
+/* The KRA jump chips in the sticky bar. Numbered, coloured by state, and
+ * clickable — so "which one still needs me" is answered without scrolling. */
+.pms .ksteps { display: flex; gap: 5px; flex-wrap: wrap; align-items: center; }
+.pms .kstep {
+  width: 28px; height: 28px; border-radius: 9px; padding: 0;
+  border: 1px solid var(--ez-line-strong); background: var(--ez-surface);
+  font-weight: 700; font-size: 12px; color: var(--ez-muted);
+  font-family: inherit; cursor: pointer; font-variant-numeric: tabular-nums;
+  transition: transform .12s ease, background .12s ease, border-color .12s ease;
+}
+.pms .kstep:hover { transform: translateY(-1px); border-color: var(--ez-brand); color: var(--ez-brand-deep); }
+.pms .kstep.done {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive-edge);
+  color: var(--ez-positive);
+}
+.pms .kstep.needs {
+  /* Same errand, same colour as the field it points at — and off the score
+   * ramp, so a jump chip can never be read as a bad rating. */
+  background: var(--ez-info-tint); border-color: var(--ez-info);
+  color: var(--ez-info);
+}
+
+/* ── one KRA ──────────────────────────────────────────────────────────── */
+
+/* The head doubles as the fold control, so the whole row is the hit target
+ * rather than a chevron somebody has to aim at. */
+.pms .khead {
+  display: flex; gap: 9px; align-items: center; flex-wrap: wrap;
+  width: 100%; background: none; border: 0; padding: 0;
+  font: inherit; color: inherit; text-align: left; cursor: pointer;
+}
+.pms .khead .fold {
+  margin-left: auto; font-size: 12px; font-weight: 700; color: var(--ez-muted);
+  display: inline-flex; align-items: center; gap: 5px; white-space: nowrap;
+}
+.pms .khead .caret { transition: transform .18s ease; display: inline-block; }
+.pms .kcard.folded .khead .caret { transform: rotate(-90deg); }
+
+/* The evidence, as label-and-value pairs on one line each instead of five
+ * stacked blocks. */
+.pms .ev { margin-top: 10px; display: grid; gap: 6px; }
+.pms .ev .row { display: grid; grid-template-columns: 116px 1fr; gap: 10px; align-items: baseline; }
+.pms .ev .row > .l {
+  font-size: 12px; font-weight: 600; text-transform: none;
+  letter-spacing: 0; color: var(--ez-muted); padding-top: 2px;
+}
+.pms .ev .row > .v { font-size: 13px; color: var(--ez-ink-soft); min-width: 0; }
+@media (max-width: 560px) {
+  .pms .ev .row { grid-template-columns: 1fr; gap: 1px; }
+}
+
+/* THE COMPARISON, side by side — comparing them IS the task. */
+.pms .vs2 {
+  display: grid; grid-template-columns: minmax(130px, 200px) 1fr; gap: 14px;
+  margin-top: 12px; padding-top: 12px; border-top: 1px dashed var(--ez-line-strong);
+  align-items: start;
+}
+@media (max-width: 620px) { .pms .vs2 { grid-template-columns: 1fr; } }
+.pms .vs2 .side > .l {
+  font-size: 12px; font-weight: 600; text-transform: none;
+  letter-spacing: 0; color: var(--ez-muted); margin-bottom: 6px;
+}
+.pms .vs2 .theirs {
+  /* WRAPS. Bands are configurable per policy, and a row that cannot wrap
+   * widens the card instead. */
+  display: flex; gap: 8px; align-items: center; flex-wrap: wrap;
+  padding: 7px 12px; border-radius: 10px;
+  background: var(--ez-surface); border: 1px solid var(--ez-line);
+}
+.pms .vs2 .theirs .n {
+  font-size: 20px; font-weight: 700; color: var(--ez-ink);
+  font-variant-numeric: tabular-nums;
+}
+.pms .vs2 .theirs .bl { font-size: 12px; color: var(--ez-muted); min-width: 0; }
+
+/* The folded summary: everything the open card would have told you about
+ * the decision, on one line. */
+.pms .kfold {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 6px; font-size: 12px; color: var(--ez-muted);
+}
+.pms .kfold b { color: var(--ez-ink); font-variant-numeric: tabular-nums; }
+
+/* ── the action bar ───────────────────────────────────────────────────────
+ *
+ * Pinned to the bottom of the viewport while the panel is longer than it,
+ * because the button was 1900px below the first thing you had to read. The
+ * negative margins pull it to the card's edges so it reads as a bar.
+ */
+.pms .actionbar {
+  position: sticky; bottom: 0;
+  margin: 16px -20px -20px; padding: 14px 20px;
+  background: color-mix(in oklab, var(--ez-surface) 98%, transparent);
+  backdrop-filter: blur(10px);
+  border-top: 1px solid var(--ez-line);
+  border-radius: 0 0 15px 15px;
+  box-shadow: 0 -10px 24px -18px color-mix(in oklab, var(--ez-brand-deep) 40%, transparent);
+  display: grid; gap: 10px;
+}
+.pms .actionbar .row {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+}
+.pms .actionbar .row .grow { flex: 1 1 auto; min-width: 0; }
+/* The blocking reasons, next to the control they block. */
+.pms .blockers {
+  display: flex; gap: 6px; flex-wrap: wrap; align-items: center;
+  font-size: 12px; color: var(--ez-warning); font-weight: 600;
+}
+.pms .blockers .b {
+  background: var(--ez-warning-tint); border: 1px solid var(--ez-warning-edge);
+  border-radius: 999px; padding: 2px 10px;
+}
+
+/* ── closing the review panel ─────────────────────────────────────────────
+ *
+ * A panel this tall needs a way out that does not depend on scrolling to its
+ * bottom. RED, AND GLOWING ON HOVER, because it is the only control here
+ * that throws work away; the confirmation beside it is the protection.
+ */
+.pms .card { position: relative; }
+.pms .xclose {
+  /* The scale in theme.css, not a number: the × must clear the sticky
+   * progress bar, and the question it opens must clear the ×. */
+  position: absolute; top: 12px; right: 12px; z-index: var(--ez-z-local-1);
+  width: 32px; height: 32px; padding: 0;
+  /* !important, AND THAT IS NOT DECORATION. UIKeyframes in lib/ui/index.tsx
+   * injects a 10px radius on every button with !important at runtime, which
+   * outranks any selector here; a round button has to fight back. */
+  border-radius: 50% !important;
+  display: inline-flex; align-items: center; justify-content: center;
+  font-size: 17px; line-height: 1; font-family: inherit; cursor: pointer;
+  background: var(--ez-critical-tint); color: var(--ez-critical);
+  border: 1px solid var(--ez-critical-edge);
+  transition: background .15s ease, color .15s ease,
+              box-shadow .15s ease, transform .15s ease;
+}
+.pms .xclose:hover {
+  background: var(--ez-critical); color: var(--ez-on-accent);
+  border-color: var(--ez-critical);
+  /* The glow. Two rings rather than one: the inner is the halo, the outer
+   * is what makes it read as lit rather than merely shadowed. */
+  box-shadow: 0 0 0 4px var(--ez-critical-tint),
+              0 0 14px 2px var(--ez-critical);
+  transform: rotate(90deg);
+}
+.pms .xclose:focus-visible {
+  box-shadow: 0 0 0 4px var(--ez-critical-tint), 0 0 14px 2px var(--ez-critical);
+}
+
+/* The second press, when there is work to lose. Inline rather than a
+ * browser confirm(): a modal blocks the page, cannot be styled, and speaks
+ * the browser's language rather than the appraisal's. */
+.pms .closeask {
+  position: absolute; top: 50px; right: 12px; z-index: var(--ez-z-local-2);
+  width: 260px; max-width: calc(100% - 24px);
+  padding: 14px; border-radius: 14px;
+  background: var(--ez-surface); border: 1px solid var(--ez-critical-edge);
+  box-shadow: 0 16px 34px -14px color-mix(in oklab, var(--ez-critical) 45%, transparent);
+}
+.pms .closeask .t { font-size: 13px; font-weight: 700; color: var(--ez-ink); }
+.pms .closeask .k { margin: 4px 0 10px; }
+.pms .closeask .row { display: flex; gap: 6px; flex-wrap: wrap; }
+
+/* The reason, as something you can read back — a textarea, so a
+ * two-sentence reason can be seen whole by the person writing it. */
+.pms textarea.why {
+  min-height: 38px; height: 38px; padding: 8px 12px;
+  font-size: 13px; line-height: 1.45; resize: vertical;
+}
+
+/* The one-to-one tick is a step, not a stray checkbox between two cards. */
+.pms .step1on1 {
+  margin-top: 14px; padding: 14px 16px; border-radius: 14px;
+  background: var(--ez-sunken); border: 1px dashed var(--ez-line-strong);
+  transition: background .2s ease, border-color .2s ease;
+}
+.pms .step1on1.on {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive-edge); border-style: solid;
+}
+
+/* A chip that is the keyboard's current stop inside the group. The group is
+ * one tab stop and the arrows move within it, as a radiogroup should. */
+.pms .chip:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
+
+/* One rating as it is read back on the chain record. Same ramp as the review
+ * panel, so one number is never two different colours on two screens. */
+.pms .rdot {
+  --kra-tone: color-mix(in oklab, var(--kra-from), var(--kra-to) var(--kra-mix));
+  display: inline-flex; align-items: center; justify-content: center;
+  min-width: 28px; height: 26px; padding: 0 8px; border-radius: 9px;
+  font-weight: 700; font-size: 12px; font-variant-numeric: tabular-nums;
+  /* Tint and ring, as the chips: white on the yellow middle is 1.9:1. */
+  background: color-mix(in oklab, var(--kra-tone) 20%, var(--ez-surface));
+  box-shadow: inset 0 0 0 1px var(--kra-tone);
+  color: var(--ez-ink);
+}
+
+/* ── what the chain asked for, on HR's publish card ──────────────────────
+ *
+ * Grouped, not tabulated: "Advanced Excel" and "Salary bonus" under one Name
+ * column are different decisions with different consequences. */
+.askgroup { margin: 12px 0 16px; }
+
+.asklbl {
+  font-size: 12px;
+  font-weight: 600;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ez-muted);
+  margin-bottom: 8px;
+  line-height: 1.6;
+}
+/* The explanation inside the label is a sentence, so it is not uppercased. */
+.asklbl .k { text-transform: none; letter-spacing: 0; font-weight: 400; }
+
+.askrow {
+  border: 1px solid var(--ez-line);
+  border-left: 3px solid var(--ez-brand);
+  border-radius: 12px;
+  background: var(--ez-surface);
+  padding: 12px 14px;
+  margin-bottom: 8px;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 4%, transparent);
+}
+
+/* A decided proposal stays visible but recedes, so the undecided ones are
+ * what the eye lands on. */
+.askrow.decided {
+  background: var(--ez-sunken);
+  border-color: var(--ez-line);
+  border-left-color: var(--ez-line-strong);
+  box-shadow: none;
+}
+
+.askhead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.askdet {
+  margin-top: 6px;
+  font-size: 12px;
+  line-height: 1.65;
+  color: var(--ez-ink-soft);
+  /* A rater's own words, kept as written: their line breaks carry meaning. */
+  white-space: pre-wrap;
+  /* A pasted course outline with no spaces must not widen the card. */
+  overflow-wrap: anywhere;
+}
+
+@media (max-width: 560px) {
+  .askhead { flex-direction: column; }
+}
+
+/* ── the AI suggestion bin ───────────────────────────────────────────────
+ *
+ * Cards rather than a list: each carries what it is, where it came from and
+ * why it was suggested, and a row of text makes the "why" an afterthought. */
+.aibin {
+  border: 1px dashed var(--ez-brand-edge);
+  border-radius: 14px;
+  background:
+    radial-gradient(80% 120% at 100% 0%, color-mix(in oklab, var(--ez-info) 12%, transparent), transparent 60%),
+    var(--ez-brand-tint);
+  padding: 12px 14px;
+  margin-bottom: 12px;
+}
+
+.aihead {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.ainote { margin-top: 8px; line-height: 1.6; }
+
+.aicards {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  gap: 10px;
+  margin-top: 10px;
+}
+
+.aicard {
+  border: 1px solid var(--ez-line);
+  border-radius: 12px;
+  background: var(--ez-surface);
+  padding: 10px 12px;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 5%, transparent);
+  /* The grab cursor is the only hint that dragging is possible; the Add
+   * button is what makes it usable without one. */
+  cursor: grab;
+  transition: transform .14s ease, box-shadow .14s ease, border-color .14s ease;
+}
+.aicard:hover { transform: translateY(-1px); border-color: var(--ez-brand-edge); box-shadow: var(--pms-card-lift); }
+.aicard:active { cursor: grabbing; }
+
+.aitop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 6px;
+  margin-bottom: 4px;
+}
+
+/* THE BADGE IS LOAD-BEARING. "In your catalogue" is a course somebody chose;
+ * "skill area" came from a model and names a direction, never a product.
+ * They must not look alike. */
+.aibadge {
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  border-radius: 99px;
+  padding: 2px 8px;
+  white-space: nowrap;
+}
+.aibadge.cat {
+  background: color-mix(in oklab, var(--ez-positive) 18%, var(--ez-surface));
+  color: var(--ez-ink);
+  box-shadow: inset 0 0 0 1px var(--ez-positive-edge);
+}
+.aibadge.skill {
+  background: color-mix(in oklab, var(--ez-info) 16%, var(--ez-surface));
+  color: var(--ez-ink);
+  box-shadow: inset 0 0 0 1px var(--ez-info-edge);
+}
+
+.ainame { font-weight: 700; line-height: 1.4; color: var(--ez-ink); }
+.airat { margin-top: 3px; line-height: 1.55; }
+
+/* The list below, as a drop target. Only visible while something is over
+ * it — a permanently dashed box reads as an empty state. */
+.aidrop {
+  border: 1px dashed transparent;
+  border-radius: 12px;
+  padding: 2px;
+  transition: background .12s var(--ez-ease, ease), border-color .12s;
+}
+.aidrop.over {
+  border-color: var(--ez-brand);
+  background: var(--ez-brand-tint);
+}
+
+@media (max-width: 560px) {
+  .aihead { flex-direction: column; }
+  .aicards { grid-template-columns: 1fr; }
+}
+
+/* ── the approval chain builder (218) ──────────────────────────────────────
+ *
+ * The track is a vertical list rather than a horizontal one, and that is the
+ * whole layout decision. A chain can have five rungs, each with a coverage
+ * pill beside it; laid out horizontally that either truncates the labels or
+ * scrolls sideways, and the coverage count — the thing that stops somebody
+ * building a chain that silently does nothing — is the first casualty of
+ * both. Vertical also means the drag axis and the reading order agree.
+ *
+ * Tokens only. A hex literal here would be white at midnight too. */
+.pms .chaintrack {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin: 8px 0 4px;
+  position: relative;
+}
+
+.pms .rung {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 11px 13px;
+  background: var(--ez-surface);
+  border: 1px solid var(--ez-line);
+  border-radius: 12px;
+  cursor: grab;
+  box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 4%, transparent);
+  transition: border-color .12s var(--ez-ease, ease), background .12s,
+              box-shadow .12s, transform .12s;
+}
+.pms .rung:active { cursor: grabbing; }
+.pms .rung:hover  { border-color: var(--ez-brand-edge); box-shadow: var(--pms-card-lift); }
+
+/* Where it will land. A border change alone is easy to miss mid-drag while
+ * the pointer is moving, so the row also lifts. */
+.pms .rung.rung-over {
+  border-color: var(--ez-brand);
+  background: var(--ez-brand-tint);
+  transform: translateY(-1px);
+  box-shadow: 0 0 0 3px color-mix(in oklab, var(--ez-brand) 18%, transparent);
+}
+
+/* The two ends. Not draggable, not removable, and they have to LOOK that way.
+ *
+ * NAMED rung-end, NOT `fixed`. `fixed` is a Tailwind utility in this app's
+ * @layer utilities, and a bare utility class name is claimed by that layer
+ * no matter what this file says — position: fixed once took both ends out of
+ * flow and stacked all three rows. Every modifier here is namespaced. */
+.pms .rung.rung-end {
+  cursor: default;
+  background: linear-gradient(90deg, var(--ez-sunken), var(--ez-surface));
+  border-style: dashed;
+  color: var(--ez-muted);
+  box-shadow: none;
+}
+.pms .rung.rung-end:hover { border-color: var(--ez-line); box-shadow: none; }
+
+.pms .rung.rung-none {
+  cursor: default;
+  background: transparent;
+  border-style: dashed;
+  box-shadow: none;
+}
+.pms .rung.rung-none:hover { box-shadow: none; }
+
+.pms .rung-no {
+  flex: 0 0 26px;
+  height: 26px;
+  display: grid;
+  place-items: center;
+  border-radius: 99px;
+  background: var(--ez-brand) var(--pms-grad-brand);
+  color: var(--ez-on-accent);
+  font-size: 12px;
+  font-weight: 700;
+  box-shadow: var(--ez-shadow-brand);
+}
+.pms .rung.rung-end .rung-no { background: transparent; color: var(--ez-muted); box-shadow: inset 0 0 0 1px var(--ez-line-strong); }
+
+.pms .rung-grip { color: var(--ez-faint); font-size: 14px; letter-spacing: -1px; }
+.pms .rung.rung-end .rung-grip,
+.pms .rung.rung-none .rung-grip { display: none; }
+
+.pms .rung-name {
+  flex: 1 1 auto;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  line-height: 1.5;
+  font-weight: 600;
+  color: var(--ez-ink);
+}
+.pms .rung.rung-end .rung-name { font-weight: 500; color: var(--ez-muted); }
+
+/* The arrows and Remove sit on the row, so they must not inherit .btnrow's
+ * top margin — that is for a row of buttons under a block. */
+.pms .rung .btnrow { margin-top: 0; }
+
+.pms .btnrow.wrap { flex-wrap: wrap; }
+
+@media (max-width: 560px) {
+  /* The controls drop below the label rather than squeezing it: the rung's
+   * name and its coverage pill are what the screen is for. */
+  .pms .rung { align-items: flex-start; flex-wrap: wrap; }
+  .pms .rung .btnrow { width: 100%; padding-left: 38px; }
+}
+
+/* ── the KPIs under a KRA (220) ────────────────────────────────────────────
+ *
+ * A KRA is the objective; these are how it is measured, and each is rated on
+ * its own by every rung. They sit INSIDE the KRA card, inset and on a sunken
+ * ground, because a KPI belongs to its KRA and a flat list of eleven rows
+ * across five objectives reads as eleven unrelated things.
+ *
+ * The balance figure is "15 of 30", never a bare percentage: the KPIs total
+ * their KRA's weightage, not 100, and the only number that tells somebody
+ * what to type next is the pair. */
+.pms .pms-kpis {
+  margin-top: 12px; padding: 10px 12px 12px;
+  background: var(--ez-sunken);
+  border: 1px solid var(--ez-line);
+  border-radius: 10px;
+}
+.pms .pms-kpis-h {
+  display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+  margin-bottom: 8px;
+}
+.pms .pms-kpis-t {
+  font-size: 12px; font-weight: 600; color: var(--ez-muted);
+}
+/* The running total, coloured by state — and the words carry it too, for
+ * anyone who cannot use the colour. */
+.pms .pms-kpis-bal {
+  font-size: 12px; font-weight: 700; font-variant-numeric: tabular-nums;
+  padding: 2px 9px; border-radius: 99px;
+  background: var(--ez-warning-tint); color: var(--ez-warning);
+}
+.pms .pms-kpis-bal.is-ok   { background: var(--ez-positive-tint); color: var(--ez-positive); }
+.pms .pms-kpis-bal.is-over { background: var(--ez-critical-tint); color: var(--ez-critical); }
+.pms .pms-kpis-h .btnrow { margin-top: 0; margin-left: auto; }
+
+/* "3 of 5" beside the add button — how many measures this KRA holds against
+ * what the policy allows. Deliberately quiet: it is a running count, not a
+ * fault, and .pms-kpis-bal next to it is already carrying a colour. Reading
+ * as a second status pill would make two neutral numbers compete. */
+/* 222: the KPI's share, shown not typed. A KPI has no weightage of its own —
+ * it takes an equal cut of its KRA's — so this column is a read-only number
+ * where an input used to be. Styled as text rather than as a disabled input:
+ * a greyed-out box invites a click that does nothing. It keeps the column so
+ * the grid still lines up with the header and with the rows above it. */
+/* Sized to match .pms-kpi label exactly — it sits in the same row as "KPI"
+ * and "Target" and is hidden by the same rule below, so a different size
+ * would show up as one column heading out of step with the other two. */
+.pms .pms-kpi-share-l {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--ez-muted); margin-bottom: 4px;
+}
+.pms .pms-kpi-share {
+  display: block; font-size: 13px; font-weight: 600; color: var(--ez-ink-soft);
+  font-variant-numeric: tabular-nums; padding: 9px 0;
+}
+
+.pms .pms-kpis-n {
+  font-size: 11px; color: var(--ez-faint); font-variant-numeric: tabular-nums;
+  white-space: nowrap; align-self: center;
+}
+
+.pms .pms-kpi {
+  display: grid;
+  grid-template-columns: 22px minmax(0, 1fr) minmax(0, 0.8fr) 104px 28px;
+  gap: 10px; align-items: end;
+  padding: 8px 0;
+  border-top: 1px dashed var(--ez-line);
+}
+/* :first-of-type WOULD BE WRONG HERE. It means the first element of its TYPE
+   among siblings, and every sibling in this box is a div — so it matched the
+   header, not the first KPI row, and every row ended up treated as "not
+   first": all the column labels vanished and row 1 kept a rule above it.
+   The adjacent sibling selector says what is actually meant: the row that
+   immediately follows the header. */
+.pms .pms-kpis-h + .pms-kpi { border-top: 0; padding-top: 2px; }
+.pms .pms-kpi.is-bad .pms-kra-wbox input { border-color: var(--ez-critical); }
+
+.pms .pms-kpi-no {
+  height: 24px; display: grid; place-items: center;
+  border-radius: 99px; background: var(--ez-surface);
+  border: 1px solid var(--ez-line);
+  font-size: 11px; font-weight: 700; color: var(--ez-muted);
+}
+.pms .pms-kpi label {
+  display: block; font-size: 11px; font-weight: 600;
+  color: var(--ez-muted); margin-bottom: 4px;
+}
+/* Only the first row needs the column headings; repeating them down the list
+ * is five words of noise per KPI. Hidden from sight but NOT from assistive
+ * tech — every input keeps its own aria-label, and these stay in the
+ * accessibility tree so the association survives. */
+.pms .pms-kpi label,
+.pms .pms-kpi-share-l {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+.pms .pms-kpis-h + .pms-kpi label,
+.pms .pms-kpis-h + .pms-kpi .pms-kpi-share-l {
+  position: static; width: auto; height: auto; padding: 0; margin: 0 0 4px;
+  overflow: visible; clip-path: none; white-space: normal;
+}
+.pms .pms-kpi-x {
+  width: 26px; height: 26px; border-radius: 50%; cursor: pointer;
+  border: 1px solid var(--ez-line); background: var(--ez-surface);
+  color: var(--ez-muted); font-size: 15px; line-height: 1;
+  transition: color .12s var(--ez-ease, ease), border-color .12s, background .12s;
+}
+.pms .pms-kpi-x:hover:not(:disabled) {
+  color: var(--ez-critical); border-color: var(--ez-critical-edge);
+  background: var(--ez-critical-tint);
+}
+.pms .pms-kpi-x:disabled { opacity: .4; cursor: not-allowed; }
+
+/* The set-level fault, under the rows it is about. */
+.pms .pms-kpis-f {
+  margin: 8px 0 0; font-size: 12px; line-height: 1.5;
+  color: var(--ez-warning);
+}
+
+.pms .pms-kra-cat { margin-top: 10px; max-width: 260px; }
+
+@media (max-width: 860px) {
+  /* The measure keeps the full width; target and weightage share the next
+   * line. The number badge and the remove button stay on the first row so
+   * the row is still identifiable as one KPI. */
+  .pms .pms-kpi { grid-template-columns: 22px minmax(0, 1fr) 28px; }
+  .pms .pms-kpi-t, .pms .pms-kpi-w { grid-column: 2 / 3; }
+  /* Stacked, every row needs its own headings — a label three rows above
+     is not a label. */
+  .pms .pms-kpi label {
+    position: static; width: auto; height: auto; margin: 0 0 4px;
+    clip-path: none; padding: 0; overflow: visible; white-space: normal;
+  }
+}
+
+/* ── rating a KPI, inside its row (220) ───────────────────────────────────
+ *
+ * Under the measure it belongs to, not in a block at the foot of the KRA.
+ * You rate the thing that was measured, beside its own target — one rating
+ * covering three different measures of one objective was the shape this
+ * replaces. */
+.pms .pms-kpi-self {
+  grid-column: 2 / -1;
+  display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1.3fr) auto;
+  gap: 12px; align-items: start;
+  margin-top: 8px; padding: 10px 12px;
+  background: var(--ez-surface);
+  border: 1px solid var(--ez-line);
+  border-radius: 8px;
+}
+/* A rated measure takes a brand tint, so what is left shows up by scanning
+ * rather than by reading every row. */
+.pms .pms-kpi-self.is-rated {
+  background: color-mix(in oklab, var(--ez-brand-tint) 55%, var(--ez-surface));
+  border-color: var(--ez-brand-edge);
+}
+/* These labels always show: they are not column headings repeated down a
+ * list, they name three different fields. */
+.pms .pms-kpi-self label,
+.pms .pms-kpi-self .pms-kra-flabel {
+  position: static; width: auto; height: auto; margin: 0 0 4px;
+  clip-path: none; overflow: visible; white-space: normal;
+  display: block; font-size: 11px; font-weight: 600; color: var(--ez-muted);
+}
+.pms .pms-kpi-self textarea { min-height: 36px; resize: vertical; line-height: 1.45; }
+.pms .pms-kpi-band {
+  display: inline-block; margin-top: 6px;
+  font-size: 11px; font-weight: 700; color: var(--ez-brand);
+}
+
+@media (max-width: 860px) {
+  .pms .pms-kpi-self { grid-template-columns: 1fr; grid-column: 1 / -1; }
+}
+
+/* ── the manager's rating stepper (222) ────────────────────────────────────
+ *
+ * One KRA at a time, with a dot per KRA and a review step at the end. The
+ * layout problem it solves is not length: it is that a flat list of eighteen
+ * rating rows gives the rater no way to know how much is left without
+ * scrolling back and counting.
+ */
+.pms .pms-ratestep { display: grid; gap: 12px; }
+
+.pms .pms-ratestep-h {
+  display: flex; align-items: center; gap: 12px; flex-wrap: wrap;
+  padding-bottom: 10px; border-bottom: 1px solid var(--ez-line);
+}
+.pms .pms-ratestep-n { font-size: 13px; font-weight: 700; color: var(--ez-ink); }
+
+/* Text that belongs to assistive tech only. */
+.pms .vh {
+  position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px;
+  overflow: hidden; clip-path: inset(50%); white-space: nowrap;
+}
+
+.pms .pms-ratestep-sub {
+  margin-left: auto; font-size: 11px; color: var(--ez-muted);
+  font-variant-numeric: tabular-nums;
+}
+
+/* The panel's existing per-KRA chips are the stepper's control, so the one
+ * it is showing needs to say so. A ring rather than a fill: "where I am" and
+ * "what is finished" have to stay two separate readings, or a rater cannot
+ * tell a completed KRA from the one under the cursor. */
+.pms .kstep.at {
+  box-shadow: 0 0 0 3px var(--ez-brand-tint);
+  border-color: var(--ez-brand);
+}
+.pms .kstep.rev { border-style: dashed; }
+
+.pms .pms-ratestep-body { display: grid; gap: 10px; }
+
+.pms .pms-ratestep-kra {
+  display: flex; align-items: center; gap: 10px; justify-content: space-between;
+  padding: 10px 12px; border-radius: var(--ez-r-md, 10px);
+  background: var(--ez-sunken); border: 1px solid var(--ez-line);
+}
+.pms .pms-ratestep-kra > div { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.pms .pms-ratestep-seq {
+  display: inline-grid; place-items: center; width: 22px; height: 22px;
+  border-radius: 50%; background: var(--ez-brand); color: var(--ez-on-accent);
+  font-size: 11px; font-weight: 700; flex: none;
+}
+.pms .pms-ratestep-wt {
+  font-size: 12px; font-weight: 700; color: var(--ez-ink-soft);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+
+.pms .pms-ratestep-kpi {
+  display: grid; gap: 8px; padding: 11px 12px;
+  border: 1px solid var(--ez-line); border-radius: var(--ez-r-md, 10px);
+  background: var(--ez-surface);
+}
+/* A rated measure tints, so what is left shows by scanning rather than by
+ * reading every row. */
+.pms .pms-ratestep-kpi.is-rated {
+  background: var(--ez-positive-tint); border-color: var(--ez-positive-edge);
+}
+.pms .pms-ratestep-m { display: flex; align-items: baseline; gap: 7px; flex-wrap: wrap; }
+.pms .pms-ratestep-share {
+  margin-left: auto; font-size: 11px; font-weight: 700; color: var(--ez-muted);
+  font-variant-numeric: tabular-nums; white-space: nowrap;
+}
+.pms .pms-ratestep-self, .pms .pms-ratestep-mine {
+  display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+}
+.pms .pms-ratestep-self .l, .pms .pms-ratestep-mine .l {
+  font-size: 10px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ez-muted); white-space: nowrap;
+}
+.pms .pms-ratestep-self .n { font-size: 15px; font-weight: 700; color: var(--ez-ink); }
+.pms .pms-ratestep-self .q { flex-basis: 100%; font-style: italic; }
+
+.pms .pms-ratestep-roll {
+  display: flex; align-items: center; gap: 9px; flex-wrap: wrap;
+  padding: 9px 12px; border-radius: var(--ez-r-md, 10px);
+  background: var(--ez-brand-tint); border: 1px solid var(--ez-brand-edge);
+}
+.pms .pms-ratestep-roll b { font-size: 15px; font-variant-numeric: tabular-nums; }
+
+.pms .pms-ratestep-rev { display: grid; gap: 10px; }
+.pms .pms-ratestep-tbl { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pms .pms-ratestep-tbl th {
+  text-align: left; font-size: 10px; font-weight: 700; letter-spacing: .05em;
+  text-transform: uppercase; color: var(--ez-muted);
+  padding: 6px 8px; border-bottom: 1px solid var(--ez-line);
+}
+.pms .pms-ratestep-tbl th.num, .pms .pms-ratestep-tbl td.num {
+  text-align: right; font-variant-numeric: tabular-nums;
+}
+.pms .pms-ratestep-tbl td { padding: 8px; border-bottom: 1px solid var(--ez-line); }
+/* A KRA that is not fully rated is the reason the review step exists. */
+.pms .pms-ratestep-tbl tr.is-short td { background: var(--ez-warning-tint); }
+
+.pms .linklike {
+  background: none; border: 0; padding: 0; cursor: pointer; font: inherit;
+  color: var(--ez-brand); text-align: left; text-decoration: underline;
+  text-underline-offset: 2px;
+}
+.pms .linklike:focus-visible { outline: 2px solid var(--ez-brand); outline-offset: 2px; }
+
+.pms .pms-ratestep-warn {
+  margin: 0; font-size: 12px; color: var(--ez-warning); font-weight: 600;
+}
+
+.pms .pms-ratestep-nav {
+  display: flex; gap: 8px; justify-content: space-between;
+  padding-top: 10px; border-top: 1px solid var(--ez-line);
+}
+
+@media (max-width: 860px) {
+  .pms .pms-ratestep-tbl { font-size: 12px; }
+  .pms .pms-ratestep-tbl th, .pms .pms-ratestep-tbl td { padding: 6px 5px; }
 }

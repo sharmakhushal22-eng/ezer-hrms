@@ -110,6 +110,14 @@ export function scopedCompanies<T extends { id: string }>(grant: Grant, all: T[]
   return all.filter(c => allowed.includes(c.id))
 }
 
+/** Whether a company selector may offer "Group Companies" (every company at once): a
+ *  cross-company caller, or one whose roles are valid in every company there is. A caller
+ *  scoped to some of the companies never gets it — '' means all of them, not "all of mine". */
+export function canPickGroup<T extends { id: string }>(grant: Grant, all: T[], module?: Module | null): boolean {
+  if (grant.crossCompany || !grant.companyId) return true
+  return all.length > 1 && scopedCompanies(grant, all, module).length === all.length
+}
+
 /** What a company selector should default to: '' (All) for a cross-company caller, else
  *  the caller's own company id. '' is only ever offered to cross-company callers. */
 export function defaultCompanyId(grant: Grant): string {
@@ -235,6 +243,12 @@ export function canSee(g: Grant, m: Module | null): boolean {
   if (!g.enforced) return true
   if (m === null) return true                       // dashboard landing page
   return atLeast(g.modules[m], 'VIEW')
+}
+
+/** The same question for a screen several modules open: any one of them is enough. */
+export function canSeeAny(g: Grant, modules: Module[]): boolean {
+  if (!g.enforced) return true
+  return !modules.length || modules.some(m => atLeast(g.modules[m], 'VIEW'))
 }
 
 /** May this person see this sub-module tab? Reliability-first, default-VISIBLE:

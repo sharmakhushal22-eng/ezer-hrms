@@ -33,6 +33,7 @@ import {
   type Progress, type Rules, type Period as CyclePeriod, type StageKey,
 } from '@/lib/pms/cycle'
 import { canLockWeightage, canPublishResult, logRows, type Log } from '@/lib/pms/oneToOne'
+import { withoutFreshCols } from '@/lib/pms/policy'
 
 export const dynamic = 'force-dynamic'
 
@@ -61,6 +62,8 @@ interface PolicyRow {
   max_kra_count: number | null
   total_weightage: number | null
   min_weightage_per_kra: number | null
+  min_kpi_per_kra: number | null
+  max_kpi_per_kra: number | null
   one_to_one_mandatory: boolean | null
   self_rating_mandatory: boolean | null
   rating_scale_type: string | null
@@ -156,12 +159,31 @@ export async function GET(req: NextRequest) {
     })
   }
 
+  /**
+   * THE POLICY READ RETRIES WITHOUT THE YOUNG COLUMNS.
+   *
+   * One unknown column fails the whole request, and `policy` then reads as
+   * null below — which this route cannot distinguish from "the period has no
+   * policy". Every rule it serves would quietly become the shipped default:
+   * the KRA counts, the one-to-one requirement and whether a self rating is
+   * mandatory. Reported from the browser as `column
+   * pms_policies.min_kpi_per_kra does not exist` on the sibling screen.
+   */
+  const POLICY_SELECT = 'id, min_kra_count, max_kra_count, total_weightage,'
+    + ' min_weightage_per_kra, min_kpi_per_kra, max_kpi_per_kra,'
+    + ' one_to_one_mandatory, self_rating_mandatory, rating_scale_type'
+  const askPolicy = async () => {
+    if (!period.policy_id) return { data: null }
+    const one = (sel: string) => sb.from('pms_policies').select(sel)
+      .eq('id', period.policy_id!).maybeSingle()
+    const first = await one(POLICY_SELECT)
+    if (!first.error) return first
+    const narrowed = withoutFreshCols(POLICY_SELECT)
+    return narrowed === POLICY_SELECT ? first : await one(narrowed)
+  }
+
   const [policyR, goalR, logR, reviewR, overallR, feedbackR, scaleR] = await Promise.all([
-    period.policy_id
-      ? sb.from('pms_policies')
-          .select('id, min_kra_count, max_kra_count, total_weightage, min_weightage_per_kra, one_to_one_mandatory, self_rating_mandatory, rating_scale_type')
-          .eq('id', period.policy_id).maybeSingle()
-      : Promise.resolve({ data: null }),
+    askPolicy(),
     sb.from('pms_employee_goals')
       .select('id, seq_no, kra_title, kpi_metric, target_value, category, weightage, status')
       .eq('employee_id', me).eq('period_id', period.id).order('seq_no'),
@@ -199,6 +221,11 @@ export async function GET(req: NextRequest) {
     maxKra: policy?.max_kra_count ?? DEFAULT_RULES.maxKra,
     totalWeightage: policy?.total_weightage ?? DEFAULT_RULES.totalWeightage,
     minWeightagePerKra: policy?.min_weightage_per_kra ?? DEFAULT_RULES.minWeightagePerKra,
+    // 221. `??` and not `||`, matching the four above: these columns are NOT
+    // NULL with defaults 1 and 5, so a null here means the migration has not
+    // run and the fallback is the same pair the database would have given.
+    minKpi: policy?.min_kpi_per_kra ?? DEFAULT_RULES.minKpi,
+    maxKpi: policy?.max_kpi_per_kra ?? DEFAULT_RULES.maxKpi,
   }
 
   const ratingOf = (goalId: string, role: string): number | null => {
@@ -282,6 +309,8 @@ export async function GET(req: NextRequest) {
       max_kra: rules.maxKra,
       total_weightage: rules.totalWeightage,
       min_weightage_per_kra: rules.minWeightagePerKra,
+      min_kpi_per_kra: rules.minKpi,
+      max_kpi_per_kra: rules.maxKpi,
       one_to_one_mandatory: policy?.one_to_one_mandatory ?? true,
       self_rating_mandatory: policy?.self_rating_mandatory ?? true,
     },

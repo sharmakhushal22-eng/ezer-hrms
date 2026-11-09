@@ -12,7 +12,7 @@
 // statement live when the Payroll head corrects the annual CTC.
 
 import { computeCtc, hraMaxFor } from '@/lib/recruitment/ctc-model'
-import { ctcStatementRows, hasStatement, type StmtRow } from '@/lib/recruitment/ctc-statement'
+import { ctcStatementRows, hasStatement, linkStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
 
 export type SalarySource = 'negotiation' | 'stipend' | 'offer_letter' | 'computed' | 'none'
 export interface SalaryBreakdown {
@@ -112,15 +112,18 @@ export async function loadSalaryBreakdown(sb: any, oc: { id: string; candidate_i
   const state = String(oc.pt_state || oc.form_data?.step_4?.curr_state || oc.form_data?.step_4?.perm_state || '')
   const city = String(oc.form_data?.step_4?.curr_city || oc.form_data?.step_4?.perm_city || '')
   if (oc.candidate_id) {
-    const [{ data: neg }, { data: ol }] = await Promise.all([
+    const [{ data: neg }, { data: ol }, { data: req }] = await Promise.all([
       sb.from('ctc_negotiations').select('calculation_data, offered_ctc, variable_pct, is_stipend, created_at').eq('candidate_id', oc.candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
       sb.from('offer_letters').select('offer_number, generated_at, basic, hra, other_allowance, statutory_bonus, employer_pf, employer_esic, gross_monthly, employee_pf, employee_esic, professional_tax, lwf, total_deduction, net_take_home, fixed_ctc_monthly, variable_monthly, final_ctc_monthly, annual_ctc').eq('candidate_id', oc.candidate_id).order('generated_at', { ascending: false }).limit(1).maybeSingle(),
+      // The HR Head's revision of the offer replaces the negotiated calculation (as in the offer file).
+      sb.from('offer_approval_requests').select('revised_calculation').eq('candidate_id', oc.candidate_id).order('created_at', { ascending: false }).limit(1).maybeSingle(),
     ])
-    const cd = neg?.calculation_data || null
+    const revised = !neg?.is_stipend && hasStatement(req?.revised_calculation) ? req.revised_calculation : null
+    const cd = revised || neg?.calculation_data || null
     if (cd && (neg?.is_stipend || cd.is_stipend)) return stipendBreakdown(cd, annualOverride)
     if (cd && hasStatement(cd)) {
       const when = neg?.created_at ? ` · ${new Date(neg.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
-      return buildBreakdown({ state, city, ...cd }, annualOverride, `Recruitment negotiation (Automated CTC model)${when}`)
+      return buildBreakdown({ state, city, ...cd }, annualOverride, `Recruitment negotiation (Automated CTC model)${revised ? ' · HR Head revision' : ''}${when}`)
     }
     if (ol && (Number(ol.annual_ctc) > 0 || Number(ol.final_ctc_monthly) > 0)) return offerLetterBreakdown(ol)
     if (cd && Number(cd.annual) > 0) return computedBreakdown(annualOverride || Number(cd.annual), state, city)
@@ -137,4 +140,29 @@ export function rebuildFor(b: SalaryBreakdown, annual: number): SalaryBreakdown 
   if (b.source === 'stipend') return { ...b, annual_ctc: annual, rows: b.rows.map(r => r.monthly != null && r.annual != null && r.kind !== 'ded' ? r : r) }
   if (b.source === 'offer_letter') return { ...b, note: `The offer letter said ₹${r0(b.annual_ctc).toLocaleString('en-IN')}; the CTC entered is ₹${r0(annual).toLocaleString('en-IN')}. The structure below is the letter's; payroll will be set up on the CTC entered.` }
   return computedBreakdown(annual, '')
+}
+
+/** The salary as the recruitment negotiation shows it: the candidate's statement from the
+ *  HR Head's revision of the offer, else the negotiated calculation (the same choice as the
+ *  offer file, lib/recruitment/offer-dossier), with the offer's one-time payments. */
+export async function negotiatedSalary(sb: any, candidateId: string): Promise<{ rows: StmtRow[]; extras: [string, number][]; ctc: number; label: string; offer: any } | null> {
+  const { data: req } = await sb.from('offer_approval_requests').select('*').eq('candidate_id', candidateId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+  const { data: neg } = req?.ctc_negotiation_id
+    ? await sb.from('ctc_negotiations').select('*').eq('id', req.ctc_negotiation_id).maybeSingle()
+    : await sb.from('ctc_negotiations').select('*').eq('candidate_id', candidateId).order('created_at', { ascending: false }).limit(1).maybeSingle()
+  if (!neg) return null
+  const extras: [string, number][] = []
+  if (Number(req?.joining_bonus) > 0) extras.push([`Joining bonus${req.joining_bonus_freq ? ` (${req.joining_bonus_freq})` : ''}`, Number(req.joining_bonus)])
+  if (Number(req?.retention_bonus) > 0) extras.push(['Retention bonus', Number(req.retention_bonus)])
+  if (Number(req?.esop_value) > 0) extras.push([`ESOP${req.esop_vesting ? ` (${req.esop_vesting})` : ''}`, Number(req.esop_value)])
+  const when = (d: any) => d ? ` · ${new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}` : ''
+  if (neg.is_stipend || neg.calculation_data?.is_stipend) {
+    const b = stipendBreakdown({ ...(neg.calculation_data || {}), stipend_monthly: neg.stipend_monthly ?? neg.calculation_data?.stipend_monthly, tds_applicable: neg.tds_applicable ?? neg.calculation_data?.tds_applicable, tds_pct: neg.tds_pct ?? neg.calculation_data?.tds_pct })
+    return { rows: b.rows, extras, ctc: b.annual_ctc, label: `Recruitment negotiation (stipend)${when(neg.created_at)}`, offer: req }
+  }
+  const calc = req?.revised_calculation || neg.calculation_data || {}
+  const offered = Number(req?.offered_ctc ?? neg.offered_ctc) || Number(calc.ctcAnnual) || 0
+  const link = linkStatementRows(calc, offered)
+  if (!link) return null
+  return { rows: link.rows, extras, ctc: offered, label: `Recruitment negotiation${req?.revised_calculation ? ' · HR Head revision' : ''}${when(req?.updated_at || neg.created_at)}`, offer: req }
 }

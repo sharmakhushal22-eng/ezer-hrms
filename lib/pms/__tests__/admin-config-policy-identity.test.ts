@@ -42,10 +42,20 @@ test('the policy query is ordered, so "first" means something', () => {
   // window landed nowhere near the real query and the test failed against
   // correct code. Found by the test failing on a fix I had just verified
   // by hand.
+  // Sliced to the execution line, NOT to a fixed character count. It was
+  // `PAGE.slice(i, i + 1400)`, and adding a six-line comment to the query
+  // pushed `await polQ` past the window — the test then failed against code
+  // that was correct, which is the same class of mistake the paragraph above
+  // records. A magic length is a assertion about formatting, not behaviour.
   const i = PAGE.indexOf("let polQ = supabase.from('pms_policies')")
   assert.ok(i > 0, 'could not find the policy query')
-  const q = PAGE.slice(i, i + 1400)
-  const exec = q.match(/await polQ[^\n]*/)
+  // 211 moved the execution into an `ordered()` helper so the select can be
+  // retried without a column PostgREST may not know yet. The ORDER BY still
+  // has to be on whatever actually runs, so the test follows it there.
+  const end = PAGE.indexOf('polQ.order(', i)
+  assert.ok(end > i, 'could not find where the policy query is ordered')
+  const q = PAGE.slice(i, PAGE.indexOf('\n', end))
+  const exec = q.match(/polQ\.order[^\n]*/)
   assert.ok(exec, 'could not find where the policy query is executed')
   assert.match(exec![0], /\.order\(/,
     'the policy query has no ORDER BY, so row [0] is whichever policy Postgres '

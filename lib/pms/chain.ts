@@ -35,7 +35,7 @@ import { CHAIN_STEPS, type Chain, type Role } from './hierarchy.ts'
  * and only one of them is somebody's fault.
  */
 export const STAGES = [
-  'EMPLOYEE', 'RM_L1', 'RM_L2', 'HOD', 'HR', 'DONE',
+  'EMPLOYEE', 'RM_L1', 'RM_L2', 'HOD', 'SITE_HR', 'REGIONAL_HEAD', 'HR', 'DONE',
 ] as const
 export type Stage = typeof STAGES[number]
 
@@ -44,8 +44,29 @@ export const STAGE_LABEL: Record<Stage, string> = {
   RM_L1:    'With RM L1',
   RM_L2:    'With RM L2',
   HOD:      'With the HOD',
+  SITE_HR:  'With the site HR',
+  REGIONAL_HEAD: 'With the regional head',
   HR:       'With HR to publish',
   DONE:     'Published',
+}
+
+/**
+ * The same stages named in two or three characters, for drawing the chain
+ * itself rather than describing where something sits.
+ *
+ * STAGE_LABEL is a sentence — "With RM L1" — which is right in a status cell
+ * and wrong repeated five times across a track, where the words "With" and
+ * "the" are four fifths of the pixels and none of the information.
+ */
+export const STAGE_SHORT: Record<Stage, string> = {
+  EMPLOYEE: 'Employee',
+  RM_L1:    'RM L1',
+  RM_L2:    'RM L2',
+  HOD:      'HOD',
+  SITE_HR:  'Site HR',
+  REGIONAL_HEAD: 'Regional',
+  HR:       'HR',
+  DONE:     'Done',
 }
 
 /**
@@ -54,13 +75,105 @@ export const STAGE_LABEL: Record<Stage, string> = {
  * The employee is not a rung: they are where it starts and where a first
  * rejection sends it, not somebody who approves their own appraisal.
  */
-export function rungs(chain: Chain): Stage[] {
-  const raters = CHAIN_STEPS[chain].filter(r => r !== 'EMPLOYEE') as Stage[]
-  return [...raters, 'HR']
+/**
+ * The rungs an appraisal travels, in order.
+ *
+ * TAKES A CUSTOM CHAIN AS WELL AS A PRESET (218). An administrator can now
+ * compose any order from the relationships on the employee record, so this
+ * accepts the composed list directly — every caller downstream already
+ * works on whatever array this returns, which is why the custom chain is a
+ * change here and almost nowhere else.
+ *
+ * HR IS APPENDED, NOT ASSUMED. A composed chain that already names HR must
+ * not get it twice: the duplicate would park an appraisal on a rung it had
+ * just left. A chain that omits it still gets it, because somebody has to
+ * publish and no administrator should be able to compose a chain whose
+ * results can never come out.
+ */
+export function rungs(chain: Chain | readonly Stage[] | null | undefined): Stage[] {
+  const steps: Stage[] = Array.isArray(chain)
+    ? (chain as Stage[]).filter(r => r !== 'EMPLOYEE')
+    : (CHAIN_STEPS[(chain as Chain) ?? 'SELF_RM1_RM2_HOD'] ?? CHAIN_STEPS.SELF_RM1_RM2_HOD)
+        .filter(r => r !== 'EMPLOYEE') as Stage[]
+  // Deduplicated in order: a composed chain is somebody's typing, and the
+  // same person twice in a row is a loop rather than two approvals.
+  const seen = new Set<Stage>()
+  const out = steps.filter(r => !seen.has(r) && seen.add(r) !== undefined && r !== 'DONE')
+  return out.includes('HR') ? out : [...out, 'HR']
+}
+
+/**
+ * A policy as far as the chain is concerned: a preset, or a chain it points at.
+ *
+ * Shaped to match what PostgREST returns from
+ * `select('approval_chain, pms_chain(rungs)')` — the embed arrives as an
+ * object, or as a one-element array depending on how the relationship is
+ * inferred, so both are accepted. Reading only one of the two shapes is how a
+ * custom chain silently falls back to the preset.
+ */
+export interface ChainSource {
+  approval_chain?: string | null
+  chain_id?: string | null
+  pms_chain?: { rungs?: unknown } | { rungs?: unknown }[] | null
+}
+
+/**
+ * WHICH CHAIN THIS POLICY ACTUALLY RUNS (218).
+ *
+ * The one place the fallback is decided, so no screen can disagree with
+ * another about whether a company is on a composed chain or a preset.
+ *
+ * A RETIRED CHAIN STILL DECIDES. is_active governs whether a chain is offered
+ * for a NEW selection, not whether a chosen one runs — so it is deliberately
+ * not consulted here. The alternative is worse than it sounds: retiring a
+ * chain would silently re-appraise everybody on the preset, which is exactly
+ * the surprise the admin route refuses to allow by declining to retire a
+ * chain a policy still points at. The builder shows "(retired)" instead.
+ *
+ * AN EMPTY rungs[] FALLS BACK rather than producing a chain of HR alone. The
+ * CHECK in 218 makes that unreachable through the product; it is reachable by
+ * hand, and "the chain is the preset" beats "nobody approves anything".
+ */
+export function effectiveChain(
+  policy: ChainSource | null | undefined,
+): Chain | Stage[] {
+  const preset = (policy?.approval_chain as Chain | undefined) ?? 'SELF_RM1_RM2_HOD'
+  const embed = policy?.pms_chain
+  const row = Array.isArray(embed) ? embed[0] : embed
+  const composed = Array.isArray(row?.rungs) ? (row!.rungs as unknown[]) : null
+  if (!composed?.length) return preset
+  const known = composed
+    .map(r => String(r).trim().toUpperCase())
+    .filter((r): r is Stage => (STAGES as readonly string[]).includes(r))
+  return known.length ? known : preset
+}
+
+/**
+ * The chain named for a reader, preset or composed.
+ *
+ * CHAIN_LABEL has an entry per preset and none for a composed chain, so
+ * `CHAIN_LABEL[chain]` renders an empty string the moment a company moves to
+ * one — on the finalise banner, which exists to tell a manager what the chain
+ * IS before they finalise against it. That is a blank where the explanation
+ * should be, and TypeScript caught it as an index error rather than letting it
+ * ship, which is the only reason this function exists.
+ *
+ * A composed chain is named by its rungs, which is what a reader needs:
+ * "Self → L1 → Site HR → HOD → HR".
+ */
+export function chainLabel(
+  chain: Chain | readonly Stage[] | null | undefined,
+  presetLabel: Record<string, string>,
+): string {
+  if (!Array.isArray(chain)) {
+    const key = (chain as Chain | null | undefined) ?? 'SELF_RM1_RM2_HOD'
+    return presetLabel[key] ?? key
+  }
+  return ['Employee', ...rungs(chain).map(r => STAGE_SHORT[r])].join(' → ')
 }
 
 /** Where a fresh submission lands. */
-export function firstRung(chain: Chain): Stage {
+export function firstRung(chain: Chain | readonly Stage[]): Stage {
   return rungs(chain)[0]
 }
 
@@ -81,11 +194,17 @@ export function firstRung(chain: Chain): Stage {
  */
 export function heldBy(m: {
   rmL1Id?: string | null; rmL2Id?: string | null; hodId?: string | null
+  /** 218. Measured 2026-11-05: site_hr_id is set for 395 of 398 active
+   *  employees; regional_head_id for none of them, which is why a chain
+   *  naming it steps straight over. */
+  siteHrId?: string | null; regionalHeadId?: string | null
 }): (s: Stage) => boolean {
   return s => s === 'HR' ? true
             : s === 'RM_L1' ? !!m.rmL1Id
             : s === 'RM_L2' ? !!m.rmL2Id
             : s === 'HOD' ? !!m.hodId
+            : s === 'SITE_HR' ? !!m.siteHrId
+            : s === 'REGIONAL_HEAD' ? !!m.regionalHeadId
             : false
 }
 
@@ -107,7 +226,7 @@ const ALL_HELD = () => true
  * Guessing "the next one along" would hand it to a HOD nobody appointed.
  */
 export function nextRung(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
 ): Stage | null {
   const r = rungs(chain)
   const i = r.indexOf(stage)
@@ -129,7 +248,7 @@ export function nextRung(
  * employee is left waiting on a correction that can never be made.
  */
 export function prevRung(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
 ): Stage | null {
   const r = rungs(chain)
   const i = r.indexOf(stage)
@@ -159,7 +278,8 @@ export function isActorsTurn(stage: Stage | null, role: Role): boolean {
  * Approve button read "Approve & finalise" and ask for a rating.
  */
 export function approvalFinalises(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage,
+  held: (s: Stage) => boolean = ALL_HELD,
 ): boolean {
   return nextRung(chain, stage, held) === 'HR'
 }
@@ -176,7 +296,8 @@ export function mayReject(stage: Stage | null): boolean {
  * which one they are making before they type the remark.
  */
 export function rejectDestination(
-  chain: Chain, stage: Stage, held: (s: Stage) => boolean = ALL_HELD,
+  chain: Chain | readonly Stage[], stage: Stage,
+  held: (s: Stage) => boolean = ALL_HELD,
 ): string {
   const back = prevRung(chain, stage, held)
   if (back === null) return 'nowhere — this stage is not part of the chain'
@@ -206,7 +327,12 @@ export function rejectDestination(
 export function rungFor(
   m: { rmL1Id?: string | null; rmL2Id?: string | null; hodId?: string | null },
   viewerId: string,
-): Stage | null {
+  // NARROWER THAN Stage, because this can only ever return a rung a PERSON
+  // occupies. HR is a role with nobody named in the snapshot and DONE is not a
+  // rung at all, so widening the return type to Stage made every caller handle
+  // two cases that cannot happen — and one of them (the one-to-one recorder,
+  // which takes a ConfirmStage) could not accept the value at all.
+): 'RM_L1' | 'RM_L2' | 'HOD' | null {
   if (!viewerId) return null
   if (m.rmL1Id && m.rmL1Id === viewerId) return 'RM_L1'
   if (m.rmL2Id && m.rmL2Id === viewerId) return 'RM_L2'

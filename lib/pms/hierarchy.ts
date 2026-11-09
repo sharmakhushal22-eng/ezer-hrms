@@ -130,6 +130,31 @@ const FINALISER_ROLES: Record<Finaliser, Role[]> = {
  * Resolves the ⚙️ cell. HR roles finalise regardless of the setting — the
  * matrix gives them a plain ✅, because who_can_finalise picks which *line
  * manager* signs off, not whether HR can correct a stuck record.
+ *
+ * ── FINALISATION IS NOT A ROLE PERMISSION, AND THAT IS A DECISION ─────────
+ *
+ * Asked directly: should finalisation be switchable from Roles & Access,
+ * alongside the PMS screen permissions? Answered: no, leave it here.
+ *
+ * Recorded because the opposite looks obviously right and is not. The
+ * authority to finalise ONE appraisal is three things at once:
+ *
+ *   · this policy's who_can_finalise  — the setting below;
+ *   · §2's matrix for the role        — may(role, 'finalise_rating');
+ *   · HOLDING THAT EMPLOYEE'S RUNG    — the frozen chain in
+ *     pms_overall_rating, which is per employee and per period.
+ *
+ * Only the third decides whether a particular HOD may settle a particular
+ * person, and a role permission cannot express it: a HOD is the HOD of
+ * their own department and nobody else's. 199's trigger enforces exactly
+ * that in SQL and would refuse anybody the chain does not name — so a
+ * global "may finalise" toggle would appear to grant something, change
+ * nothing, and then fail at the database with a message about the chain.
+ * A control that lies about what it does is worse than its absence.
+ *
+ * What IS role-switchable is the admin screens — pms.publish, pms.summary
+ * and the rest of the registry in lib/rms/screens.ts. Those gate a TAB,
+ * which is the kind of thing a role can own.
  */
 export function canFinalise(role: Role, setting: Finaliser): boolean {
   const cell = may(role, 'finalise_rating')
@@ -160,8 +185,20 @@ export const CHAIN_STEPS: Record<Chain, Role[]> = {
  * a chain that HAS an RM L2 — on Self → RM L1 → HOD there is nobody to wait
  * for, and blocking there would deadlock the record forever.
  */
-export function blockedByRmL2(chain: Chain, rmL2Done: boolean): boolean {
-  return CHAIN_STEPS[chain].includes('RM_L2') && !rmL2Done
+/**
+ * 218: takes a composed chain too, and asks the same question of it — does
+ * this chain contain an RM L2 at all.
+ *
+ * Typed `readonly string[]` rather than `Stage[]` DELIBERATELY: Stage lives in
+ * chain.ts, which imports this file, so naming it here would be a cycle. The
+ * membership test is the same either way.
+ */
+export function blockedByRmL2(
+  chain: Chain | readonly string[], rmL2Done: boolean,
+): boolean {
+  const steps: readonly string[] = Array.isArray(chain)
+    ? chain : (CHAIN_STEPS[chain as Chain] ?? CHAIN_STEPS.SELF_RM1_RM2_HOD)
+  return steps.includes('RM_L2') && !rmL2Done
 }
 
 // ── the flow, §1 ─────────────────────────────────────────────────────────

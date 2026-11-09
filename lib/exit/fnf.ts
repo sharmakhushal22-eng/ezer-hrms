@@ -56,12 +56,16 @@ export function pendingSalaryOf(grossMonthly: number, paidThroughIso: string | n
   return { days, amount: Math.round(amount), from, note: `${days} day(s) from ${from} to ${lwdIso.slice(0, 10)} at monthly gross ₹${Math.round(grossMonthly).toLocaleString('en-IN')} ÷ days in month` }
 }
 
-/** Notice shortfall (§9.2-3): unserved notice days × daily gross (gross ÷ 30). */
-export function noticeShortfallOf(grossMonthly: number, noticeDays: number, resignedIso: string | null, lwdIso: string, o: { waived?: boolean } = {}): { days: number; amount: number; note: string } {
+/** Notice shortfall (§9.2-3): unserved notice days × daily gross (gross ÷ 30), less the days the
+ *  HR Manager waived (employee_resignation.notice_waived_days, lib/exit/lwd.ts). */
+export function noticeShortfallOf(grossMonthly: number, noticeDays: number, resignedIso: string | null, lwdIso: string, o: { waived?: boolean; waivedDays?: number } = {}): { days: number; amount: number; note: string } {
   if (!noticeDays || !resignedIso || o.waived) return { days: 0, amount: 0, note: o.waived ? 'Notice not applicable for this exit' : 'No notice period on record' }
   const served = Math.max(0, Math.round((d0(lwdIso).getTime() - d0(resignedIso).getTime()) / 86400000))
-  const days = Math.max(0, noticeDays - served)
-  return { days, amount: Math.round(days * grossMonthly / 30), note: `${noticeDays} days notice, ${served} served: ${days} × (gross ÷ 30)` }
+  const waivedDays = Math.max(0, Math.round(Number(o.waivedDays) || 0))
+  const unserved = Math.max(0, noticeDays - served)
+  const days = Math.max(0, unserved - waivedDays)
+  const waivedNote = waivedDays ? `, ${Math.min(waivedDays, unserved)} waived by HR` : ''
+  return { days, amount: Math.round(days * grossMonthly / 30), note: `${noticeDays} days notice, ${served} served${waivedNote}: ${days} × (gross ÷ 30)` }
 }
 
 export interface FnfLine { key: string; label: string; amount: number; note?: string; editable?: boolean }

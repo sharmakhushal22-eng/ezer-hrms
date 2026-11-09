@@ -25,7 +25,7 @@ const C = {
   red: TK.critical, redBg: TK.criticalTint, purpleBg: TK.brandTint, gray: TK.sunken,
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
-const inr = (n: number) => '₹' + Math.round(n || 0).toLocaleString('en-IN')
+const inr = (n: number) => Math.round(n || 0).toLocaleString('en-IN')
 const fmtDate = (d?: string | null) =>
   d ? new Date(d + 'T00:00:00').toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
 
@@ -585,7 +585,7 @@ export default function NpsReport({ fy }: { fy: string }) {
 
         <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <select style={S.sel} value={fCompany} onChange={e => setFCompany(e.target.value)}>
-            <option value="">All companies</option>{companies.map(c => <option key={c}>{c}</option>)}
+            <option value="">Group Companies (all)</option>{companies.map(c => <option key={c}>{c}</option>)}
           </select>
           <select style={S.sel} value={fDept} onChange={e => setFDept(e.target.value)}>
             <option value="">All departments</option>{depts.map(d => <option key={d}>{d}</option>)}

@@ -35,6 +35,21 @@ export interface PmsAdminSnapshot {
   scale: Record<string, unknown>[]
   periods: Record<string, unknown>[]
   companies: Record<string, unknown>[]
+  /** Active employees, for the HR Head picker (205). */
+  people: Record<string, unknown>[]
+  /** The training courses the AI suggestion retrieves from (215). */
+  catalogue: Record<string, unknown>[]
+  /** The composed approval chains a policy can point at (218). */
+  chains: Record<string, unknown>[]
+  /**
+   * How many employees have somebody at each rung, shown beside each choice
+   * in the chain builder.
+   *
+   * NULLABLE, and null means "do not say" rather than "nobody": the counts
+   * are a non-fatal read, and reporting a failure as zero would warn about
+   * every rung at once.
+   */
+  coverage: Record<string, { have: number; of: number }> | null
   actor: { employeeId: string | null; name: string | null; legacy: boolean }
 }
 

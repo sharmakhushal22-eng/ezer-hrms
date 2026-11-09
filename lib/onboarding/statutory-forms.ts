@@ -26,6 +26,20 @@ export const FORMS: Record<FormKey, { file: string | null; label: string; filena
   esic1:  { file: 'esi1.pdf',   label: 'ESIC Form 1 — Declaration', filename: d => `ESIC_Form1_${slug(d.name)}.pdf`, imgW: 1080 },
   formf:  { file: null,         label: 'Gratuity Form F — Nomination', filename: d => `Gratuity_FormF_${slug(d.name)}.pdf`, imgW: 595 },
 }
+/** Where the EMPLOYEE signs, for e-signing (lib/onboarding/esign.ts): 1-based page within the
+ *  form, fractions of the page from the top-left. Measured on the official blanks next to the
+ *  printed "Signature of member / subscriber / I.P." labels, in the white space each leaves.
+ *  Form F is drawn here, so its spot is reported by the drawing code instead. Witnesses and
+ *  the employer still sign by hand where the forms ask for them. */
+export interface SignSpot { page: number; x: number; y: number; w: number; h: number }
+const SIGN_SPOTS: Record<Exclude<FormKey, 'formf'>, SignSpot[]> = {
+  form11: [{ page: 1, x: 0.727, y: 0.641, w: 0.245, h: 0.053 }],                    // above "Signature of Member"
+  form2:  [{ page: 1, x: 0.672, y: 0.905, w: 0.31, h: 0.055 },                      // under "Signature or thumb impression of the" (Part A)
+           { page: 2, x: 0.595, y: 0.648, w: 0.34, h: 0.045 }],                     // under the subscriber's label (Part B)
+  esic1:  [{ page: 1, x: 0.704, y: 0.578, w: 0.263, h: 0.047 },                     // under "Signature / T.I. of IP" (declaration)
+           { page: 1, x: 0.352, y: 0.927, w: 0.259, h: 0.034 }],                    // above "Signature / T.I. of I.P." (identity card)
+}
+
 export const isFormKey = (k: any): k is FormKey => k === 'form11' || k === 'form2' || k === 'esic1' || k === 'formf'
 const slug = (n: string) => (n || 'candidate').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '')
 
@@ -257,7 +271,7 @@ async function drawEsic1(s: Sheet, d: StatutoryData, photo: { bytes: Uint8Array;
 }
 
 // ── Gratuity Form F (A4, drawn in points: imgW = 595 so px = pt) ──────────────────────────
-function drawFormF(sheet: () => Sheet, d: StatutoryData) {
+function drawFormF(sheet: () => Sheet, d: StatutoryData, spots?: SignSpot[]) {
   const W = 595, M = 46, CW = W - 2 * M, BODY = 9.3, LH = 12.6
   let s = sheet(), y = 44
   const text = (t: string, x: number, o: { size?: number; bold?: boolean; w?: number; align?: 'left' | 'center' | 'right'; black?: boolean } = {}) => s.text(t, x, y, { black: true, ...o })
@@ -342,7 +356,10 @@ function drawFormF(sheet: () => Sheet, d: StatutoryData) {
     if (col === 1 || i === parts.length - 1) y += LH
   })
   y += 10
-  s.text(`Place: ${d.place || '____________'}`, M, y, { size: BODY }); s.text('Signature / Thumb-impression of the employee', W - M, y, { size: BODY, align: 'right', black: true }); y += LH
+  s.text(`Place: ${d.place || '____________'}`, M, y, { size: BODY }); s.text('Signature / Thumb-impression of the employee', W - M, y, { size: BODY, align: 'right', black: true })
+  // The e-signature goes right under its label (A4 drawn in points, so px = pt).
+  spots?.push({ page: 1, x: (W - M - 190) / 595, y: (y + 5) / 842, w: 190 / 595, h: 44 / 842 })
+  y += LH
   s.text(`Date: ${d.date}`, M, y, { size: BODY })
 
   // ── Page 2: witnesses, employer, acknowledgement ──
@@ -371,15 +388,20 @@ function drawFormF(sheet: () => Sheet, d: StatutoryData) {
   para('Note: Strike out the words / paragraphs not applicable. Paragraphs are struck through here from the details given on the onboarding form; the employee confirms them while signing.', { size: 8, after: 0 })
 }
 
-export interface RenderOptions { photo?: { bytes: Uint8Array; mime: string } | null }
+export interface RenderOptions {
+  photo?: { bytes: Uint8Array; mime: string } | null
+  /** Filled with where the employee signs on this form (for e-signing). */
+  spots?: SignSpot[]
+}
 
 /** The filled form as PDF bytes. */
 export async function renderStatutoryForm(key: FormKey, d: StatutoryData, o: RenderOptions = {}): Promise<Uint8Array> {
   const { doc, sheets, sheet } = await open(key)
   if (key === 'form11') drawForm11(sheets[0], d)
   else if (key === 'form2') drawForm2(sheets[0], sheets[1], d)
-  else if (key === 'formf') drawFormF(sheet, d)
+  else if (key === 'formf') drawFormF(sheet, d, o.spots)
   else await drawEsic1(sheets[0], d, o.photo || null)
+  if (key !== 'formf') o.spots?.push(...SIGN_SPOTS[key])
   doc.setTitle(`${FORMS[key].label} — ${d.name}`)
   doc.setProducer('EZER HRMS')
   return doc.save()

@@ -34,8 +34,11 @@ export async function GET(req: NextRequest) {
   return NextResponse.json({ items, mine: items.filter(i => i.mine).length, chain })
 }
 
+// Every approver sets a last working day (lib/exit/lwd.ts): 'Approve with LWD' is the managers'
+// approval and always carries a date. The older labels still resolve.
 const RES_ACTION: Record<string, string> = {
-  'Acknowledge & forward': 'ACKNOWLEDGED', 'Accept with my date': 'ACCEPTED_WITH_DATE', 'Request retention': 'REQUESTED_RETENTION',
+  'Approve with LWD': 'ACCEPTED_WITH_DATE',
+  'Acknowledge & forward': 'ACCEPTED_WITH_DATE', 'Accept with my date': 'ACCEPTED_WITH_DATE', 'Request retention': 'REQUESTED_RETENTION',
   'Resume chain': 'RESUMED', 'Set final LWD': 'FINAL_LWD_SET',
 }
 
@@ -85,8 +88,11 @@ export async function POST(req: NextRequest) {
 
   if (kind === 'RESIGNATION') {
     const code = RES_ACTION[action] || action
+    if ((code === 'ACCEPTED_WITH_DATE' || code === 'FINAL_LWD_SET' || code === 'ACKNOWLEDGED') && !/^\d{4}-\d{2}-\d{2}$/.test(String(body.lwd || ''))) {
+      return NextResponse.json({ error: code === 'FINAL_LWD_SET' ? 'Enter the final last working day.' : 'Enter the last working day you approve.' }, { status: 400 })
+    }
     const { data: out, error } = await sb.rpc('fn_resignation_act', {
-      p_resignation_id: id, p_actor_id: me, p_action: code,
+      p_resignation_id: id, p_actor_id: me, p_action: code === 'ACKNOWLEDGED' ? 'ACCEPTED_WITH_DATE' : code,
       p_note: body.note || null, p_lwd: body.lwd || null, p_regrettable: typeof body.regrettable === 'boolean' ? body.regrettable : null,
     })
     if (error) return NextResponse.json({ error: error.message.replace(/^.*?: /, '') }, { status: 409 })

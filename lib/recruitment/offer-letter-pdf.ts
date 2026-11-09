@@ -40,7 +40,13 @@ const day = (v: any) => v ? new Date(v).toLocaleDateString('en-IN', { day: '2-di
 type Item = [string, string]
 
 /** Build the letter for this engagement. Returns the finished PDF. */
-export async function offerLetterPdf(dossier: Dossier): Promise<{ name: string; content: Buffer }> {
+/** A box for EZER Sign: 1-based page, fractions of the page from the top-left. */
+export interface OfferSignSpot { page: number; x: number; y: number; w: number; h: number; kind: 'SIGNATURE' | 'DATE' }
+
+/** Build the letter for this engagement. Returns the finished PDF. With `forSigning` the
+ *  acceptance block leaves room above its first two lines (signature, date) and reports where
+ *  they are, so the candidate can e-sign it (lib/recruitment/offer-esign.ts). */
+export async function offerLetterPdf(dossier: Dossier, o: { forSigning?: boolean } = {}): Promise<{ name: string; content: Buffer; spots: OfferSignSpot[] }> {
   const { request: req, candidate: cand, company, mrf, negotiation: neg, ctx } = dossier
   const kind = dossier.kind
   const spec = specOf(kind)
@@ -85,7 +91,7 @@ export async function offerLetterPdf(dossier: Dossier): Promise<{ name: string; 
   // The wording: this engagement's template for the offer's branch (the MRF's location) and company.
   const tpl = await resolveTemplate(OFFER_LETTER_KEY[kind], { companyId: req.company_id || company?.id || null, locationId: mrf?.location_id || null })
   const T = letterFromTemplate(tpl!, f)
-  return drawOfferLetter({ kind, T, company, name, first, role, companyName, address, email: cand.email || null, phone: cand.mobile || cand.phone || null, ref, today, salary: dossier.salary })
+  return drawOfferLetter({ kind, T, company, name, first, role, companyName, address, email: cand.email || null, phone: cand.mobile || cand.phone || null, ref, today, salary: dossier.salary, forSigning: o.forSigning })
 }
 
 /**
@@ -124,11 +130,13 @@ type DrawInput = {
   kind: LetterKind; T: LetterText; company: any; name: string; first: string; role: string; companyName: string
   address: string | null; email: string | null; phone: string | null; ref: string; today: Date
   salary: Dossier['salary']
+  forSigning?: boolean
 }
 
 /** Lay the letter out on the company's letterhead. */
-async function drawOfferLetter(x: DrawInput): Promise<{ name: string; content: Buffer }> {
+async function drawOfferLetter(x: DrawInput): Promise<{ name: string; content: Buffer; spots: OfferSignSpot[] }> {
   const { kind, T, company, name, first, role, companyName, address, ref, today } = x
+  const spots: OfferSignSpot[] = []
   const spec = specOf(kind)
   const [lh, sig] = await Promise.all([loadLetterhead(company), loadSignatory(company)])
   const M = lh.margins
@@ -245,8 +253,13 @@ async function drawOfferLetter(x: DrawInput): Promise<{ name: string; content: B
     d.font('Helvetica-Bold').fontSize(11).fillColor(INK).text('ACCEPTANCE', x0, d.y, { width: W, align: 'center' })
     d.moveDown(0.5)
     para(T.acceptance)
-    d.moveDown(1.6)
+    d.moveDown(x.forSigning ? 4.6 : 1.6)
     const yS = d.y, col = W / T.signLines.length
+    if (x.forSigning) {
+      const page = d.bufferedPageRange().start + d.bufferedPageRange().count, pw = d.page.width, ph = d.page.height
+      spots.push({ page, kind: 'SIGNATURE', x: x0 / pw, y: (yS - 50) / ph, w: (col - 18) / pw, h: 48 / ph })
+      if (T.signLines.length > 1) spots.push({ page, kind: 'DATE', x: (x0 + col) / pw, y: (yS - 16) / ph, w: (col - 18) / pw, h: 14 / ph })
+    }
     T.signLines.forEach((l, i) => {
       d.moveTo(x0 + i * col, yS).lineTo(x0 + i * col + col - 18, yS).lineWidth(0.6).strokeColor(INK).stroke()
       d.font('Helvetica').fontSize(9).fillColor(MUTED).text(clean(l), x0 + i * col, yS + 4, { width: col - 18 })
@@ -259,5 +272,5 @@ async function drawOfferLetter(x: DrawInput): Promise<{ name: string; content: B
 
   // Final pass with pdf-lib: every content page onto the uploaded letterhead (when there is
   // one), and "Page x of y" just under the content area.
-  return { name: fileName, content: await stampOnLetterhead(content, lh, { title: docTitle, author: companyName, label: (i, n) => `${name} - ${spec.title} | Page ${i + 1} of ${n}` }) }
+  return { name: fileName, content: await stampOnLetterhead(content, lh, { title: docTitle, author: companyName, label: (i, n) => `${name} - ${spec.title} | Page ${i + 1} of ${n}` }), spots }
 }

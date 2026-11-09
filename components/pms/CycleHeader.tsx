@@ -24,10 +24,11 @@ import {
   stageStates, nextAction, humanDate, DEFAULT_RULES,
   type Period, type Progress, type Roles, type Queues, type Rules,
 } from '@/lib/pms/cycle'
+import { withoutFreshCols } from '@/lib/pms/policy'
 import {
   PERIOD_OPEN, GOAL_SENT, GOAL_STATUS, GOAL_AWAITING_RM, WORKFLOW, reached,
 } from '@/lib/pms/status'
-import { C, F, W, S, R } from '@/lib/ui'
+import { C, F, W, S, R, IconPerformance, IconCalendar, IconClock } from '@/lib/ui'
 
 /** PostgREST's "that relation does not exist". */
 const MISSING = 'PGRST205'
@@ -65,21 +66,38 @@ export default function CycleHeader({
   useEffect(() => {
     let alive = true
     ;(async () => {
-      const per = await supabase.from('pms_periods')
-        .select('id, period_name, period_code, financial_year, period_no, period_start, period_end,'
-              + ' kra_window_from, kra_window_to,'
-              + ' self_rating_from, self_rating_to, rm_review_from, rm_review_to,'
-              + ' finalise_from, finalise_to, result_publish_date, status,'
-              // The KRA rules come with the period's policy in the same
-              // query. They were hardcoded to DEFAULT_RULES below, so an
-              // admin changing min_kra_count left this header still saying
-              // "You need between 4 and 10".
-              + ' pms_policies(frequency, min_kra_count, max_kra_count,'
-              + ' total_weightage, min_weightage_per_kra)')
+      const PERIOD_SELECT =
+          'id, period_name, period_code, financial_year, period_no, period_start, period_end,'
+        + ' kra_window_from, kra_window_to,'
+        + ' self_rating_from, self_rating_to, rm_review_from, rm_review_to,'
+        + ' finalise_from, finalise_to, result_publish_date, status,'
+        // The KRA rules come with the period's policy in the same
+        // query. They were hardcoded to DEFAULT_RULES below, so an
+        // admin changing min_kra_count left this header still saying
+        // "You need between 4 and 10".
+        + ' pms_policies(frequency, min_kra_count, max_kra_count,'
+        + ' total_weightage, min_weightage_per_kra,'
+        + ' min_kpi_per_kra, max_kpi_per_kra)'
+      const ask = (sel: string) => supabase.from('pms_periods').select(sel)
         // NOT .eq('status','ACTIVE') — pms_periods has no such value, and
         // that filter matches zero rows forever without ever erroring.
         .in('status', PERIOD_OPEN)
         .order('period_start', { ascending: false }).limit(1).maybeSingle()
+      let per = await ask(PERIOD_SELECT)
+
+      /**
+       * TOLERANT OF A MIGRATION NOT HAVING RUN.
+       *
+       * The policy columns are EMBEDDED in this select, so one the database
+       * does not know about fails the PERIOD read as well — and this header
+       * renders nothing at all without a period. A missing KPI limit would
+       * blank the whole cycle banner, which is a great deal louder than the
+       * setting it came from.
+       */
+      if (per.error) {
+        const narrowed = withoutFreshCols(PERIOD_SELECT)
+        if (narrowed !== PERIOD_SELECT) per = await ask(narrowed)
+      }
 
       if (missing(per.error)) { if (alive) { setPending(true); setD(EMPTY) } ; return }
       const row = (per.data ?? null) as unknown as (Record<string, string | null> & { id: string }) | null
@@ -92,6 +110,7 @@ export default function CycleHeader({
       const pol = (row as unknown as { pms_policies?: {
         frequency?: string; min_kra_count?: number; max_kra_count?: number
         total_weightage?: number; min_weightage_per_kra?: number
+        min_kpi_per_kra?: number; max_kpi_per_kra?: number
       } }).pms_policies
       const freq = pol?.frequency ?? null
       // DEFAULT_RULES stays the fallback for a period with no policy, which
@@ -101,6 +120,8 @@ export default function CycleHeader({
         maxKra: Number(pol?.max_kra_count) || DEFAULT_RULES.maxKra,
         totalWeightage: Number(pol?.total_weightage) || DEFAULT_RULES.totalWeightage,
         minWeightagePerKra: Number(pol?.min_weightage_per_kra) || DEFAULT_RULES.minWeightagePerKra,
+        minKpi: Number(pol?.min_kpi_per_kra) || DEFAULT_RULES.minKpi,
+        maxKpi: Number(pol?.max_kpi_per_kra) || DEFAULT_RULES.maxKpi,
       }
       const perYear = freq === 'MONTHLY' ? 12 : freq === 'QUARTERLY' ? 4
                     : freq === 'HALF_YEARLY' ? 2 : freq === 'ANNUAL' ? 1 : null
@@ -195,7 +216,11 @@ export default function CycleHeader({
   }, [employeeId, roles.isRM, roles.isHOD])
 
   if (!d) {
-    return <div style={{ height: 132, borderRadius: R.sm, background: C.sunken, opacity: .5 }} aria-hidden />
+    return (
+      <div className="pms-skel" aria-hidden style={{ minHeight: 132 }}>
+        <i /><i /><i />
+      </div>
+    )
   }
 
   const states = stageStates(d.period, d.progress, today)
@@ -247,50 +272,41 @@ export default function CycleHeader({
   ]
 
   return (
-    <section style={{ marginBottom: S.lg }} aria-label="Where this appraisal cycle is">
-      <div className="pms-head" style={{
-        border: `1px solid ${C.line}`, borderRadius: R.sm,
-        padding: `${S.lg}px ${S.lg}px ${S.lg}px`, marginBottom: S.sm,
-      }}>
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-end',
-                      gap: S.md, flexWrap: 'wrap', marginBottom: S.lg }}>
-          <div style={{ minWidth: 0 }}>
-            <h2 style={{
-              fontSize: F.title, fontWeight: W.bold, color: C.ink, letterSpacing: '-.015em',
-              lineHeight: 1.15, margin: 0,
-            }}>{d.naming.title}</h2>
-            <div style={{ fontSize: F.small, color: C.inkSoft, marginTop: 4 }}>
-              {d.naming.sub}
-              {d.naming.code && (
-                <span style={{
-                  marginLeft: 8, padding: '2px 7px', borderRadius: 999, background: C.sunken,
-                  color: C.muted, fontSize: F.micro, fontWeight: W.semi, whiteSpace: 'nowrap',
-                }} title="The code your HR team files this under">{d.naming.code}</span>
-              )}
-            </div>
+    <section className="pms-cycle" aria-label="Where this appraisal cycle is">
+      {/* The period, on the hero band. The track sits on a white panel that
+          overlaps the band's lower edge, so the two read as one object. */}
+      <div className="pms-hero pms-hero-cycle">
+        <div className="pms-hero-main">
+          <div className="pms-hero-eyebrow">
+            <span className="pms-hero-ico" aria-hidden="true"><IconPerformance size={15} /></span>
+            My performance
           </div>
-          <div style={{ fontSize: F.micro, color: C.muted, maxWidth: '38ch', textAlign: 'right' }}>
+          <h2>{d.naming.title}</h2>
+          <div className="pms-hero-sub">{d.naming.sub}</div>
+          <div className="pms-hero-chips">
+            {d.naming.code && (
+              <span className="pms-hero-chip" title="The code your HR team files this under">
+                {d.naming.code}
+              </span>
+            )}
+            {d.span && <span className="pms-hero-chip"><IconCalendar size={13} /> {d.span}</span>}
+            {d.frequency && <span className="pms-hero-chip"><IconClock size={13} /> {d.frequency}</span>}
+          </div>
+        </div>
+      </div>
+      <div className="pms-cycle-track">
+        <div className="pms-cycle-track-head">
+          <span className="pms-cycle-track-t">Where the cycle is</span>
+          <span className="k" style={{ maxWidth: '52ch' }}>
             {pending
               ? 'These are the stages every appraisal goes through. The module is not switched on in this database yet, so nothing is filled in.'
               : 'Hover any stage to see what happens in it.'}
-          </div>
+          </span>
         </div>
-
         <CycleStepper states={states as never} detail={detail as never} />
       </div>
-
-      <div style={{ marginBottom: S.sm }}><NextAction action={action} onGo={onGo} /></div>
+      <div style={{ marginBottom: S.md }}><NextAction action={action} onGo={onGo} /></div>
       <StatCards stats={stats} />
-
-      <style>{`
-        /* A ground, not a flat panel: the rail of stages sits on a faint
-           vertical wash so the stepper reads as a surface with things on it
-           rather than a row of icons floating on the page. */
-        .pms-head{
-          background: linear-gradient(180deg, ${C.surface} 0%, ${C.canvas} 100%);
-          box-shadow: 0 1px 2px rgba(16,36,100,.05);
-        }
-      `}</style>
     </section>
   )
 }

@@ -36,15 +36,15 @@ const labelStyle: React.CSSProperties = { fontSize: 10, color: C.muted, display:
 function summarizeMonths(r: PtRow): string {
   const amts = [r.jan,r.feb,r.mar,r.apr,r.may,r.jun,r.jul,r.aug,r.sep,r.oct,r.nov,r.dec].map(Number)
   const uniq = Array.from(new Set(amts))
-  if (uniq.length === 1) return uniq[0] === 0 ? 'Exempt (₹0)' : `₹${uniq[0]} every month`
+  if (uniq.length === 1) return uniq[0] === 0 ? 'Exempt (0)' : `${uniq[0]} every month`
   const nonZeroMonths = amts.map((a, i) => a > 0 ? MONTH_LABELS[i] : null).filter(Boolean)
   const zeroCount = amts.filter(a => a === 0).length
-  if (zeroCount >= 10) return `₹${Math.max(...amts)}, only ${nonZeroMonths.join(', ')}`
-  return `Varies (peak ₹${Math.max(...amts)})`
+  if (zeroCount >= 10) return `${Math.max(...amts)}, only ${nonZeroMonths.join(', ')}`
+  return `Varies (peak ${Math.max(...amts)})`
 }
 function slabLabel(r: PtRow): string {
   const min = Number(r.slab_min).toLocaleString('en-IN')
-  return r.slab_max != null ? `₹${min}–${Number(r.slab_max).toLocaleString('en-IN')}` : `₹${min}+`
+  return r.slab_max != null ? `${min}–${Number(r.slab_max).toLocaleString('en-IN')}` : `${min}+`
 }
 
 // ── Searchable dropdown ─────────────────────────────────────────────

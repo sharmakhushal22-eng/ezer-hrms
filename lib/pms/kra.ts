@@ -13,6 +13,7 @@
 // way to find out what is wrong.
 
 import { DEFAULT_RULES, type Rules } from './cycle.ts'
+import type { Kpi } from './kpi.ts'
 
 /** §3.2 — these drive the category analytics in §3.6 and §5.3. */
 export const CATEGORIES = [
@@ -28,10 +29,29 @@ export const CATEGORY_LABEL: Record<Category, string> = {
 export interface Kra {
   seq_no: number
   kra_title: string
+  /**
+   * DEPRECATED by migration 220 — a KRA's measures live in `kpis` now.
+   *
+   * Kept because 48 rows were written before the change and
+   * pms_employee_goals still carries both columns. Nothing new should read
+   * them; `kpis` is where a measure belongs.
+   */
   kpi_metric: string
+  /** DEPRECATED by 220 — see kpi_metric. */
   target_value: string
   category: Category
   weightage: number
+  /**
+   * THE MEASURES UNDER THIS KRA (220), each rated on its own.
+   *
+   * Optional only so that callers which never touch KPIs — the one-to-one
+   * tab, the carry-forward preview — keep compiling. Anything that saves or
+   * rates a KRA must populate it: a rating belongs to a KPI now, and
+   * pms_reviews.kpi_id is NOT NULL.
+   *
+   * Their weightages total THIS KRA's weightage, not 100. See lib/pms/kpi.ts.
+   */
+  kpis?: Kpi[]
   /**
    * WHERE THIS KRA CAME FROM. pms_employee_goals.source, which has allowed
    * 'MANUAL' | 'LIBRARY' | 'AI_SUGGESTED' | 'CARRIED_FORWARD' since 066 and
@@ -227,4 +247,54 @@ export function diffKras(before: Row[], after: Row[]): KraChange[] {
     }
   }
   return out.sort((x, y) => x.seq_no - y.seq_no)
+}
+
+// ── editing a weightage after the lock ───────────────────────────────────
+
+/**
+ * WHAT HAPPENS IF THIS WEIGHTAGE IS CHANGED NOW.
+ *
+ * The decision, settled after being open since the start of this work: a
+ * senior may change a locked weightage, and doing so reopens the KRA set for
+ * re-agreement. The set returns to DRAFT, both one-to-one acknowledgements
+ * are cleared, and the employee has to agree again before anything re-locks.
+ *
+ * ENGINE COMPUTES, SQL DECIDES. 206 enforces all of this in a trigger that no
+ * client can talk out of it — including the refusal once the rating is
+ * settled. This function exists so a screen can WARN BEFORE the click rather
+ * than report a database exception after it: "this will send the set back to
+ * Priya and clear both signatures" is a sentence somebody can decide about.
+ *
+ * It deliberately says nothing about WHO may edit. The database cannot tell —
+ * a row carries no actor — so permission is the screen's to enforce and
+ * consequence is the trigger's. Keeping the split explicit is what stops a
+ * future reader assuming the trigger is also an authorisation check.
+ */
+export type WeightageEdit =
+  /** Not locked yet: an ordinary edit, nothing reopens. */
+  | { kind: 'FREE' }
+  /** Locked, and editing reopens the set. `because` is for the warning. */
+  | { kind: 'REOPENS'; because: string }
+  /** Settled. 206 raises; the screen should not offer the control at all. */
+  | { kind: 'REFUSED'; because: string }
+
+export function weightageEdit(g: {
+  status?: string | null
+  finalRating?: number | null
+  workflowStatus?: string | null
+}): WeightageEdit {
+  const settled = g.finalRating !== null && g.finalRating !== undefined
+  const status = String(g.workflowStatus ?? '')
+  if (settled || ['FINALISED', 'PUBLISHED', 'ACKNOWLEDGED'].includes(status)) {
+    return { kind: 'REFUSED', because:
+      'The rating is already settled, so the weightage cannot change. Changing '
+      + 'it now would move what this person was measured against after they '
+      + 'were measured. Ask HR to reopen the cycle.' }
+  }
+  if (g.status !== 'LOCKED') return { kind: 'FREE' }
+  return { kind: 'REOPENS', because:
+    'This weightage is locked. Changing it sends the whole set back to the '
+    + 'employee as a draft and clears both one-to-one acknowledgements — they '
+    + 'will have to agree the KRAs with you again before anything can be '
+    + 'rated. Scores already calculated are cleared with it.' }
 }

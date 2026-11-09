@@ -7,7 +7,7 @@
 //   POST { action: 'start', target_id, reason_code, sub_reason, lwd, remarks, destination_company_id }
 //        (target_id, not employee_id: lib/ess/asked reads a body employee_id as whose portal it is)
 //   POST { action: 'act', id, act, note?, lwd? }       the current stage's approver: act is
-//        ACKNOWLEDGED / ACCEPTED_WITH_DATE (lwd) / REQUESTED_RETENTION / RESUMED, or at the HR
+//        ACCEPTED_WITH_DATE (Approve with LWD — every approver sets a date) / REQUESTED_RETENTION / RESUMED, or at the HR
 //        Manager stage FINAL_LWD_SET (lwd) — the step that puts the exit into effect
 //   POST { action: 'cancel', id, note }                running or approved (not yet left)
 //   POST { action: 'reset', id }                       an older, rejected one, so another can start
@@ -65,7 +65,7 @@ async function stageApprovers(employeeId: string): Promise<Record<StageKey, Pers
 }
 
 async function tellApprovers(step: ChainStep, emp: Person, reasonLabel: string) {
-  const ask = step.stage === 'HR_MANAGER' ? 'Set the final last working day' : 'Acknowledge it, accept it with your date, or request retention'
+  const ask = step.stage === 'HR_MANAGER' ? 'Set the final last working day' : 'Approve it with your last working day, or request retention'
   await Promise.all(step.approvers.map(p => notify(p.id, `Exit approval: ${who(emp)}`,
     `${reasonLabel}. Waiting on you as ${step.label}. ${ask} in Tasks & Approvals.`, APPROVALS_LINK, 'APPROVAL').catch(() => null)))
 }

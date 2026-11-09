@@ -105,6 +105,83 @@ export const STATUS_LABEL: Record<PipStatus, string> = {
   CLOSED: 'closed',
 }
 
+/**
+ * ONE PIP, AS THE DATABASE HOLDS IT.
+ *
+ * The shape pms_pip actually has — 055. Snake-cased because this is what
+ * PostgREST returns, and translating at the edge is what lets the engine
+ * above stay about the lifecycle rather than about column names.
+ */
+export interface PipRowDb {
+  id?: string
+  employee_id?: string
+  requested_by?: string | null
+  requested_by_role?: string | null
+  requested_at?: string | null
+  trigger_rating?: number | string | null
+  request_reason?: string | null
+  proposed_start?: string | null
+  proposed_end?: string | null
+  hr_status?: string | null
+  status?: string | null
+  employee_ack?: boolean | null
+  final_outcome?: string | null
+  /** Counted from pms_pip_reviews, which this row does not carry itself. */
+  reviewsDone?: number
+  areas?: { retained?: boolean }[]
+}
+
+/**
+ * THE DATABASE KEEPS THREE FLAGS; THE LIFECYCLE HAS ONE STATE.
+ *
+ * pms_pip records hr_status, status and employee_ack separately, and no one
+ * of them is the lifecycle: a row can read hr_status = 'INITIATED' and
+ * status = 'ACTIVE' while the employee has not acknowledged it, which the
+ * engine calls INITIATED, not ACKNOWLEDGED. So the state is DERIVED, in one
+ * place, and every screen asks this rather than each inventing its own
+ * reading of the three columns.
+ *
+ * ORDER IS THE WHOLE FUNCTION. Finished beats everything — a closed PIP is
+ * closed whatever employee_ack says — then HR's verdict, then the
+ * employee's, then the review trail. Reading them in any other order makes
+ * a settled PIP look live, which is the mistake that matters: it would put
+ * somebody back in an "active PIPs" count months after it ended.
+ */
+export function pipFromRow(r: PipRowDb): Pip {
+  const hr = (r.hr_status ?? 'PENDING_HR').toUpperCase()
+  const st = (r.status ?? 'REQUESTED').toUpperCase()
+  const outcome = (r.final_outcome ?? null) as PipOutcome | 'PENDING' | null
+  const reviewsDone = r.reviewsDone ?? 0
+  const areas = r.areas ?? []
+  const base = {
+    outcome: outcome && outcome !== 'PENDING' ? outcome : null,
+    employeeAck: r.employee_ack === true,
+    reviewsDone, areas,
+  }
+
+  // FINISHED FIRST.
+  //
+  // CANCELLED is folded into CLOSED deliberately. PipStatus has no cancelled
+  // state, and the two honest options were to add one or to pick the
+  // nearest. It is read as CLOSED because the only thing a wrong answer here
+  // can do is show a withdrawn PIP as live — and a cancelled PIP is over, so
+  // "closed" is wrong only about why, while "active" would be wrong about
+  // whether. If cancelled ever needs its own handling, it needs its own
+  // status, not a looser reading of this one.
+  if (st === 'CLOSED' || st === 'CANCELLED') return { ...base, status: 'CLOSED' }
+
+  // HR'S VERDICT. Both of these end or pause the request regardless of
+  // anything else on the row.
+  if (hr === 'REJECTED') return { ...base, status: 'REJECTED' }
+  if (hr === 'SENT_BACK') return { ...base, status: 'SENT_BACK' }
+  if (hr !== 'INITIATED') return { ...base, status: 'PENDING_HR' }
+
+  // HR has started it. Now the employee, then the reviews.
+  if (!base.employeeAck) return { ...base, status: 'INITIATED' }
+  if (st === 'UNDER_REVIEW' || reviewsDone > 0) return { ...base, status: 'IN_REVIEW' }
+  return { ...base, status: 'ACKNOWLEDGED' }
+}
+
 /** What each side should do next. An inbox row is useless without it. */
 export function whatNext(p: Pip): { who: Actor | null; what: string } {
   switch (p.status) {

@@ -13,7 +13,7 @@
 import { useState, useEffect } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { scopedCompanies } from '@/lib/rms/resolve'
+import { scopedCompanies, canPickGroup } from '@/lib/rms/resolve'
 import { loadRuns, loadCompanies, editEmployeeAttendance, MONTHS, type PayrollRun } from '@/lib/payroll/core'
 import { C, font, lbl, ddInp, GROUP, SearchSelect, MultiSelect, maxDaysLive, runPeriodISO, type Opt } from './attendanceShared'
 // Design tokens, aliased as TK — this file declares its own C.
@@ -49,9 +49,11 @@ function ReadOut({ label, value, tone }: { label: string; value: any; tone?: str
   )
 }
 
-export default function AttendanceEditTab({ companyId, fy }: { companyId: string; fy: string }) {
+export default function AttendanceEditTab({ companyId, fy, month }: { companyId: string; fy: string; month?: number }) {
   const { grant } = useGrant()
   const [companies, setCompanies] = useState<Opt[]>([])
+  // "Group Companies" for whoever may see every company (lib/rms/resolve canPickGroup).
+  const [groupOk, setGroupOk] = useState(false)
   const [allRuns, setAllRuns] = useState<PayrollRun[]>([])
   const [coId, setCoId] = useState('')
   const [monthVal, setMonthVal] = useState('')
@@ -70,13 +72,13 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
   const [saveErr, setSaveErr] = useState(''); const [saveMsg, setSaveMsg] = useState(''); const [recalc, setRecalc] = useState('')
 
   useEffect(() => {
-    loadCompanies().then(cs => setCompanies(scopedCompanies(grant, cs as any[]).map((c: any) => ({ value: c.id, label: c.company_name })))).catch(() => {})
+    loadCompanies().then(cs => { setCompanies(scopedCompanies(grant, cs as any[]).map((c: any) => ({ value: c.id, label: c.company_name }))); setGroupOk(canPickGroup(grant, cs as any[])) }).catch(() => {})
     loadRuns('', fy).then(setAllRuns).catch(() => {})
   }, [fy, grant]) // eslint-disable-line react-hooks/exhaustive-deps
   // Non-cross-company users are forced onto their own company; GROUP is never selected.
   useEffect(() => {
-    setCoId(!grant.crossCompany && grant.companyId ? grant.companyId : (companyId || GROUP))
-  }, [companyId, grant]) // eslint-disable-line react-hooks/exhaustive-deps
+    setCoId(!groupOk && grant.companyId ? grant.companyId : (companyId || GROUP))
+  }, [companyId, grant, groupOk]) // eslint-disable-line react-hooks/exhaustive-deps
 
   useEffect(() => {
     if (!coId) return
@@ -92,6 +94,9 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
     const first = allRuns.map(r => r.month).sort((a, b) => (a || 0) - (b || 0))[0]
     setMonthVal(first != null ? String(first) : '')
   }, [coId, allRuns])
+
+  // The header's Month (Payroll → Month) leads; a month not created here yet leaves the pick alone.
+  useEffect(() => { if (month && allRuns.some(r => r.month === month)) setMonthVal(String(month)) }, [month, allRuns, coId])   // eslint-disable-line react-hooks/exhaustive-deps
 
   const isGroup = coId === GROUP
   const monthOpts: Opt[] = Array.from(new Map(allRuns.map(r =>
@@ -212,7 +217,7 @@ export default function AttendanceEditTab({ companyId, fy }: { companyId: string
       {/* filters */}
       <div style={card}>
         <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))', gap: 12, marginBottom: 12 }}>
-          <div><label style={lbl}>Company</label><SearchSelect value={coId} options={[...(grant.crossCompany ? [{ value: GROUP, label: 'Group Companies (all)' }] : []), ...companies]} placeholder="Select company" onChange={setCoId} /></div>
+          <div><label style={lbl}>Company</label><SearchSelect value={coId} options={[...(groupOk ? [{ value: GROUP, label: 'Group Companies (all)' }] : []), ...companies]} placeholder="Select company" onChange={setCoId} /></div>
           <div><label style={lbl}>Month</label><SearchSelect value={monthVal} options={monthOpts} placeholder={monthOpts.length ? 'Select month' : 'No month created'} onChange={setMonthVal} /></div>
           <div><label style={lbl}>Location / Branch</label><SearchSelect value={loc} options={[{ value: '', label: 'All locations' }, ...locOpts]} placeholder="All locations" onChange={setLoc} /></div>
           <div><label style={lbl}>Department</label><SearchSelect value={dept} options={[{ value: '', label: 'All departments' }, ...deptOpts]} placeholder="All departments" onChange={setDept} /></div>

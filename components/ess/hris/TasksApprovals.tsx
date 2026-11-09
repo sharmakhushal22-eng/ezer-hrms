@@ -13,7 +13,7 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import type { ChainRow, PendingItem } from './types'
 import { Ic, type IconKey } from './icons'
-import { CountUp, fmtDateTime, riseStyle, useToast } from './ui'
+import { CountUp, fmtDate, fmtDateTime, riseStyle, useToast } from './ui'
 import { MrfApprovals, OfferApprovals, HrExitApprovals } from '@/components/ess/RoleTabs'
 import OnboardingApprovals from '@/components/ess/OnboardingApprovals'
 import { ClearanceInbox } from './ExitFnf'
@@ -28,8 +28,30 @@ const KIND: Record<PendingItem['kind'], [IconKey, string]> = {
   LEAVE: ['clock', 'Leave'], LEAVE_CANCEL: ['x', 'Leave cancellation'], REGULARISATION: ['check', 'Attendance'],
   TRAVEL: ['plane', 'Travel'], RESIGNATION: ['door', 'Resignation'],
 }
-/** Same four as the live screen — an action that collects input before it fires. */
-const needsInput = (a: string) => ['Accept with my date', 'Request retention', 'Set final LWD', 'Decline'].includes(a)
+/** Same as the live screen — an action that collects input before it fires. */
+const needsInput = (a: string) => ['Approve with LWD', 'Accept with my date', 'Request retention', 'Set final LWD', 'Decline'].includes(a)
+/** The actions that carry a last working day: every approver sets one (lib/exit/lwd.ts). */
+const datedAction = (a: string | null) => a === 'Approve with LWD' || a === 'Accept with my date' || a === 'Set final LWD'
+
+/** A resignation's last working day so far: the employee's tentative date, the policy date and
+ *  each earlier approver's date. */
+function LwdTrail({ item }: { item: PendingItem }) {
+  const rows: [string, string, string | null][] = []
+  if (item.lwd_tentative) rows.push(['Employee’s tentative LWD', item.lwd_tentative, null])
+  if (item.lwd_policy) rows.push([`As per notice${item.notice_days != null ? ` (${item.notice_days} days)` : ''}`, item.lwd_policy, null])
+  for (const t of item.lwd_trail || []) rows.push([t.label, t.lwd, t.by])
+  if (!rows.length) return null
+  return (
+    <div style={{ marginTop: 9, border: '1px solid var(--ez-line)', borderRadius: 9, overflow: 'hidden' }}>
+      {rows.map(([k, v, by], idx) => (
+        <div key={idx} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 10px', fontSize: 12, background: idx % 2 ? 'transparent' : 'var(--ez-sunken)', borderTop: idx ? '1px solid var(--ez-line)' : 'none' }}>
+          <span style={{ color: 'var(--ez-muted)', flex: 1, minWidth: 0 }}>{k}{by ? <span style={{ color: 'var(--ez-faint)' }}> · {by}</span> : null}</span>
+          <b style={{ color: 'var(--ez-ink)', whiteSpace: 'nowrap' }}>{fmtDate(v)}</b>
+        </div>
+      ))}
+    </div>
+  )
+}
 
 interface Props {
   employeeId: string
@@ -100,7 +122,7 @@ export function TasksApprovals({ employeeId, api, go, onCount }: Props) {
       <div className="hx-card pad">
         <div className="hx-sec">
           <h2>Approvals</h2><span className="grow" />
-          <span style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
+          <span className="hx-chiprow" style={{ display: 'flex', gap: 6, flexWrap: 'wrap' }}>
             {CHIPS.map(([k, l]) => (
               <button key={k} className="hx-chip" aria-pressed={filter === k} onClick={() => setFilter(k)}>{l}</button>
             ))}
@@ -140,6 +162,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
   const [err, setErr] = useState('')
   const [chain, setChain] = useState<ChainRow[] | null>(null)
 
+  const lastSet = item.lwd_trail?.length ? item.lwd_trail[item.lwd_trail.length - 1].lwd : null
   async function fire(a: string) {
     setErr('')
     // Travel claims are actioned on their own screen, never here.
@@ -152,11 +175,12 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
       return
     }
     if (needsInput(a) && ask !== a) {
-      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
-      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      // The date starts from the last approver's date, else the employee's tentative one, else
+      // the policy LWD (resignation date + notice period).
+      if (datedAction(a)) setLwd(lastSet || item.lwd_proposed || item.lwd_tentative || item.lwd_policy || '')
       setAsk(a); return
     }
-    if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
+    if (datedAction(a) && !lwd) { setErr(a === 'Set final LWD' ? 'Pick the final last working day' : 'Pick the last working day you approve'); return }
     setBusy(true)
     try {
       await api('/api/ess/approvals', {
@@ -190,6 +214,7 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
         </ul>
       )}
       {item.alert && <div className="hx-note w" style={{ marginTop: 9 }}>{item.alert}</div>}
+      {item.kind === 'RESIGNATION' && <LwdTrail item={item} />}
 
       <div className="hx-actions">
         {item.actions.map((a, idx) => {
@@ -204,14 +229,15 @@ function PendingCard({ item, api, go, animate, i, onDone }: {
 
       {ask && (
         <div className="hx-form">
-          {(ask === 'Accept with my date' || ask === 'Set final LWD') && (
+          {datedAction(ask) && (
             <div>
-              <label className="hx-label">{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label>
+              <label className="hx-label">{ask === 'Set final LWD' ? 'Final last working day' : 'Last working day you approve'}</label>
               <input type="date" className="hx-input" value={lwd} onChange={e => setLwd(e.target.value)} />
               <div style={{ fontSize: 11.5, color: 'var(--ez-muted)', marginTop: 4 }}>
-                {item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.`
-                  : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.`
-                  : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}
+                {lwd && lastSet && lwd === lastSet ? `Filled from the previous approver's date (${fmtDate(lastSet)}).`
+                  : lwd && item.lwd_tentative && lwd === item.lwd_tentative ? `Filled from the employee's tentative date (${fmtDate(item.lwd_tentative)}).`
+                  : lwd && item.lwd_policy && lwd === item.lwd_policy ? `As per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}.` : ''}
+                {lwd && item.lwd_policy && lwd < item.lwd_policy ? ' Earlier than the notice period: shortfall recovery applies unless HR waives it.' : ''}
               </div>
             </div>
           )}

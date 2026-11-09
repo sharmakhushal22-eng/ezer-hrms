@@ -109,6 +109,20 @@ export interface Band {
   scoreTo?: number
   /** pms_rating_scale.rating_code — 'O' / 'EE' / 'ME' / 'NI' / 'U' / 'NR'. */
   code?: string
+  /**
+   * May a rater scoring in this band raise a PIP, and may they propose
+   * recognition? Both are per-band configuration, not thresholds in code:
+   * allows_pip_request has been in pms_rating_scale since 066, and 209 adds
+   * its mirror at the other end.
+   *
+   * Default false for the reason every other gate in this module defaults
+   * shut — a band nobody has configured should not start offering to put
+   * somebody on a performance plan.
+   */
+  allowsPip?: boolean
+  allowsRecognition?: boolean
+  // undefined means "the query did not ask", which is distinct from an
+  // admin's false. See bandsFromScale and scoreInvites.
 }
 
 /**
@@ -145,6 +159,8 @@ export interface ScaleRow {
   score_to?: number | string | null
   sort_order?: number | string | null
   is_active?: boolean | null
+  allows_pip_request?: boolean | null
+  allows_recognition?: boolean | null
 }
 
 /**
@@ -166,6 +182,20 @@ export function bandsFromScale(rows: ScaleRow[] | null | undefined): Band[] {
       code: r.rating_code ?? undefined,
       improvementMandatory: r.improvement_feedback_mandatory === true,
       minCommentChars: Number(r.min_comment_chars ?? 0) || 0,
+      // UNDEFINED IS NOT FALSE, and the difference decides whether the
+      // normalised fallback runs. The columns are NOT NULL in the database,
+      // so a row that carries the field has a real answer from an admin —
+      // including a deliberate false. A row that does NOT carry it was
+      // fetched by a query that did not ask, and that is the only case
+      // scoreInvites may override with the band's position.
+      //
+      // Collapsing both to false would mean an admin who switches
+      // recognition off for every band has it switched back on by the
+      // fallback, which is the opposite of respecting their configuration.
+      allowsPip: r.allows_pip_request === undefined || r.allows_pip_request === null
+        ? undefined : r.allows_pip_request === true,
+      allowsRecognition: r.allows_recognition === undefined || r.allows_recognition === null
+        ? undefined : r.allows_recognition === true,
       scoreFrom: n(r.score_from),
       scoreTo: n(r.score_to),
     }))
@@ -257,3 +287,255 @@ export function canManagerRate(selfSubmitted: boolean): Gate {
 }
 
 export interface Gate { open: boolean; because: string }
+
+// ── the rater's own view: theirs, mine, and the distance between ─────────
+
+export interface RatingCompare {
+  goalId: string
+  title: string
+  weightage: number
+  /** What the employee said about themselves. */
+  self: number | null
+  /** What this rater is saying. */
+  mine: number | null
+  /**
+   * mine − self. POSITIVE MEANS YOU RATED THEM HIGHER than they rated
+   * themselves.
+   *
+   * The opposite sign to gap() above, which computes self − final because it
+   * speaks to the employee ("you rated yourself higher than your manager
+   * did"). Two functions with opposite conventions is a trap, so the
+   * direction is stated in both and neither is inferred from the other.
+   */
+  delta: number | null
+  flag: GapFlag
+  /**
+   * Does this line need a written reason?
+   *
+   * Any difference at all. Ratings are whole numbers on the band scale, so a
+   * delta of 1 is a whole band — "exceeds" against "meets" — and that is a
+   * judgement the employee will want explained. An unexplained downgrade is
+   * the single most common thing an appraisal is disputed over, and the
+   * cheapest moment to write the sentence is while the rating is being made.
+   */
+  needsReason: boolean
+  hasReason: boolean
+}
+
+export interface CompareSummary {
+  lines: RatingCompare[]
+  /** Weighted, on the rating scale. Null until every line is rated. */
+  selfScore: number | null
+  myScore: number | null
+  /** myScore − selfScore. Positive means you scored them higher overall. */
+  delta: number | null
+  rated: number
+  total: number
+  agreed: number
+  higher: number
+  lower: number
+  /** Lines that differ and carry no explanation. */
+  missingReasons: RatingCompare[]
+}
+
+/**
+ * Compare this rater's scores with the employee's own, line by line.
+ *
+ * Built on score() and gap() rather than recomputing: the weighted mean and
+ * the gap thresholds are already defined once, and a second definition of
+ * "major gap" that disagreed with the employee's own screen would be worse
+ * than no comparison at all.
+ */
+export function compareRatings(
+  rows: { goalId: string; title: string; weightage: number
+          self: number | null; mine: number | null; comment?: string | null }[],
+): CompareSummary {
+  const lines: RatingCompare[] = rows.map(r => {
+    const delta = r.self == null || r.mine == null
+      ? null : Math.round((r.mine - r.self) * 100) / 100
+    // gap() takes (self, final) and returns self − final, so the arguments go
+    // in that order and only the FLAG is used from it — the delta here keeps
+    // this function's own direction.
+    const flag = gap(r.self, r.mine).flag
+    const needsReason = delta !== null && delta !== 0
+    return {
+      goalId: r.goalId, title: r.title, weightage: r.weightage,
+      self: r.self, mine: r.mine, delta, flag,
+      needsReason, hasReason: !!(r.comment && r.comment.trim()),
+    }
+  })
+
+  const asLines = rows.map(r => ({
+    goalId: r.goalId, title: r.title, category: 'BUSINESS' as Category,
+    weightage: r.weightage, self: r.self, final: r.mine,
+  }))
+  const selfScore = score(asLines, 'self')
+  const myScore = score(asLines, 'final')
+
+  return {
+    lines, selfScore, myScore,
+    delta: selfScore == null || myScore == null
+      ? null : Math.round((myScore - selfScore) * 100) / 100,
+    rated: lines.filter(l => l.mine != null).length,
+    total: lines.length,
+    agreed: lines.filter(l => l.delta === 0).length,
+    higher: lines.filter(l => (l.delta ?? 0) > 0).length,
+    lower: lines.filter(l => (l.delta ?? 0) < 0).length,
+    missingReasons: lines.filter(l => l.needsReason && !l.hasReason),
+  }
+}
+
+// ── the rating ramp: red at the bottom, yellow in the middle, green at top ─
+
+/**
+ * WHERE A RATING SITS ON THE RED-YELLOW-GREEN RAMP.
+ *
+ * Requested: a KRA rated 1 shows red, 3 yellow, 5 green, and the values
+ * between them blend — so the colour of a card answers "how did this go"
+ * before a single word is read.
+ *
+ * NOT 1..5. THE SCALE IS POLICY CONFIGURATION. pms_rating_scale sets the
+ * bands per policy, bandsFromScale reads them, and a three-point or
+ * ten-point scale is a setting away. Hardcoding the midpoint at 3 would put
+ * yellow on "exceeds" for a four-point scale and on the bottom band but one
+ * for a ten-point one. So the position is normalised against the bands that
+ * are actually in play: lowest band = 0, highest = 1, and the midpoint is
+ * wherever the policy's own middle falls.
+ *
+ * TWO SEGMENTS, NOT ONE. Mixing red straight into green passes through a
+ * muddy olive at the midpoint rather than yellow, which is the opposite of
+ * what the middle band should look like. So the ramp is red→yellow for the
+ * bottom half and yellow→green for the top, and this returns which of the
+ * two segments the value is in along with how far along it sits.
+ *
+ * TOKENS, NOT COLOURS. It names --ez-* custom properties and never a hex
+ * value: that is what makes the ramp follow the theme, so a card that is
+ * amber in daylight is the dark palette's amber at night rather than a
+ * frozen daytime swatch. The mixing itself is CSS color-mix(), which is
+ * also why the endpoints are returned rather than a blended result —
+ * nothing here can resolve a custom property.
+ */
+export interface RatingTone {
+  /** The --ez-* token the segment starts at. */
+  from: string
+  /** The token it ends at. */
+  to: string
+  /** How far along that segment, 0-100, for color-mix(). */
+  mix: number
+}
+
+// The ramp's three stops, as the PMS-local tokens that define them. Two
+// forward to --ez-critical and --ez-positive; the middle one cannot, because
+// --ez-warning is a dark orange-brown in daylight (picked for text contrast)
+// and a ramp built on it reads brown where it should read yellow. See the
+// block in pms.css.
+export const TONE_LOW = '--pms-ramp-low'
+export const TONE_MID = '--pms-ramp-mid'
+export const TONE_HIGH = '--pms-ramp-high'
+
+export function ratingTone(
+  rating: number | null | undefined, bands = DEFAULT_BANDS,
+): RatingTone | null {
+  if (rating === null || rating === undefined || Number.isNaN(Number(rating))) return null
+  if (!bands.length) return null
+  const vals = bands.map(b => b.value)
+  const lo = Math.min(...vals), hi = Math.max(...vals)
+  // A single-band scale has no ramp to sit on. Neither red nor green is
+  // honest about a scale with one rung, so the card simply stays neutral.
+  if (hi === lo) return null
+  // Clamped: a rating outside the scale is a data problem, not a reason to
+  // compute a colour past the end of the ramp.
+  const t = Math.min(1, Math.max(0, (Number(rating) - lo) / (hi - lo)))
+  const pct = (x: number) => Math.round(x * 1000) / 10
+  return t <= 0.5
+    ? { from: TONE_LOW, to: TONE_MID, mix: pct(t * 2) }
+    : { from: TONE_MID, to: TONE_HIGH, mix: pct((t - 0.5) * 2) }
+}
+
+/**
+ * The same thing as inline style custom properties, which is the only shape
+ * a component can actually use. Returned as a plain object so a caller can
+ * spread it next to its own styles.
+ */
+export function toneVars(t: RatingTone | null): Record<string, string> {
+  if (!t) return {}
+  return {
+    '--kra-from': `var(${t.from})`,
+    '--kra-to': `var(${t.to})`,
+    '--kra-mix': `${t.mix}%`,
+  }
+}
+
+// ── rules 10 and 11, on the rater's side of the form ────────────────────
+
+export interface RemarkCheck {
+  ok: boolean
+  /** The band the rater's own weighted score falls in. Null before they
+   *  have rated enough to have a score at all. */
+  band: Band | null
+  /** Characters the band demands, and characters written. */
+  need: number
+  have: number
+  /** Does this band also demand that the remark say what would change? */
+  improvementNeeded: boolean
+  /** One sentence for the blocker list, or null when nothing is owed. */
+  fault: string | null
+}
+
+/**
+ * WHAT THIS RATER OWES IN WORDS, given the score they have just given.
+ *
+ * Requested: "mandatory remarks by r1, r2, hod should be in effect". They
+ * were not. pms_rating_scale has carried min_comment_chars and
+ * improvement_feedback_mandatory per band since 066 — on this company's
+ * scale 200/100/50/200/200 characters and improvement mandatory at 2 and 1 —
+ * and the only screen that ever checked them was HR's publish workspace,
+ * through checkFeedback. The rating form checked nothing.
+ *
+ * MEASURED, not assumed: Isha Nair SRS9057 went through the whole chain with
+ * 8 of 12 ratings carrying any comment at all.
+ *
+ * THE BAND COMES FROM THE SCORE, NOT THE ROUNDED RATING. bandForScore reads
+ * pms_rating_scale's own windows (4.51-5.00, 3.51-4.50, …), which is how the
+ * scale is designed to be read and what makes 3.50 and 3.51 different bands.
+ * Rounding disagrees with those windows at every boundary.
+ *
+ * ONE SOURCE FOR THE THRESHOLDS. The numbers are read off the Band object
+ * that checkFeedback also uses — not copied. A second definition of "200
+ * characters at Outstanding" would eventually disagree with the publish
+ * screen about the same remark.
+ *
+ * THE LOW BANDS DEMAND MORE WORDS, NOT FEWER. A 5 can stand on a sentence; a
+ * 1 is the rating somebody may later have to defend, and "needs to improve"
+ * defends nothing.
+ */
+export function checkRaterRemark(
+  score: number | null,
+  remark: string | null | undefined,
+  bands = DEFAULT_BANDS,
+): RemarkCheck {
+  const band = bandForScore(score, bands)
+  const have = (remark ?? '').trim().length
+  if (!band) {
+    // No score yet means no band, and therefore no demand. The gate that
+    // insists every KRA is rated is what covers this case.
+    return { ok: true, band: null, need: 0, have, improvementNeeded: false, fault: null }
+  }
+  const need = band.minCommentChars
+  const improvementNeeded = band.improvementMandatory
+  if (have === 0) {
+    return { ok: false, band, need, have, improvementNeeded, fault:
+      improvementNeeded
+        ? `Write your overall remark — at ${band.value} (${band.label.toLowerCase()}) `
+          + `it has to say what would change, in at least ${need} characters.`
+        : `Write your overall remark — at least ${need} characters at `
+          + `${band.value} (${band.label.toLowerCase()}).` }
+  }
+  if (have < need) {
+    return { ok: false, band, need, have, improvementNeeded, fault:
+      `Your overall remark needs ${need - have} more character`
+      + `${need - have === 1 ? '' : 's'} — ${need} at ${band.value} `
+      + `(${band.label.toLowerCase()}), and there ${have === 1 ? 'is' : 'are'} ${have}.` }
+  }
+  return { ok: true, band, need, have, improvementNeeded, fault: null }
+}

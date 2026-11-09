@@ -242,8 +242,22 @@ check('the tooltip is reachable from the keyboard, not hover-only',
 # Spanning centre-to-centre struck a line through the numerals — 84 crossings
 # across the seven stages — and z-index cannot fix it, because each line
 # belongs to a later sibling than the dot it crosses.
-check('the connector is trimmed clear of the dots it joins',
-      'calc(-50% + 18px)' in step and 'calc(50%  + 18px)' in step)
+# THE PROPERTY, NOT A PIXEL VALUE. The line must occupy the gap and never
+# run under a dot, so the trim has to exceed the dot's radius. A pinned 18px
+# failed the moment the dots grew from 28px to 32px in the Edition 2
+# redesign, even though the geometry was still correct — the constant was
+# stale, not the code. Asserting the relationship cannot go stale.
+_dot  = re.search(r'\.pms-dot\{[^}]*?width:\s*(\d+)px', step, re.S)
+_trim = re.search(r'left:\s*calc\(-50% \+ (\d+)px\)', step)
+_ok   = bool(_dot and _trim) and int(_trim.group(1)) > int(_dot.group(1)) / 2
+check('the connector is trimmed clear of the dots it joins', _ok,
+      f'dot {_dot.group(1) if _dot else "?"}px, radius '
+      f'{int(_dot.group(1))//2 if _dot else "?"}px, trim '
+      f'{_trim.group(1) if _trim else "?"}px')
+# And both sides must be trimmed by the same amount, or the line sits askew.
+check('both ends of the connector are trimmed equally',
+      bool(_trim) and f'right: calc(50%  + {_trim.group(1)}px)' in step)
+
 check('stage state reaches assistive tech as an attribute, not hidden text',
       'aria-label={`Step ' in step and 'ez-sr' not in step)
 check('stage labels reserve two lines so the dates below them line up',

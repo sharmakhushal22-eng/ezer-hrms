@@ -1,4 +1,6 @@
 // /api/ess/resignation — the employee's own resignation: submit, see the chain, withdraw.
+// Submitting takes the employee's tentative last working day (tentative_lwd, migration 207):
+// every approver sees it, and the dates the approvers before them set (lib/exit/lwd.ts).
 // The chain itself (stamping, stage skipping, HR final LWD) lives in 071's
 // fn_resignation_submit / fn_resignation_advance / fn_resignation_act.
 import { NextRequest, NextResponse } from 'next/server'
@@ -8,6 +10,7 @@ import { employeeScope } from '@/lib/config/store'
 import { notifyFromTemplate } from '@/lib/config/notify'
 import { mailResignationStep } from '@/lib/exit/mail'
 import { effectiveNoticeDays, onProbation } from '@/lib/exit/notice'
+import { tentativeProblem } from '@/lib/exit/lwd'
 
 export const dynamic = 'force-dynamic'
 
@@ -71,10 +74,17 @@ export async function POST(req: NextRequest) {
   }
 
   if (!body.reason_code) return NextResponse.json({ error: 'Pick a reason' }, { status: 400 })
+  const resignedOn = String(body.date || new Date().toISOString().slice(0, 10)).slice(0, 10)
+  const tentative = String(body.tentative_lwd || '').slice(0, 10)
+  const why = tentativeProblem(tentative, resignedOn)
+  if (why) return NextResponse.json({ error: why }, { status: 400 })
   const { data: id, error } = await sb.rpc('fn_resignation_submit', {
-    p_employee_id: me, p_reason_code: body.reason_code, p_date: body.date || new Date().toISOString().slice(0, 10), p_remarks: body.remarks || null,
+    p_employee_id: me, p_reason_code: body.reason_code, p_date: resignedOn, p_remarks: body.remarks || null,
   })
   if (error) return NextResponse.json({ error: error.message.replace(/^.*?: /, '') }, { status: 409 })
+  // The employee's proposed date, beside the policy one the RPC worked out.
+  const { error: tErr } = await sb.from('employee_resignation').update({ tentative_lwd: tentative }).eq('id', id)
+  if (tErr) console.error('tentative_lwd not saved (run migration 207_exit_lwd_controls.sql)', tErr.message)
   const { data: res } = await sb.from('employee_resignation').select('status, current_stage, current_approver_id').eq('id', id).maybeSingle()
   if (res?.current_approver_id) {
     const { data: meRow } = await sb.from('employees').select('full_name, emp_code').eq('id', me).maybeSingle()
@@ -85,6 +95,6 @@ export async function POST(req: NextRequest) {
   }
   // Mail: the employee gets the acknowledgement of receipt, the first approver hears it is with them.
   await mailResignationStep(sb as any, { resignationId: id, stage: 'EMPLOYEE', action: 'STAMPED', actorId: res?.current_approver_id || null, baseUrl: process.env.NEXT_PUBLIC_APP_URL || req.nextUrl.origin }).catch(e => console.warn('resignation submit mail failed', e))
-  await audit(c.caller, 'RESIGNATION_SUBMITTED', me, { resignation_id: id, reason_code: body.reason_code })
+  await audit(c.caller, 'RESIGNATION_SUBMITTED', me, { resignation_id: id, reason_code: body.reason_code, tentative_lwd: tentative })
   return NextResponse.json({ ok: true, id, status: res?.status, stage: res?.current_stage })
 }
