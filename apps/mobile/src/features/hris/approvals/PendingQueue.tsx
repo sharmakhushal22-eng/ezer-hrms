@@ -15,7 +15,7 @@ import { F, R, S } from '@/ui/theme'
 import { Button, Card, Input, PickerField, Txt } from '@/ui/primitives'
 import { DateSheet, fmtDay, useOverlay } from '@/ui/overlays'
 import { Ic, type IconKey } from '../icons'
-import { errMsg, fmtDateTime, KpiGrid, LoadingLine, NoteBox, Pill } from '../ui'
+import { errMsg, fmtDate, fmtDateTime, KpiGrid, LoadingLine, NoteBox, Pill } from '../ui'
 import { afterDecision } from './shared'
 
 export interface PendingItem {
@@ -25,6 +25,9 @@ export interface PendingItem {
   tone?: 'w' | 'd'; link?: string; facts?: string[]; alert?: string | null
   /** Resignations: the dates the LWD inputs start from — policy (resignation date + notice) and the RM's proposal. */
   lwd_policy?: string | null; lwd_proposed?: string | null; notice_days?: number | null
+  /** The employee's tentative LWD, and each earlier approver's date (lib/ess/pending.ts). */
+  lwd_tentative?: string | null
+  lwd_trail?: { stage: string; label: string; by: string | null; lwd: string; at: string | null }[]
 }
 interface ChainRow { stage: string; action: string; approver?: { full_name?: string | null; emp_code?: string | null; designation?: string | null } | null; actioned_at: string; note?: string | null; proposed_lwd?: string | null }
 
@@ -37,13 +40,41 @@ const KIND: Record<PendingItem['kind'], [IconKey, string]> = {
   LEAVE: ['clock', 'Leave'], LEAVE_CANCEL: ['x', 'Leave cancellation'], REGULARISATION: ['check', 'Attendance'],
   TRAVEL: ['plane', 'Travel'], RESIGNATION: ['door', 'Resignation'],
 }
-const needsInput = (a: string) => ['Accept with my date', 'Request retention', 'Set final LWD', 'Decline'].includes(a)
+/** An action that collects input before it fires (TasksApprovals.tsx). */
+const needsInput = (a: string) => ['Approve with LWD', 'Accept with my date', 'Request retention', 'Set final LWD', 'Decline'].includes(a)
+/** The actions that carry a last working day: every approver sets one (lib/exit/lwd.ts). */
+const datedAction = (a: string | null) => a === 'Approve with LWD' || a === 'Accept with my date' || a === 'Set final LWD'
+const lastSetOf = (item: PendingItem) => (item.lwd_trail?.length ? item.lwd_trail[item.lwd_trail.length - 1].lwd : null)
 
 /** TasksApprovals.tsx — where the LWD input's date came from, and a shortfall warning. */
 function lwdHint(item: PendingItem, lwd: string) {
-  return item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.`
-    : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.`
-    : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''
+  const lastSet = lastSetOf(item)
+  const from = lwd && lastSet && lwd === lastSet ? `Filled from the previous approver's date (${fmtDate(lastSet)}).`
+    : lwd && item.lwd_tentative && lwd === item.lwd_tentative ? `Filled from the employee's tentative date (${fmtDate(item.lwd_tentative)}).`
+    : lwd && item.lwd_policy && lwd === item.lwd_policy ? `As per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}.` : ''
+  const early = lwd && item.lwd_policy && lwd < item.lwd_policy ? ' Earlier than the notice period: shortfall recovery applies unless HR waives it.' : ''
+  return (from + early).trim()
+}
+
+/** A resignation's last working day so far: the employee's tentative date, the policy date and
+ *  each earlier approver's date. */
+function LwdTrail({ item }: { item: PendingItem }) {
+  const { C } = useTheme()
+  const rows: [string, string, string | null][] = []
+  if (item.lwd_tentative) rows.push(['Employee’s tentative LWD', item.lwd_tentative, null])
+  if (item.lwd_policy) rows.push([`As per notice${item.notice_days != null ? ` (${item.notice_days} days)` : ''}`, item.lwd_policy, null])
+  for (const t of item.lwd_trail || []) rows.push([t.label, t.lwd, t.by])
+  if (!rows.length) return null
+  return (
+    <View style={{ marginTop: 9, borderWidth: 1, borderColor: C.line, borderRadius: 9, overflow: 'hidden' }}>
+      {rows.map(([k, v, by], idx) => (
+        <View key={idx} style={{ flexDirection: 'row', gap: 10, alignItems: 'baseline', paddingVertical: 6, paddingHorizontal: 10, backgroundColor: idx % 2 ? 'transparent' : C.sunken, borderTopWidth: idx ? 1 : 0, borderTopColor: C.line }}>
+          <Txt size={12} tone="muted" style={{ flex: 1, minWidth: 0 }}>{k}{by ? <Txt size={12} tone="faint"> · {by}</Txt> : null}</Txt>
+          <Txt size={12} w={700}>{fmtDate(v)}</Txt>
+        </View>
+      ))}
+    </View>
+  )
 }
 
 function ToggleBtn({ label, on, onPress }: { label: string; on: boolean; onPress: () => void }) {
@@ -72,11 +103,12 @@ function PendingCard({ item, employeeId, onDone }: { item: PendingItem; employee
       return
     }
     if (needsInput(a) && ask !== a) {
-      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
-      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      // The date starts from the last approver's date, else the employee's tentative one, else
+      // the policy LWD (resignation date + notice period).
+      if (datedAction(a)) setLwd(lastSetOf(item) || item.lwd_proposed || item.lwd_tentative || item.lwd_policy || '')
       setAsk(a); return
     }
-    if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
+    if (datedAction(a) && !lwd) { setErr(a === 'Set final LWD' ? 'Pick the final last working day' : 'Pick the last working day you approve'); return }
     setBusy(true)
     try {
       await api('/api/ess/approvals', { method: 'POST', employeeId, body: { kind: item.kind, id: item.id, action: a, note: note || null, lwd: lwd || null, regrettable: regret } })
@@ -104,6 +136,7 @@ function PendingCard({ item, employeeId, onDone }: { item: PendingItem; employee
         </View>
       )}
       {!!item.alert && <NoteBox tone="w" style={{ marginTop: 9 }}>{item.alert}</NoteBox>}
+      {item.kind === 'RESIGNATION' && <LwdTrail item={item} />}
 
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 10 }}>
         {item.actions.map((a, idx) => {
@@ -115,8 +148,8 @@ function PendingCard({ item, employeeId, onDone }: { item: PendingItem; employee
 
       {ask && (
         <View style={{ marginTop: 10, padding: 10, borderRadius: 8, backgroundColor: C.canvas }}>
-          {(ask === 'Accept with my date' || ask === 'Set final LWD') && (
-            <PickerField label={ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'} value={lwd ? fmtDay(lwd) : ''} placeholder="Pick a date" onPress={() => setDateOpen(true)}
+          {datedAction(ask) && (
+            <PickerField label={ask === 'Set final LWD' ? 'Final last working day' : 'Last working day you approve'} value={lwd ? fmtDay(lwd) : ''} placeholder="Pick a date" onPress={() => setDateOpen(true)}
               help={lwdHint(item, lwd) || undefined} />
           )}
           {ask === 'Set final LWD' && (
@@ -134,7 +167,7 @@ function PendingCard({ item, employeeId, onDone }: { item: PendingItem; employee
             <Button title="Cancel" size="sm" variant="outline" onPress={() => { setAsk(null); setNote(''); setLwd('') }} />
           </View>
           <DateSheet visible={dateOpen} onClose={() => setDateOpen(false)} value={lwd || null} onPick={setLwd}
-            title={ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'} />
+            title={ask === 'Set final LWD' ? 'Final last working day' : 'Last working day you approve'} />
         </View>
       )}
 

@@ -7,8 +7,10 @@ import type { ExpoConfig } from 'expo/config'
 const config: ExpoConfig = {
   name: 'EZER HRMS',
   slug: 'ezer-hrms',
-  // Bump for every APK you hand to testers; versionCode below must also go up.
-  version: '1.2.0',
+  // The version people see on the Play Store. Raise it for each release.
+  // versionCode is counted by EAS (eas.json appVersionSource "remote") and goes
+  // up by itself on every production build; the value below only seeded it.
+  version: '1.3.0',
   orientation: 'portrait',
   icon: './assets/images/icon.png',
   scheme: 'ezerhrms',

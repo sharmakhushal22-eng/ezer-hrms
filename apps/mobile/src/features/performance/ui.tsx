@@ -3,17 +3,91 @@
 // .card / .stat / .banner b-* / .pill p-* / .chips / .abar / .tabs, mapped onto
 // the app's tokens. Module-level so inputs keep focus.
 import * as React from 'react'
-import { Pressable, ScrollView, Text, View, type StyleProp, type ViewStyle } from 'react-native'
+import { Pressable, Text, View, type StyleProp, type ViewStyle } from 'react-native'
 import { bandFor, DEFAULT_BANDS, type Band } from '@web/pms/scoring'
+import { initials } from '@web/pms/team'
 import { useTheme } from '@/ui/ThemeProvider'
+import { mixOklab, toneColour, type RampStops } from './logic'
 import type { Palette } from '@/ui/theme'
 import { F, FONT, R, S } from '@/ui/theme'
 import { Txt } from '@/ui/primitives'
 
-// pms.css literals the tokens do not cover (light / dark blocks).
-const PMS_LIGHT = { exitFg: '#9A3412', exitBg: '#FFEDD5', rowExit: '#FFF4ED', rowNotice: '#FEFCE8' }
-const PMS_DARK = { exitFg: '#FDBA74', exitBg: 'rgba(249,115,22,0.18)', rowExit: 'rgba(249,115,22,0.10)', rowNotice: 'rgba(234,179,8,0.10)' }
+// pms.css literals the tokens do not cover (light / dark blocks), including
+// the score ramp's middle and top stops (--pms-ramp-mid / --pms-ramp-high);
+// its bottom stop is --ez-critical, i.e. C.critical.
+const PMS_LIGHT = { exitFg: '#9A3412', exitBg: '#FFEDD5', rowExit: '#FFF4ED', rowNotice: '#FEFCE8', rampMid: '#EAB308', rampHigh: '#16A34A' }
+const PMS_DARK = { exitFg: '#FDBA74', exitBg: 'rgba(249,115,22,0.18)', rowExit: 'rgba(249,115,22,0.10)', rowNotice: 'rgba(234,179,8,0.10)', rampMid: '#FBBF24', rampHigh: '#34D399' }
 export const usePmsLiterals = () => (useTheme().isDark ? PMS_DARK : PMS_LIGHT)
+
+/** The red-yellow-green ramp's three stops for the current theme. */
+export function useRamp(): RampStops {
+  const { C } = useTheme()
+  const lit = usePmsLiterals()
+  return { low: C.critical, mid: lit.rampMid, high: lit.rampHigh }
+}
+
+/** A rating on the ramp: its colour, a 22% wash of it for a chip, a 20% wash for a dot. */
+export function useTone(rating: number | null | undefined, bands: Band[]) {
+  const { C } = useTheme()
+  const tone = toneColour(rating, bands, useRamp())
+  return tone ? { tone, chip: mixOklab(C.surface, tone, 22), dot: mixOklab(C.surface, tone, 20), card: mixOklab(C.surface, tone, 9) } : null
+}
+
+/** ManagerTabs.tsx RatingChips — a radiogroup; the chosen chip takes the ramp colour of what it means. */
+export function RampChips({ bands, value, onPick, label }: { bands: Band[]; value: number | null; onPick: (v: number) => void; label: string }) {
+  return (
+    <View accessibilityRole="radiogroup" accessibilityLabel={label} style={{ flexDirection: 'row', gap: 6, flexWrap: 'wrap' }}>
+      {bands.map(b => <RampChip key={b.value} band={b} bands={bands} on={value === b.value} onPick={onPick} />)}
+    </View>
+  )
+}
+function RampChip({ band, bands, on, onPick }: { band: Band; bands: Band[]; on: boolean; onPick: (v: number) => void }) {
+  const { C } = useTheme()
+  const t = useTone(on ? band.value : null, bands)
+  return (
+    <Pressable onPress={() => onPick(band.value)} accessibilityRole="radio" accessibilityState={{ checked: on }} accessibilityLabel={`${band.value}: ${band.label}`}
+      style={{ minWidth: 44, height: 44, borderRadius: 8, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 8,
+        borderWidth: on ? 2 : 1, borderColor: t ? t.tone : C.line, backgroundColor: t ? t.chip : C.surface }}>
+      <Txt size={F.small} w={800} color={on ? C.ink : C.muted}>{band.value}</Txt>
+    </Pressable>
+  )
+}
+
+/** ManagerTabs.tsx RatingDot — one rating read back on the ramp; not rated is a dash, not a colour. */
+export function RDot({ v, bands }: { v: number | null | undefined; bands: Band[] }) {
+  const { C } = useTheme()
+  const t = useTone(v ?? null, bands)
+  if (v === null || v === undefined) return <Txt size={F.tiny} tone="muted">—</Txt>
+  const b = bandFor(v, bands)
+  return (
+    <View accessibilityLabel={b ? `${v} · ${b.label}` : String(v)}
+      style={{ alignSelf: 'flex-start', minWidth: 30, height: 26, paddingHorizontal: 8, borderRadius: 9, alignItems: 'center', justifyContent: 'center',
+        backgroundColor: t?.dot ?? C.sunken, borderWidth: 1, borderColor: t?.tone ?? C.line }}>
+      <Txt size={F.tiny} w={700} style={{ fontVariant: ['tabular-nums'] }}>{v}</Txt>
+    </View>
+  )
+}
+
+/** The initials avatar on queue cards and the profile card. */
+export function Ava({ name, size = 36 }: { name: string; size?: number }) {
+  const { C } = useTheme()
+  return (
+    <View accessibilityElementsHidden importantForAccessibility="no-hide-descendants"
+      style={{ width: size, height: size, borderRadius: size / 2, backgroundColor: C.brandTint, borderWidth: 1, borderColor: C.brandEdge, alignItems: 'center', justifyContent: 'center' }}>
+      <Txt size={size >= 40 ? F.small : F.tiny} w={800} color={C.brandDeep}>{initials(name)}</Txt>
+    </View>
+  )
+}
+
+/** .bar — a thin progress track. */
+export function Bar({ pct, tone = 'brand' }: { pct: number; tone?: 'brand' | 'green' }) {
+  const { C } = useTheme()
+  return (
+    <View style={{ height: 6, borderRadius: 3, backgroundColor: C.sunken, overflow: 'hidden' }}>
+      <View style={{ width: `${Math.max(0, Math.min(100, pct))}%`, height: '100%', borderRadius: 3, backgroundColor: tone === 'green' ? C.positive : C.brand }} />
+    </View>
+  )
+}
 
 /** .card — h3 title + .sub line. */
 export function PCard({ title, sub, children, style }: { title?: string; sub?: string; children?: React.ReactNode; style?: StyleProp<ViewStyle> }) {
@@ -89,7 +163,7 @@ export function Pill({ kind, label }: { kind: PillKind; label: string }) {
   }
   const p = map[kind]
   return (
-    <View style={{ alignSelf: 'flex-start', paddingHorizontal: 9, paddingVertical: 3, borderRadius: 20, backgroundColor: p.bg }}>
+    <View style={{ alignSelf: 'flex-start', maxWidth: '100%', flexShrink: 1, paddingHorizontal: 9, paddingVertical: 3, borderRadius: 12, backgroundColor: p.bg }}>
       <Txt size={F.micro} w={700} color={p.fg}>{label}</Txt>
     </View>
   )
@@ -142,22 +216,22 @@ export function ABar({ name, self, final, solidOnly, value }: { name: string; se
   )
 }
 
-/** .tabs — underline strip, scrolls sideways. */
+/** .pms-ws-tabs — the workspace's tabs. They wrap rather than scroll sideways, so no
+ *  label is ever cut at the screen's edge at 360dp with large text. */
 export function TabStrip<K extends string>({ tabs, active, onPick }: { tabs: { k: K; label: string }[]; active: K; onPick: (k: K) => void }) {
   const { C } = useTheme()
   return (
-    <View style={{ borderBottomWidth: 1, borderBottomColor: C.line, marginTop: S.lg, marginBottom: S.sm }}>
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: 4 }}>
-        {tabs.map(t => {
-          const on = t.k === active
-          return (
-            <Pressable key={t.k} onPress={() => onPick(t.k)} accessibilityRole="tab" accessibilityState={{ selected: on }}
-              style={{ paddingHorizontal: 13, minHeight: 44, justifyContent: 'center', borderBottomWidth: 2, borderBottomColor: on ? C.brand : 'transparent' }}>
-              <Txt size={F.small} w={600} color={on ? C.brand : C.muted}>{t.label}</Txt>
-            </Pressable>
-          )
-        })}
-      </ScrollView>
+    <View accessibilityRole="tablist" style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: S.md, marginBottom: S.md }}>
+      {tabs.map(t => {
+        const on = t.k === active
+        return (
+          <Pressable key={t.k} onPress={() => onPick(t.k)} accessibilityRole="tab" accessibilityState={{ selected: on }}
+            style={{ paddingHorizontal: 12, minHeight: 40, justifyContent: 'center', borderRadius: R.pill, borderWidth: 1,
+              borderColor: on ? C.brand : C.line, backgroundColor: on ? C.brandTint : C.surface }}>
+            <Txt size={F.small} w={on ? 700 : 600} color={on ? C.brandDeep : C.muted}>{t.label}</Txt>
+          </Pressable>
+        )
+      })}
     </View>
   )
 }

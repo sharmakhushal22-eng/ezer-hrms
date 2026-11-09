@@ -44,3 +44,6 @@ example
 
 # Any plain .env too — values belong in EAS environment variables.
 .env
+
+# Google Play upload key for `eas submit` — a password to the store listing.
+google-play-service-account.json

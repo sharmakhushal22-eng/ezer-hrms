@@ -1,23 +1,24 @@
 // src/features/performance/MySide.tsx — the employee's own side (website:
 // components/ess/Performance.tsx MySide). Same reads, same derived values, same
-// writes (actions.ts): the merged KRAs + self rating submission into the chain,
-// the one-to-one log with duration and weightage changes, acknowledging a
-// discussion somebody else logged, the Self Rating tab, and acknowledging a
-// published result.
+// writes (actions.ts): the merged KRAs + KPIs + per-KPI self rating submission
+// with the one-to-one tick, into the chain; the one-to-one log with duration
+// and weightage changes; acknowledging a discussion somebody else logged; the
+// Self Rating tab (one row per KPI); and acknowledging a published result.
 import * as React from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { DEFAULT_RULES, STAGES, currentStage, settled, stageStates, type Progress, type Rules, type StageKey } from '@web/pms/cycle'
 import { canLockWeightage, canPublishResult, type Log } from '@web/pms/oneToOne'
 import { reached, WORKFLOW } from '@web/pms/status'
-import type { Kra, Category } from '@web/pms/kra'
-import type { Line } from '@web/pms/scoring'
+import type { Kra } from '@web/pms/kra'
 import { invalidate } from '@/core/query'
 import { useOverlay } from '@/ui/overlays'
 import { Loading } from '@/ui/primitives'
 import { bandsOrDefault, loadPeriod, loadPeriodData, loadWho, localToday } from './data'
-import { acknowledgeDiscussion, acknowledgeResult, logDiscussion, submitKras, submitSelf, type KraSelf, type SelfRow } from './actions'
+import { acknowledgeDiscussion, acknowledgeResult, logDiscussion, submitKras, submitSelf } from './actions'
+import { blankKra, EMPTY_SELF, krasFromRows, resultLines, seedSelf, selfRowsOf, type KraSelf, type SelfRow } from './logic'
 import { Banner, K } from './ui'
-import { ChainBanner, DashboardTab, KraTab } from './EmpTabsA'
+import { ChainBanner, DashboardTab } from './EmpTabsA'
+import { KraTab } from './EmpKras'
 import { OneToOneTab } from './EmpOneToOne'
 import { AnalyticsTab, ResultTab, SelfRatingTab } from './EmpTabsB'
 import { NoPeriod } from './Pending'
@@ -32,7 +33,6 @@ export const EMP_TABS: { k: EmpTab; label: string; blurb: string }[] = [
   { k: 'analytics', label: 'My Analytics', blurb: 'how you and your manager saw the same work' },
 ]
 
-const blankKra = (seq: number): Kra => ({ seq_no: seq, kra_title: '', kpi_metric: '', target_value: '', category: 'BUSINESS', weightage: 0 })
 const STAGE_KEYS = STAGES.map(s => s.key)
 const ACTION_LABEL: Record<StageKey, string> = {
   kra: 'Write your KRAs', oneToOne: 'The KRA discussion', lock: 'Waiting on your manager', self: 'Your self rating',
@@ -45,7 +45,6 @@ const actionNotes = (rules: Rules): Record<StageKey, string> => ({
   self: 'Rate every KRA, then submit (it locks)', review: 'Nothing owed from you right now',
   finalise: 'Nothing owed from you right now', result: 'Acknowledge once you have read it',
 })
-const EMPTY_SELF: KraSelf = { achievement: '', rating: null, comment: '' }
 
 export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab }) {
   const { notify } = useOverlay()
@@ -61,6 +60,7 @@ export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab })
     queryFn: () => loadPeriodData(employeeId, ctx!), enabled: !!period,
   })
   const goals = React.useMemo(() => dataQ.data?.goals ?? [], [dataQ.data])
+  const kpis = React.useMemo(() => dataQ.data?.kpis ?? [], [dataQ.data])
   const reviews = React.useMemo(() => dataQ.data?.reviews ?? [], [dataQ.data])
   const logs: Log[] = dataQ.data?.logs ?? []
   const feedback = dataQ.data?.feedback ?? null
@@ -69,58 +69,31 @@ export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab })
 
   const [draftKras, setDraftKras] = React.useState<Kra[] | null>(null)
   const [selfDraft, setSelfDraft] = React.useState<SelfRow[] | null>(null)
-  const [selfBySeq, setSelfBySeq] = React.useState<Record<number, KraSelf> | null>(null)
+  const [selfByKey, setSelfByKey] = React.useState<Record<string, KraSelf> | null>(null)
+  /** The employee's one-to-one tick: a confirmation made at the moment of submitting, so never persisted. */
+  const [confirmOneToOne, setConfirmOneToOne] = React.useState(false)
   const [saving, setSaving] = React.useState(false)
   const [msg, setMsg] = React.useState<string | null>(null)
   const today = localToday()
 
-  const kras: Kra[] = draftKras ?? (goals.length
-    ? goals.map(g => ({
-        seq_no: Number(g.seq_no), kra_title: String(g.kra_title ?? ''), kpi_metric: String(g.kpi_metric ?? ''),
-        target_value: String(g.target_value ?? ''), category: String(g.category ?? 'BUSINESS') as Category, weightage: Number(g.weightage) || 0,
-      }))
+  const savedKras = React.useMemo(() => krasFromRows(goals, kpis), [goals, kpis])
+  const kras: Kra[] = draftKras ?? (goals.length ? savedKras
     : carried?.kras.length ? carried.kras
     : Array.from({ length: rules?.minKra ?? DEFAULT_RULES.minKra }, (_, i) => blankKra(i + 1)))
 
   const lockGate = canLockWeightage(logs)
   const publishGate = canPublishResult(logs)
   const locked = goals.length > 0 && goals.every(g => g.status === 'LOCKED')
+  const oneToOneAlready = logs.some(l => l.discussion_type === 'KRA_SETTING' && l.employee_ack === true)
   const selfSubmitted = !!(overall?.workflow_status && overall.workflow_status !== 'NOT_STARTED' && overall.self_score != null)
   // Publication is an event: the workflow ladder, not "a final rating exists".
   const published = reached(overall?.workflow_status, WORKFLOW.PUBLISHED)
   const feedbackVisible = published && !!feedback?.visible_to_employee
 
-  const ratingOf = (goalId: string, role: string) => {
-    const row = reviews.find(r => String(r.goal_id) === goalId && r.rater_role === role)
-    return row?.rating === null || row?.rating === undefined ? null : Number(row.rating)
-  }
-  const lines: Line[] = goals.map(g => ({
-    goalId: String(g.id), title: String(g.kra_title ?? ''), category: String(g.category ?? 'BUSINESS') as Category,
-    weightage: Number(g.weightage) || 0,
-    self: ratingOf(String(g.id), 'SELF'), rmL1: ratingOf(String(g.id), 'RM_L1'), rmL2: ratingOf(String(g.id), 'RM_L2'),
-    final: ratingOf(String(g.id), 'HOD') ?? ratingOf(String(g.id), 'RM_L2') ?? ratingOf(String(g.id), 'RM_L1'),
-  }))
-  // seq_no → the employee's saved SELF review (the KRA form works in seq_no).
-  const selfSeeded = React.useMemo(() => {
-    const out: Record<number, KraSelf> = {}
-    for (const g of goals) {
-      const row = reviews.find(r => String(r.goal_id) === String(g.id) && r.rater_role === 'SELF')
-      out[Number(g.seq_no)] = {
-        achievement: String(row?.achievement_value ?? ''),
-        rating: row?.rating === null || row?.rating === undefined ? null : Number(row.rating),
-        comment: String(row?.comments ?? ''),
-      }
-    }
-    return out
-  }, [goals, reviews])
-  const selfForKras = selfBySeq ?? selfSeeded
-  const selfRows: SelfRow[] = selfDraft ?? goals.map(g => {
-    const s = selfSeeded[Number(g.seq_no)] ?? EMPTY_SELF
-    return {
-      goalId: String(g.id), title: String(g.kra_title ?? ''), weightage: Number(g.weightage) || 0,
-      category: String(g.category ?? 'BUSINESS') as Category, achievement: s.achievement, rating: s.rating, comment: s.comment,
-    }
-  })
+  const lines = React.useMemo(() => resultLines(goals, reviews), [goals, reviews])
+  const selfSeeded = React.useMemo(() => seedSelf(goals, kpis, reviews), [goals, kpis, reviews])
+  const selfForKras = selfByKey ?? selfSeeded
+  const selfRows: SelfRow[] = selfDraft ?? selfRowsOf(goals, kpis, reviews)
   const progress: Progress = settled({
     kraCount: goals.length, weightageTotal: kras.reduce((s, k) => s + k.weightage, 0),
     kraSubmitted: goals.length > 0, kraApproved: locked, oneToOneLogged: logs.length > 0,
@@ -134,28 +107,28 @@ export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab })
   if (periodQ.isLoading || (period && dataQ.isLoading)) return <Loading />
   if (!period || !ctx) return <NoPeriod />
 
-  const show = (text: string | null, ok: boolean) => {
-    setMsg(text)
-    if (text) notify(text, ok ? 'success' : 'error')
-  }
   const run = async (fn: () => Promise<{ ok: boolean; msg: string | null }>, after?: () => void) => {
     setSaving(true); setMsg(null)
     try {
       const r = await fn()
-      show(r.msg, r.ok)
+      setMsg(r.msg)
+      if (r.msg) notify(r.msg, r.ok ? 'success' : 'error')
       if (r.ok) { after?.(); await invalidate('pms') }
     } finally { setSaving(false) }
   }
   const onSubmitKras = () => run(
-    () => submitKras({ employeeId, periodId: period.id, companyId: ctx.companyId, goals, kras, self: selfForKras }),
-    () => { setDraftKras(null); setSelfBySeq(null) })
+    () => submitKras({
+      employeeId, periodId: period.id, companyId: ctx.companyId, managerId: ctx.managerId, frozenRmL1: overall?.rm_l1_id ?? null,
+      today, goals, kras, self: selfForKras, confirmOneToOne, oneToOneAlready,
+    }),
+    () => { setDraftKras(null); setSelfByKey(null); setConfirmOneToOne(false) })
   const onSubmitSelf = () => run(() => submitSelf(employeeId, period.id, ctx.companyId, selfRows), () => setSelfDraft(null))
   const onLog = (l: Log) => run(() => logDiscussion({ employeeId, periodId: period.id, companyId: ctx.companyId, managerId: ctx.managerId, l }))
   const onAckLog = (logId: string) => run(() => acknowledgeDiscussion(employeeId, logId))
   const onAckResult = () => { if (published) void run(() => acknowledgeResult(employeeId, period.id)) }
-  const onSelfChange = (seq: number, patch: Partial<KraSelf>) => setSelfBySeq(prev => {
+  const onSelfChange = (key: string, patch: Partial<KraSelf>) => setSelfByKey(prev => {
     const base = prev ?? selfSeeded
-    return { ...base, [seq]: { ...(base[seq] ?? EMPTY_SELF), ...patch } }
+    return { ...base, [key]: { ...(base[key] ?? EMPTY_SELF), ...patch } }
   })
 
   return (
@@ -174,7 +147,9 @@ export function MySide({ employeeId, tab }: { employeeId: string; tab: EmpTab })
         <KraTab rules={ctx.rules} carriedFrom={!goals.length && carried ? carried.fromPeriodCode : null} bands={bands}
           self={selfForKras} onSelfChange={onSelfChange} selfSubmitted={selfSubmitted}
           rateRequired={logs.some(l => l.discussion_type === 'KRA_SETTING' && (l.employee_ack || l.manager_ack))}
-          kras={kras} onChange={setDraftKras} locked={locked} lockGate={lockGate} onSubmit={onSubmitKras} saving={saving} />
+          kras={kras} onChange={setDraftKras} locked={locked} lockGate={lockGate} onSubmit={onSubmitKras} saving={saving}
+          confirmOneToOne={confirmOneToOne} onConfirmOneToOne={setConfirmOneToOne}
+          oneToOneRequired={ctx.policy?.one_to_one_mandatory !== false} oneToOneAlready={oneToOneAlready} />
       )}
       {tab === 'oneToOne' && (
         <OneToOneTab kras={kras.map(k => ({ seq_no: k.seq_no, kra_title: k.kra_title, weightage: k.weightage }))}

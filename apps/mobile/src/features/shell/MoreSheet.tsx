@@ -4,7 +4,7 @@
 // are not offered on a phone (EmployeePortal.tsx, AdminOnPhone).
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
-import { router } from 'expo-router'
+import { navigateTo } from '@/core/links'
 import { LinearGradient } from 'expo-linear-gradient'
 import { useEmployee } from '@/core/employee'
 import { useMenu } from '@/core/menu'
@@ -40,7 +40,7 @@ export function MoreSheet({ visible, onClose, active }: { visible: boolean; onCl
   const { signOut } = useSession()
   const { confirm } = useOverlay()
   const groups = groupSections(visibleSections(menu))
-  const go = (route: string) => { onClose(); router.navigate(route as never) }
+  const go = (route: string) => { onClose(); navigateTo(route) }
   const leave = async () => {
     onClose()
     if (await confirm({ title: 'Sign out?', message: 'You will need your password to sign in again.', confirm: 'Sign out', destructive: true })) signOut()

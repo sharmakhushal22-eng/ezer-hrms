@@ -1,21 +1,26 @@
 // src/features/performance/HodTabs.tsx — analytics and the HOD's tabs
 // (website: components/pms/ManagerTabs.tsx §4.5, §5.1–5.3). Live as on the
-// website: Finalise (pms_finalise), Log final review / Acknowledge it, and
-// Feedback & Recognition → Publish. "Nudge RM L2" has no handler in ESS and
-// stays disabled, as on the website.
+// website: choose a final rating, Log final review (once a rating is chosen),
+// Finalise (pms_finalise); Feedback & Recognition → Publish when the policy
+// gives that step to the finaliser; Published Results, read-only. "Nudge RM
+// L2" has no handler in ESS and stays disabled, as on the website.
 import * as React from 'react'
 import { View } from 'react-native'
 import { teamQueue, finaliseQueue, distribution, type TeamMember, type FinaliseRow } from '@web/pms/team'
 import { score, byCategory, bandFor, checkFeedback, DEFAULT_BANDS, type Band } from '@web/pms/scoring'
 import { canPublishResult, type Log } from '@web/pms/oneToOne'
 import { CHAIN_LABEL, FINALISER_LABEL, type Chain, type Finaliser, type Role } from '@web/pms/hierarchy'
+import { chainLabel, type Stage } from '@web/pms/chain'
+import { humanDate } from '@web/pms/cycle'
 import type { FlagRules } from '@web/pms/employment'
 import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Input, PickerField, Txt } from '@/ui/primitives'
 import { SelectSheet } from '@/ui/overlays'
 import { ABar, B, Banner, EmptyBlock, Field, K, PCard, Pill, PStat, StatGrid } from './ui'
-import { BENEFIT_LABEL, BENEFIT_TYPES, type BenefitType, type FeedbackDraft } from './data'
+import { BENEFIT_LABEL, BENEFIT_TYPES, type BenefitType } from './data'
+import type { FeedbackDraft, PublishedResult } from './dataTeam'
+import { publishedFirst } from './logic'
 import { EMPTY_TEAM, ExitBanner, QueueCard } from './MgrTabs'
 
 // ── §4.5 / §5.3 analytics (lines are always [] and averages null in ESS) ──
@@ -49,10 +54,9 @@ export function TeamAnalyticsTab({ members, today, scopeLabel, bands = DEFAULT_B
 interface FinaliseHandlers {
   onFinalise?: (id: string, rating: number) => void
   onLogFinalReview?: (id: string) => void
-  onAcknowledgeFinalReview?: (id: string) => void
   saving?: boolean
 }
-function FinaliseCard({ r, bands, finalReviewRequired, onFinalise, onLogFinalReview, onAcknowledgeFinalReview, saving }: FinaliseHandlers & {
+function FinaliseCard({ r, bands, finalReviewRequired, onFinalise, onLogFinalReview, saving }: FinaliseHandlers & {
   r: FinaliseRow; bands: Band[]; finalReviewRequired: boolean
 }) {
   const [picked, setPicked] = React.useState<number | null>(null)
@@ -63,12 +67,14 @@ function FinaliseCard({ r, bands, finalReviewRequired, onFinalise, onLogFinalRev
   if (m.finalised) action = <K>done</K>
   else if (r.canFinalise) action = <Button size="sm" title="Finalise" disabled={!picked || !onFinalise || saving} onPress={() => picked && onFinalise?.(m.employeeId, picked)} />
   else if (r.insteadDo?.startsWith('RM L2')) action = <Button size="sm" variant="ghost" title="Nudge RM L2" disabled />
-  else if (finalReviewRequired && !m.finalReviewDone && r.precedingDone) {
-    action = !m.finalReviewLogged
-      ? <Button size="sm" title="Log final review" disabled={!onLogFinalReview || saving} onPress={() => onLogFinalReview?.(m.employeeId)} />
-      : !m.finalReviewMgrAcked
-        ? <Button size="sm" title="Acknowledge it" disabled={!onAcknowledgeFinalReview || saving} onPress={() => onAcknowledgeFinalReview?.(m.employeeId)} />
-        : <K>Waiting on {m.name.split(' ')[0]} to acknowledge the final review</K>
+  else if (finalReviewRequired && !m.finalReviewLogged && r.precedingDone) {
+    // The rating comes first: the final review is the conversation about it.
+    action = (
+      <View style={{ gap: 4 }}>
+        <Button size="sm" title="Log final review" disabled={!onLogFinalReview || saving || !picked} onPress={() => onLogFinalReview?.(m.employeeId)} style={{ alignSelf: 'flex-start' }} />
+        {!picked && <K>Choose the rating first — this records the conversation about it.</K>}
+      </View>
+    )
   } else action = <K>{r.insteadDo}</K>
   return (
     <QueueCard r={r}>
@@ -77,19 +83,20 @@ function FinaliseCard({ r, bands, finalReviewRequired, onFinalise, onLogFinalRev
         <Field label="RM L2">{m.rmL2Score?.toFixed(2) ?? '-'}</Field>
         <Field label="Final rating">
           {m.finalised ? <Pill kind="green" label={`${m.finalRating} · finalised`} />
-            : <PickerField value={band ? `${band.value} · ${band.label}` : ''} placeholder="Choose" disabled={!r.canFinalise}
+            // canChoose, not canFinalise: the number can be picked as soon as the chain ahead is clear.
+            : <PickerField value={band ? `${band.value} · ${band.label}` : ''} placeholder="Choose" disabled={!r.canChoose}
                 onPress={() => setOpen(true)} style={{ marginBottom: 0 }} />}
         </Field>
         <Field label="Action">{action}</Field>
       </View>
-      <SelectSheet visible={open} onClose={() => setOpen(false)} title="Final rating" value={picked ?? undefined}
+      <SelectSheet visible={open} onClose={() => setOpen(false)} title={`Final rating for ${m.name}`} value={picked ?? undefined}
         options={bands.map(b => ({ value: b.value, label: `${b.value} · ${b.label}` }))} onPick={v => setPicked(Number(v))} />
     </QueueCard>
   )
 }
 
 export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptName, bands = DEFAULT_BANDS, finalReviewRequired = false, flagRules, ...h }: FinaliseHandlers & {
-  members: TeamMember[]; today: string; role: Role; chain: Chain; whoCanFinalise: Finaliser; deptName: string
+  members: TeamMember[]; today: string; role: Role; chain: Chain | readonly Stage[]; whoCanFinalise: Finaliser; deptName: string
   bands?: Band[]; finalReviewRequired?: boolean; flagRules?: FlagRules
 }) {
   const rows = finaliseQueue(members, today, { role, chain, whoCanFinalise, finalReviewRequired, rules: flagRules })
@@ -102,7 +109,7 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
   return (
     <>
       <Banner tone="blue" glyph="ℹ️">
-        The chain is <B>{CHAIN_LABEL[chain]}</B>, and under this policy <B>{FINALISER_LABEL[whoCanFinalise]}</B> may finalise. A row cannot be finalised while a step ahead of it is still open. That is not a nicety, it is the difference between a rating that went through the chain and one that skipped it.
+        The chain is <B>{chainLabel(chain, CHAIN_LABEL)}</B>, and under this policy <B>{FINALISER_LABEL[whoCanFinalise]}</B> may finalise. A row cannot be finalised while a step ahead of it is still open. That is not a nicety, it is the difference between a rating that went through the chain and one that skipped it.
       </Banner>
       <ExitBanner rows={rows} />
       <StatGrid>
@@ -120,6 +127,20 @@ export function FinaliseTab({ members, today, role, chain, whoCanFinalise, deptN
 }
 
 // ── §5.2 Feedback & Recognition ──────────────────────────────────────────
+/** 202: HR owns the step by default. The tab stays, and says where the controls went. */
+export function FeedbackOwnedByHr() {
+  return (
+    <>
+      <Banner tone="blue" glyph="📋">
+        <B>HR writes this now.</B> Once you settle a rating, HR writes the appreciation and improvement feedback, awards any recognition and publishes the result. What went out is on <B>Published Results</B>, read-only. Your part ends at the rating.
+      </Banner>
+      <PCard>
+        <K>If your company would rather the finaliser did all of it — the appreciation remark, the improvement feedback and the recognition awards, as the spec’s Stage 6 describes — HR can switch this policy’s <B>post-finalisation owner</B> back to the finaliser in Setup &amp; Controls, and these controls return here.</K>
+      </PCard>
+    </>
+  )
+}
+
 function BenefitRow({ b, i, onType, onNote }: { b: FeedbackDraft['benefits'][number]; i: number; onType: (i: number) => void; onNote: (i: number, t: string) => void }) {
   const { C } = useTheme()
   return (
@@ -130,10 +151,12 @@ function BenefitRow({ b, i, onType, onNote }: { b: FeedbackDraft['benefits'][num
   )
 }
 
-export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs, bands = DEFAULT_BANDS, onChange, onPublish, saving }: {
+export function FeedbackTab({ member, rating, appreciation, improvement, benefits, logs, bands = DEFAULT_BANDS, onChange, onPublish, onAcknowledgeFinalReview, saving }: {
   member: TeamMember | null; rating: number | null
   appreciation: string; improvement: string; benefits: FeedbackDraft['benefits']; logs: Log[]
-  bands?: Band[]; onChange: (patch: Partial<FeedbackDraft>) => void; onPublish?: () => void; saving?: boolean
+  bands?: Band[]; onChange: (patch: Partial<FeedbackDraft>) => void; onPublish?: () => void
+  /** The manager's half of the final-review sign-off, which gates publication (200 / 207). */
+  onAcknowledgeFinalReview?: () => void; saving?: boolean
 }) {
   const [typeFor, setTypeFor] = React.useState<number | null>(null)
   if (!member) {
@@ -172,12 +195,72 @@ export function FeedbackTab({ member, rating, appreciation, improvement, benefit
           {!publish.open && <Txt size={F.tiny} tone="warning" style={{ marginTop: 4 }}>• {publish.because}</Txt>}
         </Banner>
       )}
-      <Button full disabled={!canPublish || !onPublish || saving} onPress={onPublish}
-        title={saving ? 'Publishing…' : canPublish ? 'Publish the result' : 'Cannot publish yet'} />
+      <View style={{ gap: S.sm }}>
+        <Button full disabled={!canPublish || !onPublish || saving} onPress={onPublish}
+          title={saving ? 'Publishing…' : canPublish ? 'Publish the result' : 'Cannot publish yet'} />
+        {!publish.open && logs.some(l => l.discussion_type === 'FINAL_REVIEW' && !l.manager_ack) && !!onAcknowledgeFinalReview && (
+          <Button full variant="outline" title="Acknowledge the final review" disabled={saving} onPress={onAcknowledgeFinalReview} />
+        )}
+      </View>
       <SelectSheet visible={typeFor !== null} onClose={() => setTypeFor(null)} title="Type"
         value={typeFor !== null ? benefits[typeFor]?.type : undefined}
         options={BENEFIT_TYPES.map(t => ({ value: t, label: BENEFIT_LABEL[t] }))}
         onPick={v => { if (typeFor !== null) setB(typeFor, { type: v as BenefitType }) }} />
+    </>
+  )
+}
+
+// ── §5.3 Published Results — the department's record, read-only ──────────
+export function PublishedResultsTab({ members, bands = DEFAULT_BANDS, results = [], deptName, hrHead }: {
+  members: TeamMember[]; bands?: Band[]; results?: PublishedResult[]; deptName?: string
+  hrHead?: { name: string; code: string } | null
+}) {
+  const { C } = useTheme()
+  const rows = publishedFirst(members)
+  const byId = new Map(results.map(r => [r.employeeId, r]))
+  const acked = rows.filter(r => r.resultAcknowledged).length
+  return (
+    <>
+      <Banner tone="blue" glyph="🔒">
+        These results are out. {deptName ? `${deptName}'s ` : 'Your department’s '}record of what each person was told, and nothing here can be changed — the employee has already read it. A rating that genuinely needs correcting goes through{' '}
+        {hrHead?.name ? <>the HR Head, <B>{hrHead.name}</B>{hrHead.code ? ` (${hrHead.code})` : ''}.</>
+          : <>HR — no HR Head is named for this company yet, so ask an administrator to set one in Setup &amp; Controls.</>}
+      </Banner>
+      <StatGrid>
+        <PStat tone="accent" label="Published" value={rows.length} />
+        <PStat label="Acknowledged by the employee" value={acked} note={rows.length ? `${rows.length - acked} still to read theirs` : undefined} />
+        <PStat label="Average rating" value={rows.length ? (rows.reduce((s, r) => s + (r.finalRating ?? 0), 0) / rows.length).toFixed(2) : '—'} />
+      </StatGrid>
+      <PCard title="Released results" sub="Oldest at the bottom. Read-only.">
+        {!rows.length ? (
+          <EmptyBlock title="Nothing published yet" note="A result appears here once it has been released to the employee. Until then it sits in Review & Finalise, then Feedback & Recognition." />
+        ) : rows.map((m, i) => {
+          const band = bandFor(m.finalRating, bands)
+          const fb = byId.get(m.employeeId)
+          return (
+            <View key={m.employeeId} style={{ paddingVertical: S.md, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, gap: 6 }}>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm }}>
+                <Txt size={F.small} w={600} style={{ flex: 1 }}>{m.name}</Txt>
+                <Txt size={F.micro} tone="muted">{m.code}</Txt>
+              </View>
+              <Field label="Rating"><Txt size={F.tiny}><B>{m.finalRating ?? '—'}</B>{band ? ` · ${band.label}` : ''}</Txt></Field>
+              <Field label="Published">{m.publishedAt ? humanDate(String(m.publishedAt).slice(0, 10)) : '—'}</Field>
+              <Field label="Read by them">{m.resultAcknowledged ? <Pill kind="green" label="✓ acknowledged" /> : <Pill kind="amber" label="not yet" />}</Field>
+              {!fb?.appreciation && !fb?.improvement ? <K>No written feedback went out.</K> : (
+                <View style={{ gap: 4 }}>
+                  {!!fb?.appreciation && <Txt size={F.tiny} tone="soft"><B>Appreciation.</B> {fb.appreciation}</Txt>}
+                  {!!fb?.improvement && <Txt size={F.tiny} tone="soft"><B>Improvement.</B> {fb.improvement}</Txt>}
+                </View>
+              )}
+              {!!fb?.benefits?.length && (
+                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
+                  {fb.benefits.map((b, j) => <Pill key={j} kind="brand" label={`${b.type.replace(/_/g, ' ').toLowerCase()}${b.note ? ` · ${b.note}` : ''}`} />)}
+                </View>
+              )}
+            </View>
+          )
+        })}
+      </PCard>
     </>
   )
 }

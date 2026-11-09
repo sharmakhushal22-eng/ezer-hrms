@@ -5,7 +5,7 @@
 // same query finds the same screen on both.
 import * as React from 'react'
 import { Pressable, TextInput, View } from 'react-native'
-import { router } from 'expo-router'
+import { navigateTo } from '@/core/links'
 import { useMenu } from '@/core/menu'
 import { SECTION_ICON, visibleSections } from '@/core/nav'
 import { useTheme } from '@/ui/ThemeProvider'
@@ -21,7 +21,7 @@ const ESS_KEYWORDS: Record<string, string> = {
   claims: 'travel claims expense reimbursement', attendance: 'attendance punch regularise regularize', leave: 'leave apply holiday time off',
   inbox: 'messages notifications mail', directory: 'team directory people colleagues employees', requests: 'raise request helpdesk ticket',
   approvals: 'tasks approvals pending approve leave travel resignation offers interviews', exit: 'resign resignation exit separation',
-  company: 'company headcount attrition', reports: 'reports export', performance: 'pms performance goals kra appraisal review',
+  company: 'company headcount attrition', reports: 'reports export', performance: 'pms performance goals kra appraisal review', learning: 'learning training course courses lms catalogue certificate quiz compliance webinar',
   social: 'social wall fame appreciate', funzone: 'games fun zone',
 }
 
@@ -51,7 +51,7 @@ export function FeatureSearch({ onOpen }: { onOpen?: () => void }) {
       keywords: `${s.label.toLowerCase()} ${ESS_KEYWORDS[i.k] || ''}`, route: i.route,
     }))), [menu])
   const qq = q.trim().toLowerCase()
-  const open = (route: string) => { setQ(''); onOpen?.(); router.navigate(route as never) }
+  const open = (route: string) => { setQ(''); onOpen?.(); navigateTo(route) }
   const hits = qq ? entries.map(e => ({ e, s: score(e, qq) })).filter(x => x.s > 0).sort((a, b) => b.s - a.s || a.e.label.localeCompare(b.e.label)).slice(0, 8) : []
 
   return (

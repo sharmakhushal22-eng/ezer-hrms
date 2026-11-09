@@ -1,7 +1,7 @@
 {
   "cli": {
     "version": ">= 16.0.0",
-    "appVersionSource": "local",
+    "appVersionSource": "remote",
     "requireCommit": true
   },
   "build": {
@@ -11,18 +11,22 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ezer-hrms-chi.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://app.ezerhrms.com",
+        "EXPO_PUBLIC_LMS_URL": "https://ezerlms.com"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "autoIncrement": true
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ezer-hrms-chi.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://app.ezerhrms.com",
+        "EXPO_PUBLIC_LMS_URL": "https://ezerlms.com"
       },
-      "environment": "production"
+      "environment": "production",
+      "autoIncrement": true
     },
     "development": {
       "developmentClient": true,
@@ -31,6 +35,15 @@
         "buildType": "apk"
       },
       "environment": "development"
+    }
+  },
+  "submit": {
+    "production": {
+      "android": {
+        "serviceAccountKeyPath": "./google-play-service-account.json",
+        "track": "internal",
+        "releaseStatus": "draft"
+      }
     }
   }
 }
