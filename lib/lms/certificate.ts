@@ -44,8 +44,9 @@ export async function issueCertificate(i: IssueInput) {
   return must(made)
 }
 
+// On Learning's own domain when it has one (lib/lms/site.ts); the HRMS address keeps working too.
 export const verifyUrl = (code: string) =>
-  `${(process.env.NEXT_PUBLIC_APP_URL || 'https://app.ezerhrms.com').replace(/\/+$/, '')}/learn/verify/${code}`
+  `${(process.env.NEXT_PUBLIC_LMS_URL || process.env.NEXT_PUBLIC_APP_URL || 'https://app.ezerhrms.com').replace(/\/+$/, '')}/learn/verify/${code}`
 
 const fmt = (d: string) => new Date(d).toLocaleDateString('en-GB', { timeZone: 'Asia/Kolkata', day: '2-digit', month: 'long', year: 'numeric' })
 
