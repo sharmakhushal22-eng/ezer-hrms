@@ -25,7 +25,7 @@ RETURNS TABLE (seq int, check_name text, result text, detail text)
 LANGUAGE plpgsql AS $fn$
 DECLARE
   v_emp uuid; v_code text; v_period uuid; v_rating numeric;
-  v_actor uuid; v_res jsonb; v_rows jsonb;
+  v_actor uuid; v_res jsonb; v_rows jsonb; v_code2 text;
 BEGIN
   -- Somebody really enrolled, in a period that really has a policy, with a
   -- settled rating — so the only thing that can refuse the file is the rule
@@ -57,12 +57,23 @@ BEGIN
     jsonb_build_object('employee_code', v_code, 'final_rating', '1',
                        'override_reason', 'verify fixture'));
   v_res := public.pms_commit_rating_upload(v_period, v_actor, 'HR_MANAGER', v_rows);
+  -- THE VERB IS PART OF THE CHECK. 223's message hardcoded the plural, and
+  -- this check matched on "more than once" alone — so it passed while
+  -- reporting "SRS9030 appear more than once", which is the common case:
+  -- one row pasted twice. A check that does not read the sentence it is
+  -- quoting back is not checking the sentence.
   IF (v_res->>'ok')::boolean IS FALSE
+     AND v_res->>'message' LIKE '%appears more than once%' THEN
+    RETURN QUERY SELECT 20, 'a duplicate file is refused, in agreeing English'::text,
+      'PASS'::text, left(v_res->>'message', 95);
+  ELSIF (v_res->>'ok')::boolean IS FALSE
      AND v_res->>'message' LIKE '%more than once%' THEN
-    RETURN QUERY SELECT 20, 'a duplicate file is refused'::text, 'PASS'::text,
-      left(v_res->>'message', 95);
+    RETURN QUERY SELECT 20, 'a duplicate file is refused, in agreeing English'::text,
+      'FAIL'::text, format('refused correctly but the verb does not agree for '
+                           'ONE code: %s', left(v_res->>'message', 70));
   ELSE
-    RETURN QUERY SELECT 20, 'a duplicate file is refused'::text, 'FAIL'::text,
+    RETURN QUERY SELECT 20, 'a duplicate file is refused, in agreeing English'::text,
+      'FAIL'::text,
       format('ok=%s applied=%s msg=%s', v_res->>'ok', v_res->>'applied',
              left(COALESCE(v_res->>'message', '(none)'), 60));
   END IF;
@@ -105,13 +116,45 @@ BEGIN
                        'final_rating', '1', 'override_reason', 'verify fixture'));
   v_res := public.pms_commit_rating_upload(v_period, v_actor, 'HR_MANAGER', v_rows);
   IF (v_res->>'ok')::boolean IS FALSE
-     AND v_res->>'message' LIKE '%more than once%' THEN
+     AND v_res->>'message' LIKE '%appears more than once%' THEN
     RETURN QUERY SELECT 23, 'case and padding are the same person'::text,
       'PASS'::text, left(v_res->>'message', 95);
   ELSE
     RETURN QUERY SELECT 23, 'case and padding are the same person'::text,
       'FAIL'::text, format('ok=%s applied=%s — a duplicate slipped through on '
                            'case or whitespace', v_res->>'ok', v_res->>'applied');
+  END IF;
+  -- ── 24. two duplicated codes take the plural ────────────────────────────
+  -- The mirror of 20. A message hardcoded the other way — always "appears" —
+  -- would pass check 20 and be just as wrong on the file that names three
+  -- people twice.
+  SELECT e.emp_code INTO v_code2
+    FROM pms_overall_rating o2
+    JOIN employees e ON e.id = o2.employee_id
+   WHERE o2.period_id = v_period AND o2.employee_id <> v_emp
+     AND o2.final_rating IS NOT NULL
+   LIMIT 1;
+
+  IF v_code2 IS NULL THEN
+    RETURN QUERY SELECT 24, 'two duplicated codes take the plural'::text,
+      'SKIP'::text, 'only one rated employee in this period'::text;
+  ELSE
+    v_rows := jsonb_build_array(
+      jsonb_build_object('employee_code', v_code,  'final_rating', v_rating::text),
+      jsonb_build_object('employee_code', v_code,  'final_rating', v_rating::text),
+      jsonb_build_object('employee_code', v_code2, 'final_rating', '3',
+                         'override_reason', 'verify fixture'),
+      jsonb_build_object('employee_code', v_code2, 'final_rating', '3',
+                         'override_reason', 'verify fixture'));
+    v_res := public.pms_commit_rating_upload(v_period, v_actor, 'HR_MANAGER', v_rows);
+    IF v_res->>'message' LIKE '%appear more than once%'
+       AND v_res->>'message' NOT LIKE '%appears more than once%' THEN
+      RETURN QUERY SELECT 24, 'two duplicated codes take the plural'::text,
+        'PASS'::text, left(v_res->>'message', 95);
+    ELSE
+      RETURN QUERY SELECT 24, 'two duplicated codes take the plural'::text,
+        'FAIL'::text, left(COALESCE(v_res->>'message', '(none)'), 95);
+    END IF;
   END IF;
 END $fn$;
 

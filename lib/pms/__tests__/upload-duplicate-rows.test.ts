@@ -115,6 +115,7 @@ test('the sentence says what to do, not just what is wrong', () => {
 const DIR = 'supabase/migrations'
 const M223 = read(`${DIR}/223_pms_upload_refuses_duplicate_rows.sql`)
 const M192 = read(`${DIR}/192_pms_rating_upload_commit.sql`)
+const M224 = read(`${DIR}/224_pms_upload_duplicate_message_agrees.sql`)
 
 function fnOf(sql: string, name: string): string {
   const i = sql.indexOf(`CREATE OR REPLACE FUNCTION ${name}(`)
@@ -124,7 +125,28 @@ function fnOf(sql: string, name: string): string {
 const codeOnly = (sql: string) =>
   sql.split('\n').filter(l => !l.trim().startsWith('--')).join('\n')
 
-test('223 is the newest definition of the commit function', () => {
+test('the refusal agrees with the number of codes it names', () => {
+  // 223 HARDCODED THE PLURAL: `v_dups || ' appear more than once '`. With one
+  // duplicated code — the ordinary case, a single row pasted twice — that
+  // read "SRS9030 appear more than once".
+  //
+  // Nothing caught it. The repo test and both verify checks matched on
+  // "more than once" and never looked at the verb, so all three passed while
+  // quoting the broken sentence back. 224 makes it agree.
+  //
+  // This matters because the sentence is the entire explanation an HR
+  // administrator gets for why a calibration file was rejected.
+  const fn = codeOnly(fnOf(M224, 'pms_commit_rating_upload'))
+  const msg = fn.slice(fn.indexOf('IF v_dups IS NOT NULL THEN'), fn.indexOf('FOR r IN'))
+  assert.match(msg, /CASE WHEN v_ndups = 1 THEN ' appears' ELSE ' appear' END/,
+    'the verb is fixed rather than chosen by the count')
+  assert.ok(!/\|\| ' appear more than once '/.test(msg),
+    'the hardcoded plural is still there')
+  // And the count it branches on is actually computed.
+  assert.match(fn, /INTO v_dups, v_ndups/, 'v_ndups is branched on but never set')
+})
+
+test('224 is the newest definition of the commit function', () => {
   // The last CREATE OR REPLACE wins at apply time, so a later migration
   // restating 192's body would drop this check without a word.
   const latest = readdirSync(DIR)
@@ -132,7 +154,7 @@ test('223 is the newest definition of the commit function', () => {
     .filter(f => read(`${DIR}/${f}`).includes('CREATE OR REPLACE FUNCTION pms_commit_rating_upload('))
     .sort((a, b) => parseInt(a, 10) - parseInt(b, 10))
     .pop()
-  assert.equal(latest, '223_pms_upload_refuses_duplicate_rows.sql')
+  assert.equal(latest, '224_pms_upload_duplicate_message_agrees.sql')
 })
 
 test('the database refuses the duplicate too, before it validates anything', () => {
@@ -161,6 +183,20 @@ test('the database refuses the duplicate too, before it validates anything', () 
   assert.match(fn, /upper\(btrim\(COALESCE\(e\.value->>'employee_code', ''\)\)\)/)
 })
 
+test('224 reproduces 223 exactly, apart from the message', () => {
+  const strip = (t: string) => t.split('\n')
+    .filter(l => l.trim() && !l.trim().startsWith('--')).map(l => l.trim())
+  const old = strip(fnOf(M223, 'pms_commit_rating_upload'))
+  const now = strip(fnOf(M224, 'pms_commit_rating_upload'))
+  const removed = old.filter(l => !now.includes(l))
+  const added = now.filter(l => !old.includes(l))
+  // Only the message construction and the count that feeds it.
+  assert.ok(removed.every(l => /appear more than once|string_agg|INTO v_dups|meant cannot be guessed|in this file/.test(l)),
+    '224 changed something other than the message:\n  ' + removed.join('\n  '))
+  assert.ok(added.length <= 8,
+    `224 added ${added.length} lines, more than the message needs:\n  ` + added.join('\n  '))
+})
+
 test('223 reproduces 192 exactly, apart from the duplicate check', () => {
   // 221 restated a deployed function from memory and silently dropped the
   // UPDATE that advances the workflow; what was left looked complete. So this
@@ -181,7 +217,7 @@ test('the two-pass apply the whole feature rests on is intact', () => {
   // Validate every row, THEN apply every row — so a bad row anywhere means
   // nothing is written. Asserted directly as well as by the diff above,
   // because it is the guarantee the admin is shown on screen.
-  const fn = codeOnly(fnOf(M223, 'pms_commit_rating_upload'))
+  const fn = codeOnly(fnOf(M224, 'pms_commit_rating_upload'))
   const loops = [...fn.matchAll(/FOR r IN SELECT \* FROM jsonb_array_elements\(p_rows\) LOOP/g)]
   assert.equal(loops.length, 2, 'the validate pass and the apply pass are not both there')
   assert.match(fn, /IF v_errors > 0 THEN/)
