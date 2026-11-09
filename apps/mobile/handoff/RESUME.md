@@ -1,7 +1,29 @@
-# Resume here — EZER HRMS Android app (updated 1 Nov 2026, evening)
+# Resume here — EZER HRMS Android app (updated 9 Nov 2026)
 
 Branch **`feat/mobile-app`**. App in `apps/mobile/` (Expo SDK 57, React Native). It mirrors the website's
 employee self-service portal (`/ess`), same backend, admin excluded.
+
+## 1.3.0 — synced to the website at `2b1b031` + PR #18 (9 Nov 2026)
+* **Performance (PMS):** the website's redesign ported: several KPIs per KRA, per-KPI self rating, the manager's
+  review panel, Team Ratings as a record, Published Results, HOD finalise/feedback (details in the parity table).
+  The "next step" card now scrolls to the tab it opens. Stage rail is three to a row (four broke words on Android).
+* **Learning:** More → Learning opens **ezerlms.com** in the in-app browser, signed in through `/api/lms/sso`
+  (`core/links.ts` `openLms`, `#sso=…&from=app`; the LMS then hides its "Back to EZER HRMS" link). Notifications
+  linking to `/learning/…` go there too. Until PR #18 is live on production the LMS shows its sign-in page instead.
+* **Exit:** tentative last working day (the server refuses a resignation without one since migration 207, so 1.2.0
+  could not resign at all); chain L1 → HR; "Approve with LWD" + the LWD trail in approvals and the HR exit block.
+* **Investment Proofs:** documents on every line (`/api/ess/investment-proofs`). **Flexi Claims:** window 1st–20th by date.
+* API host is now `https://app.ezerhrms.com` (same deployment as ezer-hrms-chi.vercel.app). versionCode is counted by
+  EAS for preview and production builds.
+* Tested: `npm run check`, eslint; browser harness for writes (PMS write path, proof upload/remove, resignation
+  submit/withdraw: all restored, see TEST-RECORDS.md); Android emulator (API 35, 360dp, font 1.15) for every section.
+* Website bugs the PMS port found (app works around them; the website still has them): MySide self-rating read omits
+  `kpi_id`; Self Rating weights rows by the retired `pms_goal_kpi.weightage`; My Result / Analytics take the first
+  KPI's score per KRA; the AI training request sends no ratings; the approval card says "Waiting on RM L1's rating"
+  to the RM L1; "+ Add KRA" adds a KRA with no KPI; production has no AI key / empty training catalogue.
+* Emulator kit now lives in `~/.local/android` (install.sh, swap.sh, ui.py), not the session scratchpad.
+
+
 
 ## Play Store prep (7 Nov 2026)
 * `eas.json`: versionCode now counted by EAS (`appVersionSource: remote`, production `autoIncrement`), and a `submit.production` profile (internal track, draft) reading `google-play-service-account.json` (git-ignored).

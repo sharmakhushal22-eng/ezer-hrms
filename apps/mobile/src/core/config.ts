@@ -10,7 +10,11 @@
 // no service-role key, no ESS_SESSION_SECRET, no API keys with spend.
 
 /** The website. Every /api/* call goes here. No trailing slash. */
-export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'https://ezer-hrms-chi.vercel.app').replace(/\/+$/, '')
+export const API_URL = (process.env.EXPO_PUBLIC_API_URL || 'https://app.ezerhrms.com').replace(/\/+$/, '')
+
+/** EZER Learn, the LMS on its own domain (docs/lms/STANDALONE.md). Learning opens there,
+ *  already signed in, rather than as a screen of the app — as the website does. */
+export const LMS_URL = (process.env.EXPO_PUBLIC_LMS_URL || 'https://ezerlms.com').replace(/\/+$/, '')
 
 /** Supabase — the public URL and the public anon key, exactly what the website's
  *  browser bundle carries (NEXT_PUBLIC_SUPABASE_URL / _ANON_KEY). Used only by the

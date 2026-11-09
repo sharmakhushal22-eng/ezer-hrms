@@ -145,23 +145,13 @@ export async function loadEntitlements(employeeId: string): Promise<{
   return { companyId, regime, fixed, slabLabel: slab?.slab_label || null, limits }
 }
 
-export async function loadWindow(companyId: string, year: number, month: number) {
-  const { data } = await supabase.from('flexi_windows').select('*')
-    .eq('company_id', companyId).eq('year', year).eq('month', month).maybeSingle()
-  return data as any
-}
-
-/** FlexiClaims.tsx load(). The month is the device's local month, as on the website. */
+/** FlexiClaims.tsx load(). The claim window is no longer a row HR opens: it runs the 1st–20th of
+ *  every month on its own (@web/lib/flexi/window), so only entitlements and history are read. */
 export async function loadFlexiClaims(employeeId: string) {
   const ent = await loadEntitlements(employeeId)
-  let win: any = null
-  if (ent.companyId) {
-    const now = new Date()
-    win = await loadWindow(ent.companyId, now.getFullYear(), now.getMonth() + 1)
-  }
   const hist = ((await fetchClaims(employeeId)) || []) as HistItem[]
-  // "days left" is worked out against the moment of loading (render must stay pure).
-  return { ...ent, win, hist, now: Date.now() }
+  // The window is worked out against the moment of loading (render must stay pure).
+  return { ...ent, hist, now: Date.now() }
 }
 
 /** POST { action:'SUBMIT', … } → { success, claim_id } | { error }. Never throws. */

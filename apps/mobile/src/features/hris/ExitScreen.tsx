@@ -6,10 +6,13 @@
 // stage machine — which lives in migration 071's fn_resignation_* and is
 // enforced there.
 //
-// Kept on purpose (spec §5.2 BUG, still so on the website): the timeline looks
-// chain rows up by 'PENDING_*' while the log stores 'RM_L1'…, so a row never
-// matches and past stages read "upcoming". Each stage now names its approver
-// (who acted, else `approvers[RM_L1|…]` from the API, else "nobody assigned yet").
+// The chain is L1, then HR (migration 208); L2 / HOD show only on an older resignation
+// where they had already acted. The timeline looks a stage's log row up by 'RM_L1'…
+// (as the website now does) and names its approver (who acted, else
+// `approvers[RM_L1|…]` from the API, else "nobody assigned yet").
+// Submitting takes the employee's tentative last working day (tentative_lwd, migration
+// 207; @web/exit/lwd tentativeProblem is the server's own rule), defaulting to the policy
+// date: resignation + notice period.
 // Under the form / the open resignation: clearance & settlement (exit/MyExitDocuments).
 // Exiting somebody else is People → Employees → HR Actions on the website (admin side).
 // Changed on purpose: the default "Date of resignation" is today in the phone's
@@ -28,6 +31,7 @@ import { DateSheet, fmtDay, SelectSheet, useOverlay, ymd } from '@/ui/overlays'
 import { Ic } from './icons'
 import { errMsg, fmtDate, fmtDateTime, KpiGrid, LoadingLine, NoteBox, SolidButton } from './ui'
 import { MyExitDocuments } from './exit/MyExitDocuments'
+import { tentativeProblem } from '@web/exit/lwd'
 
 type Person = { full_name?: string | null; emp_code?: string | null; designation?: string | null }
 interface ChainRow { stage: string; action: string; approver?: Person | null; actioned_at: string; note?: string | null; proposed_lwd?: string | null }
@@ -35,6 +39,8 @@ interface StageApprover { id: string; full_name: string; emp_code: string | null
 interface ResignationRecord {
   id: string; status: string; submitted_at?: string | null; created_at?: string | null; notice_period_days?: number | null
   lwd_as_per_policy?: string | null; proposed_lwd?: string | null; final_lwd?: string | null; reason_code?: string | null
+  /** The date the employee proposed when resigning, and the notice HR waived (migration 207). */
+  tentative_lwd?: string | null; notice_waived_days?: number | null; notice_waiver_reason?: string | null
   exit_reason_master?: { label?: string | null } | null; submitted_by_employee?: boolean | null
 }
 interface ResignationState {
@@ -55,7 +61,10 @@ const STAGE_LABEL: Record<string, string> = {
   SETTLED: 'Settled',
   WITHDRAWN: 'Withdrawn',
 }
-const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER']
+/** The stages the timeline walks, in order: L1, then HR (migration 208). L2 / HOD appear only on
+ *  an older resignation where they had already acted. */
+const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_HR_MANAGER']
+const ALL_STAGES = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER']
 const CLOSED = ['SETTLED', 'WITHDRAWN']
 
 /** "Aditya Iyer · STC9054 · Assistant Manager" */
@@ -66,10 +75,13 @@ function Timeline({ status, chain, approvers }: { status: string; chain: ChainRo
   const byStage: Record<string, ChainRow> = {}
   // The last row per stage (STAMPED first, then the decision); the decision wins.
   for (const c of chain) if (!byStage[c.stage] || c.action !== 'STAMPED') byStage[c.stage] = c
-  const curIdx = STAGE_ORDER.indexOf(status)
+  const logOf = (stg: string) => byStage[stg.replace('PENDING_', '')] || byStage[stg]
+  const stages = ALL_STAGES.filter(st => STAGE_ORDER.includes(st) || st === status
+    || (byStage[st.replace('PENDING_', '')] && !['SKIPPED', 'STAMPED'].includes(byStage[st.replace('PENDING_', '')].action)))
+  const curIdx = stages.indexOf(status)
   const hold = status === 'RETENTION_HOLD'
-  const nodes: { key: string; cls: string; st: string; who: string | null; act: string; when: string; note: string | null | undefined }[] = STAGE_ORDER.map((stg, i) => {
-    const c = byStage[stg]
+  const nodes: { key: string; cls: string; st: string; who: string | null; act: string; when: string; note: string | null | undefined }[] = stages.map((stg, i) => {
+    const c = logOf(stg)
     const key = stg.replace('PENDING_', '')
     const decided = !!c && c.action !== 'STAMPED'
     const skipped = c?.action === 'SKIPPED'
@@ -112,6 +124,7 @@ function Timeline({ status, chain, approvers }: { status: string; chain: ChainRo
 }
 
 export default function ExitScreen() {
+  const { C } = useTheme()
   const employeeId = useEmployeeId()
   const { notify, confirm: ask } = useOverlay()
   const q = useQuery({
@@ -122,16 +135,23 @@ export default function ExitScreen() {
   const [reason, setReason] = React.useState('')
   const [date, setDate] = React.useState(() => ymd(new Date()))
   const [remarks, setRemarks] = React.useState('')
+  // The employee's proposed last working day: starts at the policy date (resignation + notice).
+  const [tentative, setTentative] = React.useState('')
   const [confirming, setConfirming] = React.useState(false)
   const [busy, setBusy] = React.useState(false)
-  const [sheet, setSheet] = React.useState<'reason' | 'date' | null>(null)
+  const [sheet, setSheet] = React.useState<'reason' | 'date' | 'lwd' | null>(null)
 
   const refresh = () => invalidate('hris', 'today', 'notifications')
+
+  const noticeDays = Number(q.data?.notice_period_days) || 0
+  const policyLwd = (() => { const t = new Date(`${date}T00:00:00Z`); if (isNaN(t.getTime())) return ''; t.setUTCDate(t.getUTCDate() + noticeDays); return t.toISOString().slice(0, 10) })()
+  const tentativeLwd = tentative || policyLwd
+  const tentativeBad = tentativeLwd ? (tentativeProblem(tentativeLwd, date) ? 'It cannot be before the date of resignation.' : '') : 'Enter your tentative last working day.'
 
   async function submit() {
     setBusy(true)
     try {
-      await api('/api/ess/resignation', { method: 'POST', body: { reason_code: reason, date, remarks }, employeeId })
+      await api('/api/ess/resignation', { method: 'POST', body: { reason_code: reason, date, remarks, tentative_lwd: tentativeLwd }, employeeId })
       notify('Resignation submitted'); setConfirming(false); void refresh()
     } catch (e) { notify(errMsg(e), 'error') } finally { setBusy(false) }
   }
@@ -158,16 +178,17 @@ export default function ExitScreen() {
       const kpis = [
         { k: 'Status', v: STAGE_LABEL[cur.status] || cur.status, tone: cur.status === 'RETENTION_HOLD' ? 'warn' as const : '' as const },
         { k: 'Submitted', v: fmtDate(cur.submitted_at || cur.created_at) },
-        { k: 'Notice period', v: `${cur.notice_period_days ?? '-'} days` },
+        { k: 'Notice period', v: `${cur.notice_period_days ?? '-'} days`, note: Number(cur.notice_waived_days) > 0 ? `${cur.notice_waived_days} days waived by HR` : undefined },
+        ...(cur.tentative_lwd ? [{ k: 'Your tentative LWD', v: fmtDate(cur.tentative_lwd), note: 'what you proposed' }] : []),
         { k: 'Last working day', v: lwd ? fmtDate(lwd) : '-', note: lwdNote },
-      ].map(k => ({ ...k, small: String(k.v).length > 10 }))
+      ].map(k => ({ ...k, small: String(k.v).length > 10 }) as { k: string; v: string; tone?: 'warn' | ''; note?: string; small: boolean })
       body = (
         <>
           <KpiGrid items={kpis} />
           <Card>
             <Txt size={F.lead} w={700} style={{ marginBottom: S.sm }}>Your resignation</Txt>
             <Txt size={12.5} tone="muted" style={{ marginBottom: 14 }}>Reason: <Txt size={12.5} w={700}>{cur.exit_reason_master?.label || cur.reason_code || '-'}</Txt></Txt>
-            <Txt size={12.5} w={700} style={{ marginBottom: 10 }}>Acknowledgement chain</Txt>
+            <Txt size={12.5} w={700} style={{ marginBottom: 10 }}>Approval chain</Txt>
             <Timeline status={cur.status} chain={d.chain || []} approvers={d.approvers || {}} />
             {canWithdraw && <Button title="Withdraw resignation" variant="danger" disabled={busy} onPress={() => void withdraw(cur.id)} style={{ marginTop: S.sm }} full />}
             <NoteBox style={{ marginTop: 14 }}>Retention pauses the chain; only you can withdraw it. Your last working day becomes final at the HR stage.</NoteBox>
@@ -186,15 +207,21 @@ export default function ExitScreen() {
           {cur && <NoteBox style={{ marginBottom: 12 }}>{`Your previous resignation is ${(STAGE_LABEL[cur.status] || cur.status).toLowerCase()}.`}</NoteBox>}
           <PickerField label="Reason" value={reasonLabel} placeholder="Select…" onPress={() => setSheet('reason')} />
           <PickerField label="Date of resignation" value={date ? fmtDay(date) : ''} placeholder="Pick a date" onPress={() => setSheet('date')} />
+          <PickerField label="Tentative last working day *" value={tentativeLwd ? fmtDay(tentativeLwd) : ''} placeholder="Pick a date" onPress={() => setSheet('lwd')} />
+          <Txt size={F.tiny} color={tentativeBad ? C.critical : C.muted} style={{ marginTop: -6, marginBottom: 12, lineHeight: 17 }}>
+            {tentativeBad || (policyLwd && tentativeLwd !== policyLwd
+              ? `As per your notice period it would be ${fmtDate(policyLwd)}. ${tentativeLwd < policyLwd ? 'An earlier date may mean notice recovery, unless HR waives it.' : ''}`
+              : 'As per your notice period. Your approvers see it and confirm their own date.')}
+          </Txt>
           <Input label="Anything you want to say (optional)" value={remarks} onChangeText={setRemarks} multiline placeholder="Share context for your manager and HR…" />
           <NoteBox tone="w">
             <Txt size={F.tiny} tone="warning" style={{ lineHeight: 19 }}>
-              Your notice period: <Txt size={F.tiny} w={700} tone="warning">{d.notice_period_days ?? '-'} days</Txt>{d.on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the acknowledgement chain: your reporting manager first, then L2 / HOD, then HR sets the final last working day.
+              Your notice period: <Txt size={F.tiny} w={700} tone="warning">{d.notice_period_days ?? '-'} days</Txt>{d.on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the approval chain: your reporting manager approves it with a last working day (seeing your tentative date), then HR sets the final last working day.
             </Txt>
           </NoteBox>
           <View style={{ gap: S.sm, marginTop: 14 }}>
             {!confirming ? (
-              <Button title="Submit resignation" disabled={!reason} onPress={() => setConfirming(true)} full />
+              <Button title="Submit resignation" disabled={!reason || !!tentativeBad} onPress={() => setConfirming(true)} full />
             ) : (
               <>
                 <SolidButton title="Yes, submit" tone="critical" loading={busy} disabled={busy} onPress={() => void submit()} full />
@@ -205,7 +232,8 @@ export default function ExitScreen() {
           <SelectSheet visible={sheet === 'reason'} onClose={() => setSheet(null)} title="Reason" value={reason}
             options={(d.reasons || []).map(r => ({ value: r.code, label: r.label }))}
             onPick={v => { setReason(String(v)); setConfirming(false) }} />
-          <DateSheet visible={sheet === 'date'} onClose={() => setSheet(null)} value={date} onPick={setDate} title="Date of resignation" />
+          <DateSheet visible={sheet === 'date'} onClose={() => setSheet(null)} value={date} onPick={v => { setDate(v); setConfirming(false) }} title="Date of resignation" />
+          <DateSheet visible={sheet === 'lwd'} onClose={() => setSheet(null)} value={tentativeLwd} min={date} onPick={v => { setTentative(v); setConfirming(false) }} title="Tentative last working day" />
         </Card>
         </>
       )

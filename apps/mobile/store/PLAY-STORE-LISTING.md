@@ -13,9 +13,9 @@ Data safety answers in Play Console, and `app/privacy/page.tsx` together.
 | Free or paid | Free |
 | Category | Business |
 | Tags | HR, Employee self-service, Attendance |
-| Privacy policy URL | https://ezer-hrms-chi.vercel.app/privacy |
+| Privacy policy URL | https://app.ezerhrms.com/privacy (live once this branch reaches `main`; check it opens before submitting) |
 | Contact email | the mailbox set in `app/privacy/page.tsx` → `CONTACT_EMAIL` (same one in both) |
-| Website | https://ezer-hrms-chi.vercel.app |
+| Website | https://ezerhrms.com |
 
 ## Graphics (files in this folder)
 
@@ -62,6 +62,7 @@ AND MORE
 • Digital ID card
 • Raise HR requests, read company announcements, celebrate colleagues on the wall
 • Performance goals, self-ratings and reviews
+• Learning: your assigned courses and certificates on EZER Learn
 • Approvals inbox for managers
 
 Light and dark themes, built for every screen size.

@@ -1,64 +1,37 @@
-// src/features/performance/RateTab.tsx — §4.3 Rate My Team (website:
-// components/pms/ManagerTabs.tsx RateTab). The tab chooses its own subject
-// from the team queue; once picked, their KRAs, what they delivered and their
-// own rating sit beside yours. Settled (finalised) rows offer no Rate button.
+// src/features/performance/RateTab.tsx — §4.3 Team Ratings (website:
+// components/pms/ManagerTabs.tsx RateTab). A record, not a form: what each
+// rung of the chain scored each KRA, side by side, with every comment.
+// Ratings are given while approving, in KRA Approval & One-to-One. Nothing
+// on this screen writes.
 import * as React from 'react'
 import { View } from 'react-native'
 import { teamQueue, type TeamMember } from '@web/pms/team'
-import { canManagerRate, checkFeedback, score, gap, bandFor, DEFAULT_BANDS, type Band, type Line } from '@web/pms/scoring'
+import { heldBy, STAGE_SHORT, type Stage } from '@web/pms/chain'
+import { bandFor, score, DEFAULT_BANDS, type Band, type Line, type RaterRole } from '@web/pms/scoring'
 import type { FlagRules } from '@web/pms/employment'
 import { DEFAULT_RULES, type Rules } from '@web/pms/cycle'
 import { useTheme } from '@/ui/ThemeProvider'
-import { F, R, S } from '@/ui/theme'
-import { Button, Input, Txt } from '@/ui/primitives'
-import { Banner, Chips, K, PCard, Pill, PStat, StatGrid } from './ui'
+import { F, S } from '@/ui/theme'
+import { Button, Txt } from '@/ui/primitives'
+import { B, Banner, K, PCard, PStat, RDot, StatGrid } from './ui'
 import { QueueList } from './MgrTabs'
-import type { RateRow } from './data'
+import { CHAIN_RATERS, type RateRow } from './logic'
 
-function RateCard({ r, i, bands, onSet }: { r: RateRow; i: number; bands: Band[]; onSet: (i: number, p: Partial<RateRow>) => void }) {
-  const { C } = useTheme()
-  const rg = gap(r.selfRating, r.myRating)
-  return (
-    <View style={{ borderWidth: 1, borderColor: C.line, borderRadius: R.md, padding: S.md, marginBottom: S.md }}>
-      <View style={{ flexDirection: 'row', gap: S.sm, marginBottom: S.sm }}>
-        <Txt size={F.small} w={600} style={{ flex: 1 }}>{r.title}</Txt>
-        <Txt size={F.tiny} tone="muted">Wt {r.weightage}</Txt>
-      </View>
-      <Txt size={F.micro} w={700} tone="muted" upper>What they delivered</Txt>
-      {r.achievement ? <Txt size={F.tiny} style={{ marginTop: 2 }}>{r.achievement}</Txt> : <K>nothing written</K>}
-      {!!r.selfComment && <K>{r.selfComment}</K>}
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, marginTop: S.sm, marginBottom: S.sm }}>
-        <Txt size={F.micro} w={700} tone="muted" upper>Theirs</Txt>
-        <Txt size={F.small} w={700}>{r.selfRating ?? '-'}</Txt>
-        {rg.flag === 'MAJOR_GAP' && <Pill kind="amber" label="gap" />}
-      </View>
-      <Txt size={F.micro} w={700} tone="muted" upper style={{ marginBottom: 6 }}>Yours</Txt>
-      <Chips bands={bands} value={r.myRating} name={`Your rating for ${r.title}`} onPick={n => onSet(i, { myRating: n })} />
-      <Input value={r.myComment} placeholder="What you saw, specifically" style={{ marginTop: S.md, marginBottom: 0 }}
-        accessibilityLabel={`Your comment on ${r.title}`} onChangeText={t => onSet(i, { myComment: t })} />
-    </View>
-  )
-}
-
-export function RateTab({ member, rows, onChange, onSubmit, saving, overallComment, onOverallComment, bands = DEFAULT_BANDS, members, onPick, today, rules = DEFAULT_RULES, flagRules, loadingRows }: {
-  member: TeamMember | null; rows: RateRow[]; onChange: (next: RateRow[]) => void
-  onSubmit: () => void; saving?: boolean
-  overallComment: string; onOverallComment: (s: string) => void
-  bands?: Band[]; members?: TeamMember[]; onPick?: (employeeId: string | null) => void; today?: string
+export function RateTab({ member, rows, bands = DEFAULT_BANDS, members, onPick, today, rules = DEFAULT_RULES, flagRules, loadingRows }: {
+  member: TeamMember | null; rows: RateRow[]; bands?: Band[]
+  members?: TeamMember[]; onPick?: (employeeId: string | null) => void; today?: string
   rules?: Rules; flagRules?: FlagRules; loadingRows?: boolean
 }) {
+  const { C } = useTheme()
   if (!member) {
     const pickable = members && today ? teamQueue(members, today, flagRules) : []
     return (
-      <PCard title="Who are you rating?" sub="Their KRAs and their own ratings appear beside yours once you choose.">
+      <PCard title="Whose ratings do you want to see?" sub="Every rating the chain has given, side by side. Nothing on this screen can be changed — ratings are given while approving the KRA set.">
         {!onPick ? <K>Picking is not available on this screen.</K> : (
-          <QueueList rules={rules} rows={pickable}
-            empty="Nobody is with you yet. A rating opens once their weightages are locked and they have submitted their own rating."
+          <QueueList rules={rules} rows={pickable} empty="Nobody is with you yet. Ratings appear here as the chain gives them."
             extra={r => (
               <View style={{ marginTop: S.sm }}>
-                {r.member.finalised
-                  ? <Pill kind="green" label="settled" />
-                  : <Button size="sm" title={r.member.selfSubmitted ? 'Rate' : 'Open'} onPress={() => onPick(r.member.employeeId)} />}
+                <Button size="sm" variant="ghost" title="View" style={{ alignSelf: 'flex-start' }} onPress={() => onPick(r.member.employeeId)} />
               </View>
             )} />
         )}
@@ -66,47 +39,54 @@ export function RateTab({ member, rows, onChange, onSubmit, saving, overallComme
     )
   }
 
-  // Phone adaptation: the website has no way back to the list once somebody is picked.
+  // Which rungs this employee has — held, or holding a real rating somebody gave.
+  const held = heldBy(member)
+  const raters = CHAIN_RATERS.filter(r => held(r as Stage) || rows.some(x => x.by[r]?.rating != null))
+  const lines = (who: RaterRole): Line[] => rows.map(r => ({ goalId: r.goalId, title: r.title, category: r.category, weightage: r.weightage, final: r.by[who]?.rating ?? null }))
+  const scoreOf = (who: RaterRole) => score(lines(who), 'final')
+  const selfScore = scoreOf('SELF')
+  // Phone adaptation: a way back to the list (the website has none once somebody is picked).
   const back = onPick ? <Button size="sm" variant="ghost" title="← Choose somebody else" onPress={() => onPick(null)} style={{ alignSelf: 'flex-start', marginBottom: S.md }} /> : null
-  const canRate = canManagerRate(member.selfSubmitted)
-  if (!canRate.open) {
-    return (
-      <>
-        {back}
-        <PCard title={`${member.name}: not yet`}>
-          <Banner tone="amber" glyph="⏳" style={{ marginBottom: 0 }}>{canRate.because}</Banner>
-        </PCard>
-      </>
-    )
-  }
-  const lines: Line[] = rows.map(r => ({ goalId: r.goalId, title: r.title, category: r.category, weightage: r.weightage, self: r.selfRating, final: r.myRating }))
-  const mine = score(lines, 'final')
-  const theirs = score(lines, 'self')
-  const g = gap(theirs, mine)
-  const unrated = rows.filter(r => r.myRating === null).length
-  const band = bandFor(mine === null ? null : Math.round(mine), bands)
-  const fb = checkFeedback(mine === null ? null : Math.round(mine), { appreciation: overallComment }, bands)
-  const set = (i: number, patch: Partial<RateRow>) => onChange(rows.map((r, j) => j === i ? { ...r, ...patch } : r))
 
   return (
     <>
       {back}
+      <Banner tone="blue" glyph="ℹ️">
+        <B>This screen is a record, not a form.</B> Ratings are given while approving the KRA set, in <B>KRA Approval &amp; One-to-One</B> — one reading, one score, one approval. What each rung settled on appears here as they do it.
+      </Banner>
       <StatGrid>
-        <PStat tone="accent" label="Rating" value={member.name} note={member.code} />
-        <PStat label="They rated themselves" value={theirs === null ? '-' : theirs.toFixed(2)} />
-        <PStat label="Your score so far" value={mine === null ? '-' : mine.toFixed(2)} note={band ? band.label : `${unrated} still unrated`} />
-        <PStat tone={g.flag === 'MAJOR_GAP' ? 'warn' : undefined} label="Difference" value={g.delta === null ? '-' : g.delta.toFixed(2)}
-          note={g.flag === 'MAJOR_GAP' ? 'Worth raising with them' : ''} />
+        <PStat tone="accent" label="Ratings for" value={member.name} note={member.code} />
+        <PStat label="They rated themselves" value={selfScore === null ? '—' : selfScore.toFixed(2)}
+          note={bandFor(selfScore === null ? null : Math.round(selfScore), bands)?.label ?? ''} />
+        {raters.map(r => {
+          const sc = scoreOf(r)
+          const given = rows.filter(x => x.by[r]?.rating != null).length
+          return <PStat key={r} label={STAGE_SHORT[r as Stage]} value={sc === null ? '—' : sc.toFixed(2)} note={sc === null ? 'Not rated yet' : `${given} of ${rows.length} rated`} />
+        })}
       </StatGrid>
-      <PCard title="Rate each KRA" sub="Their achievement and their own rating are shown so you are rating the same thing they did.">
-        {loadingRows ? <K>Loading…</K> : rows.map((r, i) => <RateCard key={r.goalId} r={r} i={i} bands={bands} onSet={set} />)}
-        <Input label="Overall comment" value={overallComment} onChangeText={onOverallComment} multiline
-          placeholder="Evidence, not adjectives. This is what they read." />
-        {!fb.ok && overallComment.trim().length > 0 && (
-          <Banner tone="amber" glyph="!" style={{ marginBottom: S.md }}>{fb.faults.join(' ')}</Banner>
-        )}
-        <Button full disabled={unrated > 0 || saving} onPress={onSubmit}
-          title={saving ? 'Saving…' : unrated > 0 ? `${unrated} KRA${unrated === 1 ? '' : 's'} still to rate` : 'Submit my rating'} />
+      <PCard title="Every rating, KRA by KRA" sub={`${rows.length} KRAs. A blank means that rung has not rated it yet.`}>
+        {loadingRows ? <K>Loading…</K> : !rows.length ? <K>No KRAs on record for this period.</K> : rows.map((r, i) => {
+          const said = (['SELF', ...raters] as RaterRole[]).filter(w => r.by[w]?.comment?.trim())
+          return (
+            <View key={r.goalId} style={{ paddingVertical: S.md, borderTopWidth: i ? 1 : 0, borderTopColor: C.line, gap: S.sm }}>
+              <View style={{ flexDirection: 'row', gap: S.sm }}>
+                <Txt size={F.small} w={600} style={{ flex: 1 }}>{r.title}</Txt>
+                <Txt size={F.tiny} tone="muted">Wt {r.weightage}</Txt>
+              </View>
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: S.md }}>
+                {(['SELF', ...raters] as RaterRole[]).map(w => (
+                  <View key={w} style={{ alignItems: 'flex-start', gap: 3, minWidth: 56 }}>
+                    <Txt size={F.micro} w={700} tone="muted" upper>{w === 'SELF' ? 'Self' : STAGE_SHORT[w as Stage]}</Txt>
+                    <RDot v={r.by[w]?.rating ?? null} bands={bands} />
+                  </View>
+                ))}
+              </View>
+              {said.length ? said.map(w => (
+                <K key={w}><B>{w === 'SELF' ? 'Them' : STAGE_SHORT[w as Stage]}:</B> {r.by[w]!.comment}</K>
+              )) : <K>—</K>}
+            </View>
+          )
+        })}
       </PCard>
     </>
   )

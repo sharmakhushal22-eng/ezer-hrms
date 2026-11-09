@@ -1,6 +1,6 @@
 # EZER HRMS — Android app ↔ ESS website feature parity
 
-Compared against website commit `379a058` (origin/NayanAhuja, 30 Oct 2026).
+Compared against website commit `2b1b031` (origin/NayanAhuja = main, 9 Nov 2026) plus PR #18 (EZER Learn on ezerlms.com, `1abde01`). App version 1.3.0.
 How to re-sync after the website changes: `docs/mobile-app-architecture.md` §4.1.
 
 Status: ✅ same as the website · 🟡 present, with the noted difference · ⏳ "Soon" on the website too · ✖ not in the app (reason given).
@@ -18,8 +18,8 @@ Status: ✅ same as the website · 🟡 present, with the noted difference · �
 | Org Chart | `/ess/orgchart` | everyone | `/orgchart` | `features/orgchart` | ✅ |
 | Payroll → Salary Slip | `/ess/payslip` | — | `/payroll/payslip` | `features/shell` | ⏳ placeholder, as on the website |
 | Payroll → Flexi Benefits | `/ess/flexi` | everyone | `/payroll/flexi` | `features/payroll-tax` | ✅ CTC / variable / DOJ read-only from salary record |
-| Payroll → Investment Proofs | `/ess/proofs` | everyone | `/payroll/proofs` | `features/payroll-tax` | ✅ |
-| Payroll → Flexi Claims | `/ess/flexiclaims` | everyone | `/payroll/flexiclaims` | `features/payroll-tax` | ✅ |
+| Payroll → Investment Proofs | `/ess/proofs` | everyone | `/payroll/proofs` | `features/payroll-tax` | ✅ documents on every line (camera, gallery or PDF, 10 MB; View / Remove) through `/api/ess/investment-proofs` |
+| Payroll → Flexi Claims | `/ess/flexiclaims` | everyone | `/payroll/flexiclaims` | `features/payroll-tax` | ✅ window runs the 1st–20th on its own (`@web/flexi/window`); uploader always shown, locked outside it or at ₹0 balance |
 | Payroll → Voluntary PF | `/ess/vpf` | everyone | `/payroll/vpf` | `features/payroll-benefits` | ✅ |
 | Payroll → Corporate NPS | `/ess/nps` | everyone | `/payroll/nps` | `features/payroll-benefits` | ✅ |
 | Payroll → Loans | `/ess/loans` | everyone | `/payroll/loans` | `features/payroll-benefits` | ✅ |
@@ -35,14 +35,15 @@ Status: ✅ same as the website · 🟡 present, with the noted difference · �
 | Travel & Expenses — Finance desk | `/ess/travel` | finance | `/expenses/desk/finance` | `features/expenses/desk` | 🟡 Verification and Journeys in the app; Advances, Payouts, Corrections, Months say "done on the website" (bank files and month locks are back-office work) |
 | HR Services → Team Directory | `/ess/directory` | everyone | `/hris/directory` | `features/hris` | ✅ |
 | HR Services → Raise a Request | `/ess/requests` | everyone | `/hris/requests` | `features/hris` | ✅ incl. MRF wizard (department + work location required) |
-| HR Services → Tasks & Approvals | `/ess/approvals` | approvers | `/hris/approvals` | `features/hris` | ✅ MRF, offers, exits waiting on you, exit clearance inbox, onboarding sign-off, request queue (resignation LWD pre-filled) |
-| HR Services → Exit Process | `/ess/exit` | everyone | `/hris/exit` | `features/hris` | ✅ timeline names approvers; clearance, F&F and exit letters |
+| HR Services → Tasks & Approvals | `/ess/approvals` | approvers | `/hris/approvals` | `features/hris` | ✅ MRF, offers, exits waiting on you, exit clearance inbox, onboarding sign-off, request queue (resignation LWD pre-filled); "Approve with LWD" and the last-working-day trail |
+| HR Services → Exit Process | `/ess/exit` | everyone | `/hris/exit` | `features/hris` | ✅ tentative last working day (required by the server since migration 207); chain L1 → HR (208); timeline names approvers; clearance, F&F and exit letters |
 | Company | `/ess/company` | role-gated | `/company` | `features/company` | ✅ |
 | Reports | `/ess/reports` | role-gated | `/reports` | `features/reports` | ✅ |
-| Performance (PMS) | `/ess/performance` | everyone; My team / My department by role | `/performance` | `features/performance` | ✅ KRAs + self rating, carry-forward, change log, approval chain (send back / approve / finalise), one-to-ones, Rate My Team, HOD publish, result acknowledgement. PIP request and "Nudge RM L2" inert, as on the website |
+| Performance (PMS) | `/ess/performance` | everyone; My team / My department by role | `/performance` | `features/performance` | ✅ several KPIs per KRA (policy limits), per-KPI self rating, the manager's review panel (one KRA at a time, measure by measure, reasons for differences, overall remark, training, PIP / recognition offer, one-to-one tick, final rating at the last rung), Team Ratings as a read-only record, Published Results naming the HR Head, HOD finalise / feedback. The HR Head's workspace (final rating, publishing) is the admin PMS module: website only |
 | Social | `/ess/social` | everyone | `/social` | `features/social` | ✅ (Wall-of-Fame badges don't load on the website either — DB has no FK between `employee_badges` and `badge_master`) |
 | RNR | `/ess/rnr` | — | `/rnr` | `features/shell` | ⏳ placeholder, as on the website |
 | Fun Zone | `/ess/funzone` | everyone | `/funzone` | `features/funzone` | ✅ |
+| Learning (EZER Learn) | `/learning` → ezerlms.com | everyone | More → Learning | `core/links.ts` `openLms()` | ✅ opens ezerlms.com in the in-app browser, signed in through the HRMS hand-off (`/api/lms/sso`); notifications that link to `/learning/…` open the same screen there. Not an app screen, as on the website |
 | Help → TDS / Negotiation CTC calculator | Help | HR roles + hiring managers | — | — | ✖ a recruitment tool, not employee self-service |
 | Admin dashboard (`/dashboard/**`, "Manage" modules) | `/dashboard` | admins | — | — | ✖ out of scope by design: the app is employee self-service only |
 

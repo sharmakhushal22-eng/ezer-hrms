@@ -16,7 +16,7 @@
 import type { IconProps } from '@/ui/icons'
 import {
   IconAward, IconBuilding, IconCalendar, IconEmployees, IconGame, IconHeart, IconHome, IconLeave,
-  IconLetters, IconMail, IconOrgChart, IconPayroll, IconPerformance, IconReceipt, IconReports, IconUser,
+  IconLearning, IconLetters, IconMail, IconOrgChart, IconPayroll, IconPerformance, IconReceipt, IconReports, IconUser,
 } from '@/ui/icons'
 import type { ComponentType } from 'react'
 
@@ -100,6 +100,12 @@ export const SECTIONS: NavSection[] = [
   { k: 'performance', label: 'Performance', short: 'PMS', status: 'ready', desc: 'Your goals (KRAs) and the reviews you owe',
     items: [{ k: 'performance', label: 'Performance', route: '/performance' }] },
 
+  // EZER Learn is a product of its own, at ezerlms.com (docs/lms/STANDALONE.md). As on the
+  // website, Learning is one item that leaves for it: '/learning' is not an app screen, and
+  // core/links.ts navigateTo() opens the LMS there, signed in.
+  { k: 'learning', label: 'Learning', short: 'Learn', status: 'ready', desc: 'Your assigned training, the course catalogue and your certificates',
+    items: [{ k: 'learning', label: 'Learning', route: '/learning' }] },
+
   { k: 'social', label: 'Social', short: 'Social', status: 'ready', desc: 'Birthdays, work anniversaries, new joiners and the Wall of Fame',
     items: [{ k: 'social', label: 'Social', route: '/social' }] },
 
@@ -121,7 +127,7 @@ export const SECTIONS: NavSection[] = [
 export const NAV_GROUPS: { label: string | null; keys: string[] }[] = [
   { label: null, keys: ['home', 'inbox'] },
   { label: 'Time & pay', keys: ['attendance', 'leave', 'payroll', 'expenses'] },
-  { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance'] },
+  { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance', 'learning'] },
   { label: 'Workplace', keys: ['hris', 'company', 'reports'] },
   { label: 'Community', keys: ['social', 'rnr', 'funzone'] },
 ]
@@ -134,7 +140,7 @@ export const SECTION_ICON: Record<string, ComponentType<IconProps>> = {
   home: IconHome, profile: IconUser, team: IconEmployees, payroll: IconPayroll, inbox: IconMail,
   attendance: IconCalendar, leave: IconLeave, hris: IconLetters, performance: IconPerformance,
   orgchart: IconOrgChart, company: IconBuilding, reports: IconReports, social: IconHeart,
-  rnr: IconAward, funzone: IconGame, expenses: IconReceipt,
+  rnr: IconAward, funzone: IconGame, expenses: IconReceipt, learning: IconLearning,
 }
 
 export interface MenuFlags { can: { company: boolean; reports: boolean; approvals: boolean }; is_rm: boolean; is_hod: boolean }

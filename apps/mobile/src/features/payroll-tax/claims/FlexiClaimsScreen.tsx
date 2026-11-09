@@ -1,7 +1,9 @@
 // Payroll › Flexi Claims — components/ess/FlexiClaims.tsx on the phone.
 //
-// Monthly bill submission against flexi entitlements inside the company's window,
-// a per-component balance + history, and limit-increase requests. The website's
+// Monthly bill submission against flexi entitlements, a per-component balance + history,
+// and limit-increase requests. Bills go in from the 1st to the 20th of every month (the
+// website's lib/flexi/window, shared); outside it, or with nothing left to claim, the
+// uploader stays on screen but locked, as on the website. The website's
 // local toast becomes notify(); its right-hand history drawer becomes a sheet.
 import * as React from 'react'
 import { Pressable, View } from 'react-native'
@@ -18,6 +20,10 @@ import { Sheet, useOverlay } from '@/ui/overlays'
 import { B, Box, Pill } from '../ui'
 import { FY, NO_INVOICE, loadFlexiClaims, requestLimit, submitClaim, uploadBillFile, type ComponentLimit, type HistItem } from './data'
 import { BillFrame, HistorySheet, blankFrame, inr, type Frame } from './BillFrame'
+import { closingDay, nextOpening, windowDaysLeft, windowOpenAt } from '@web/flexi/window'
+
+/** "2026-11-20" → "20 Nov 2026", as the website words the window's days. */
+const dayLabel = (d: string) => new Date(`${d}T00:00:00Z`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric', timeZone: 'UTC' })
 
 function EntitlementCard({ lim, histCount, onHistory, onRequest }: { lim: ComponentLimit; histCount: number; onHistory: () => void; onRequest: () => void }) {
   const { C } = useTheme()
@@ -79,7 +85,6 @@ export default function FlexiClaimsScreen() {
 
   const d = q.data
   const limits = d?.limits || []
-  const win = d?.win || null
   const claimHist: HistItem[] = d?.hist || []
   const companyId = d?.companyId || null
 
@@ -97,11 +102,16 @@ export default function FlexiClaimsScreen() {
   const addFrame = () => setFrames(p => [...p, blankFrame()])
   const removeFrame = (id: string) => setFrames(p => p.length > 1 ? p.filter(f => f.id !== id) : p)
 
-  const isOpen = win?.status === 'OPEN'
+  const now = new Date(d?.now ?? 0)
+  const windowOpen = !!d && windowOpenAt(now)
+  const hasBalance = billTypeOptions.length > 0
+  const canSubmit = windowOpen && hasBalance
   const reload = () => queryClient.invalidateQueries({ queryKey: ['payroll-tax', 'claims', employeeId] })
 
   async function submitAll() {
-    if (!isOpen) return showToast('Submission window is closed')
+    // Asked again at the moment of submitting: the screen may have been open since the 20th.
+    if (!windowOpenAt(new Date())) return showToast(`Bills can be submitted from the 1st to the 20th. The window opens on ${dayLabel(nextOpening(new Date()))}`)
+    if (!hasBalance) return showToast('Your balance is ₹0 on every component, so no more bills can be submitted')
     const active = frames.filter(f => f.code || f.amount || f.files.length)
     if (!active.length) return showToast('Add at least one bill')
     for (const f of active) {
@@ -116,7 +126,7 @@ export default function FlexiClaimsScreen() {
     const fails: string[] = []
     for (const f of active) {
       const res = await submitClaim({
-        window_id: win.id, employee_id: employeeId, company_id: companyId,
+        employee_id: employeeId, company_id: companyId,
         component_code: f.code, claim_amount: Number(f.amount), bill_date: f.billDate || null,
         bill_no: f.billNo || null, agency_name: f.vendor || null, vendor_desc: f.vendor || null,
       })
@@ -147,30 +157,24 @@ export default function FlexiClaimsScreen() {
   const body = () => {
     if (q.isLoading) return <Loading label="Loading flexi claims…" />
     if (q.error) return <ErrorState error={q.error} onRetry={() => q.refetch()} />
-    if (!limits.length) return (
-      <Card>
-        <Txt size={15} w={700} style={{ marginBottom: 6 }}>Flexi Reimbursement</Txt>
-        <Txt size={13} tone="muted">No claimable flexi components are configured for your company &amp; salary band yet. Once HR sets up the flexi policy slabs, your entitlements &amp; bill submission will appear here.</Txt>
-      </Card>
-    )
-    const closes = win?.closes_at ? new Date(win.closes_at) : null
     return (
       <View>
         <Txt size={17} w={700}>Flexi Reimbursement</Txt>
         <Txt size={12} tone="muted" style={{ marginBottom: S.md }}>Submit monthly bills for your declared flexi components · {d!.regime === 'old' ? 'Old' : 'New'} regime{d!.slabLabel ? ` · Slab ${d!.slabLabel}` : ''}</Txt>
 
-        {win ? (
-          <Box bg={isOpen ? C.positiveTint : C.criticalTint} edge={isOpen ? C.positive : C.critical} style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, marginBottom: S.md }}>
-            <Txt size={16}>{isOpen ? '🟢' : '🔴'}</Txt>
-            <Txt size={12} color={isOpen ? C.positive : C.critical} style={{ flex: 1 }}>
-              {isOpen
-                ? <>Window open · submit bills by <B>{closes ? closes.toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : ''}</B> · {Math.max(0, Math.ceil(((closes?.getTime() || 0) - d!.now) / 86400000))} days left</>
-                : 'Window closed · bills cannot be submitted right now'}
-            </Txt>
-          </Box>
-        ) : (
-          <Box bg={C.warningTint} edge={C.warningEdge} style={{ marginBottom: S.md }}><Txt size={12} color={C.warning}>No submission window is open for this month yet. Contact HR / Payroll.</Txt></Box>
-        )}
+        {/* The window (1st–20th) and whether anything is left to claim */}
+        <Box bg={canSubmit ? C.positiveTint : windowOpen ? C.warningTint : C.criticalTint} edge={canSubmit ? C.positive : windowOpen ? C.warningEdge : C.critical} style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, marginBottom: S.md }}>
+          <Txt size={16}>{canSubmit ? '🟢' : windowOpen ? '🟡' : '🔴'}</Txt>
+          <Txt size={12} color={canSubmit ? C.positive : windowOpen ? C.warning : C.critical} style={{ flex: 1 }}>
+            {!windowOpen
+              ? <>Window closed · bills can be submitted from the 1st to the 20th of every month. It opens again on <B>{dayLabel(nextOpening(now))}</B>.</>
+              : hasBalance
+                ? <>Window open · submit bills by <B>{dayLabel(closingDay(now))}</B> · {windowDaysLeft(now)} day{windowDaysLeft(now) === 1 ? '' : 's'} left</>
+                : limits.length
+                  ? <>Window open till <B>{dayLabel(closingDay(now))}</B>, but your balance is ₹0 on every component that takes a bill, so no more bills can be submitted. Ask Payroll for a limit increase on a component below if you need more.</>
+                  : <>Window open till <B>{dayLabel(closingDay(now))}</B>, but you have no claimable flexi components yet: file your Flexi &amp; TDS declaration, or ask HR to set up the flexi policy for your band.</>}
+          </Txt>
+        </Box>
 
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 10, marginBottom: S.lg }}>
           {([['Annual limit', inr(totals.limit), C.brand], ['Approved', inr(totals.approved), C.positive], ['Pending', inr(totals.pending), C.warning], ['Balance', inr(totals.balance), C.ink]] as const).map(([l, v, c]) => (
@@ -181,13 +185,19 @@ export default function FlexiClaimsScreen() {
           ))}
         </View>
 
-        {isOpen && billTypeOptions.length > 0 && (
+        {(
           <View style={{ borderRadius: 16, marginBottom: S.lg, overflow: 'hidden', borderWidth: 1, borderColor: C.line }}>
             <LinearGradient colors={[C.brand, C.brandDeep]} start={{ x: 0, y: 0 }} end={{ x: 1, y: 1 }} style={{ paddingVertical: 14, paddingHorizontal: 18 }}>
-              <Txt size={15} w={800} color={C.onAccent}>Upload your bills</Txt>
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: S.sm, flexWrap: 'wrap' }}>
+                <Txt size={15} w={800} color={C.onAccent} style={{ flexShrink: 1 }}>Upload your bills</Txt>
+                {!canSubmit && <Pill label={!windowOpen ? 'Opens on the 1st' : 'Balance ₹0'} bg={C.criticalTint} fg={C.critical} />}
+              </View>
               <Txt size={11.5} color={C.onAccent} style={{ opacity: 0.9, marginTop: 1 }}>Pick a bill type, enter the amount, attach photos or files. Add as many bills as you like.</Txt>
             </LinearGradient>
-            <View style={{ padding: S.md, backgroundColor: C.canvas, gap: S.md }}>
+            {/* Locked: every field, picker and button inside stops taking touches, as the website's
+                disabled fieldset does. */}
+            <View pointerEvents={canSubmit ? 'auto' : 'none'} accessibilityState={{ disabled: !canSubmit }}
+              style={{ padding: S.md, backgroundColor: C.canvas, gap: S.md, opacity: canSubmit ? 1 : 0.55 }}>
               {frames.map((f, i) => (
                 <BillFrame key={f.id} frame={f} index={i} options={billTypeOptions}
                   remaining={f.code ? remainingOf(f.code) : -1} canRemove={frames.length > 1}
@@ -210,6 +220,7 @@ export default function FlexiClaimsScreen() {
         )}
 
         <Txt size={12} w={700} tone="muted" upper style={{ marginTop: 4, marginBottom: S.sm }}>Your entitlements</Txt>
+        {!limits.length && <Card style={{ marginBottom: S.md }}><Txt size={13} tone="muted">No claimable flexi components are configured for your company &amp; salary band yet.</Txt></Card>}
         {limits.map(lim => (
           <EntitlementCard key={lim.code} lim={lim} histCount={claimHist.filter(c => c.component_code === lim.code).length}
             onHistory={() => setHistComp(lim.code)} onRequest={() => { setReqErr(''); setReqComp(lim.code) }} />

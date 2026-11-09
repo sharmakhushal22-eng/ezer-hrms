@@ -11,16 +11,19 @@
         "buildType": "apk"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ezer-hrms-chi.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://app.ezerhrms.com",
+        "EXPO_PUBLIC_LMS_URL": "https://ezerlms.com"
       },
-      "environment": "preview"
+      "environment": "preview",
+      "autoIncrement": true
     },
     "production": {
       "android": {
         "buildType": "app-bundle"
       },
       "env": {
-        "EXPO_PUBLIC_API_URL": "https://ezer-hrms-chi.vercel.app"
+        "EXPO_PUBLIC_API_URL": "https://app.ezerhrms.com",
+        "EXPO_PUBLIC_LMS_URL": "https://ezerlms.com"
       },
       "environment": "production",
       "autoIncrement": true

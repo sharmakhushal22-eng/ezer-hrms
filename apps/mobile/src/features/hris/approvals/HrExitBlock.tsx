@@ -26,6 +26,27 @@ const stepText = (s: any) => s.status === 'HOLD' ? 'retention requested' : s.sta
   : s.action === 'STARTED' ? 'started it' : s.action === 'ACCEPTED_WITH_DATE' ? `accepted with ${fmtD(s.lwd)}` : s.action === 'FINAL_LWD_SET' ? `final LWD ${fmtD(s.lwd)}` : 'acknowledged'
 const needs = (act: string) => act === 'ACCEPTED_WITH_DATE' || act === 'FINAL_LWD_SET' || act === 'REQUESTED_RETENTION'
 
+/** The last working day so far: what HR proposed when starting the exit, then each approver's
+ *  date (RoleTabs LwdTrail; every approver sets one, lib/exit/lwd.ts). */
+function LwdTrail({ x }: { x: any }) {
+  const { C } = useTheme()
+  const rows: { label: string; by: string | null; lwd: string }[] = [
+    { label: 'Proposed when the exit started', by: x.initiated_by_name || null, lwd: x.last_working_day },
+    ...(x.chain || []).filter((s: any) => s.status === 'APPROVED' && s.lwd && s.action !== 'STARTED').map((s: any) => ({ label: s.label, by: s.acted_by?.full_name || null, lwd: s.lwd })),
+  ].filter(t => t.lwd)
+  if (!rows.length) return null
+  return (
+    <View style={{ marginTop: 4, borderWidth: 1, borderColor: C.line, borderRadius: 8, overflow: 'hidden' }}>
+      {rows.map((r, i) => (
+        <View key={i} style={{ flexDirection: 'row', gap: 10, alignItems: 'baseline', paddingVertical: 6, paddingHorizontal: 10, backgroundColor: i % 2 ? 'transparent' : C.canvas, borderTopWidth: i ? 1 : 0, borderTopColor: C.line }}>
+          <Txt size={12} tone="muted" style={{ flex: 1, minWidth: 0 }}>{r.label}{r.by ? <Txt size={12} tone="faint"> · {r.by}</Txt> : null}</Txt>
+          <Txt size={12} w={700}>{fmtD(r.lwd)}</Txt>
+        </View>
+      ))}
+    </View>
+  )
+}
+
 function ExitItem({ x, employeeId, busy, setBusy, onDone }: { x: any; employeeId: string; busy: boolean; setBusy: (id: string | null) => void; onDone: () => void }) {
   const { C } = useTheme()
   const { notify } = useOverlay()
@@ -76,20 +97,21 @@ function ExitItem({ x, employeeId, busy, setBusy, onDone }: { x: any; employeeId
         </View>
       )}
       <Txt size={11} tone="faint">{(x.chain || []).map((s: any) => `${s.label}: ${stepText(s)}`).join(' → ')}</Txt>
+      <LwdTrail x={x} />
 
       {!act && acts.length > 0 && (
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
           {acts.map(a => a.code === 'REQUESTED_RETENTION'
             ? <Button key={a.code} title={busy ? '…' : a.label} size="sm" variant="outline" disabled={busy} onPress={() => { setAct(a.code); setNote(''); setLwd('') }} />
             : <SolidButton key={a.code} title={busy ? '…' : a.label} size="sm" disabled={busy}
-                tone={a.code === 'FINAL_LWD_SET' || a.code === 'ACKNOWLEDGED' || a.code === 'RESUMED' ? 'positive' : 'brand'}
+                tone={a.code === 'FINAL_LWD_SET' || a.code === 'ACCEPTED_WITH_DATE' || a.code === 'RESUMED' ? 'positive' : 'brand'}
                 onPress={() => { if (needs(a.code)) { setAct(a.code); setNote(''); setLwd(x.proposed_lwd || x.last_working_day || '') } else void fire(a.code) }} />)}
         </View>
       )}
       {!!act && (
         <View style={{ marginTop: 8, padding: 10, borderRadius: 8, backgroundColor: C.canvas }}>
           {act !== 'REQUESTED_RETENTION' && (
-            <PickerField label={act === 'FINAL_LWD_SET' ? 'Final last working day' : 'The last working day you accept'} value={lwd ? fmtDay(lwd) : ''} placeholder="Pick a date" onPress={() => setDateOpen(true)} />
+            <PickerField label={act === 'FINAL_LWD_SET' ? 'Final last working day' : 'Last working day you approve'} value={lwd ? fmtDay(lwd) : ''} placeholder="Pick a date" onPress={() => setDateOpen(true)} />
           )}
           <Input value={note} onChangeText={setNote} multiline inputStyle={{ minHeight: 50 }}
             placeholder={act === 'REQUESTED_RETENTION' ? 'Why the employee should be retained (optional)' : 'Note (optional)'} />
@@ -99,7 +121,7 @@ function ExitItem({ x, employeeId, busy, setBusy, onDone }: { x: any; employeeId
               disabled={busy || (act !== 'REQUESTED_RETENTION' && !lwd)} onPress={() => void fire(act)} />
           </View>
           <DateSheet visible={dateOpen} onClose={() => setDateOpen(false)} value={lwd || null} onPick={setLwd}
-            title={act === 'FINAL_LWD_SET' ? 'Final last working day' : 'The last working day you accept'} />
+            title={act === 'FINAL_LWD_SET' ? 'Final last working day' : 'Last working day you approve'} />
         </View>
       )}
     </View>

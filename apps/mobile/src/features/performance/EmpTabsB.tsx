@@ -8,7 +8,7 @@ import { useTheme } from '@/ui/ThemeProvider'
 import { F, R, S } from '@/ui/theme'
 import { Button, Input, Txt } from '@/ui/primitives'
 import { ABar, B, Banner, Chips, EmptyBlock, Field, K, PCard, PStat, StatGrid } from './ui'
-import type { SelfRow } from './actions'
+import type { SelfRow } from './logic'
 
 // ── §3.4 Self Rating ─────────────────────────────────────────────────────
 function SelfCard({ r, i, submitted, onSet, bands }: { r: SelfRow; i: number; submitted: boolean; onSet: (i: number, p: Partial<SelfRow>) => void; bands: Band[] }) {
@@ -17,7 +17,7 @@ function SelfCard({ r, i, submitted, onSet, bands }: { r: SelfRow; i: number; su
     <View style={{ borderWidth: 1, borderColor: C.line, borderRadius: R.md, padding: S.md, marginBottom: S.md }}>
       <View style={{ flexDirection: 'row', gap: S.sm, marginBottom: S.sm }}>
         <Txt size={F.small} w={600} style={{ flex: 1 }}>{r.title}</Txt>
-        <Txt size={F.tiny} tone="muted">Wt {r.weightage}</Txt>
+        <Txt size={F.tiny} tone="muted">Wt {Number.isInteger(r.weightage) ? r.weightage : r.weightage.toFixed(2)}</Txt>
       </View>
       <Input label="What you delivered" value={r.achievement} editable={!submitted} placeholder="The number you actually hit"
         accessibilityLabel={`Achievement for ${r.title}`} onChangeText={t => onSet(i, { achievement: t })} />
@@ -55,7 +55,7 @@ export function SelfRatingTab({ rows, onChange, submitted, onSubmit, saving, ban
       <PCard title="Self rating" sub="Your achievement, your rating, and a comment on each KRA. It locks when you submit.">
         {rows.length === 0
           ? <EmptyBlock title="No KRAs to rate" note="Your KRA set has to be locked before self rating opens." />
-          : rows.map((r, i) => <SelfCard key={r.goalId} r={r} i={i} submitted={submitted} onSet={set} bands={bands} />)}
+          : rows.map((r, i) => <SelfCard key={r.kpiId || r.goalId} r={r} i={i} submitted={submitted} onSet={set} bands={bands} />)}
         {!submitted && rows.length > 0 && (
           <Button full disabled={unrated > 0 || saving} onPress={onSubmit} style={{ marginTop: S.sm }}
             title={saving ? 'Submitting…' : unrated > 0 ? `${unrated} KRA${unrated === 1 ? '' : 's'} still unrated` : 'Submit (this locks it)'} />
