@@ -135,6 +135,35 @@ test('225 is the newest definition of the read-only guard', () => {
   assert.equal(latest, '225_pms_readonly_lets_the_result_out_properly.sql')
 })
 
+test('225 has a verify script, and it isolates the guard', () => {
+  // I shipped 225 saying it could not be verified, because the guard only
+  // bites on a read-only row and making one means marking somebody exited.
+  // That was wrong: every other script in supabase/verify manufactures its
+  // own state inside BEGIN … ROLLBACK.
+  //
+  // The isolation matters. Four triggers watch this table and fire in name
+  // order, so trg_pms_publish_needs_hr_final speaks before trg_pms_readonly —
+  // a full publish on an unsettled row is refused by the HR Head rule and
+  // never reaches the rule under test. Both publish triggers return early
+  // unless workflow_status TRANSITIONS, so the script updates chain_stage
+  // alone and nothing else runs.
+  const v = read('supabase/verify/225_pms_readonly_publish_verify.sql')
+  assert.match(v, /^BEGIN;/m, 'the verify script is not transactional')
+  assert.match(v, /^ROLLBACK;/m, 'the verify script does not roll back')
+  assert.match(v, /SET chain_stage = 'DONE'/, 'it never exercises the guard')
+  assert.match(v, /SET chain_stage = 'RM_L1'/,
+    'nothing checks that the column is allowed ONWARD only — a guard that '
+    + 'allowed chain_stage unconditionally would pass the first check')
+  assert.match(v, /SET final_rating = 1/,
+    'nothing checks the lock still locks everything else')
+  // And it must NOT transition workflow_status, or the publish triggers fire
+  // first and the reading is about them instead.
+  const fn = v.slice(v.indexOf('verify_readonly_publish'), v.indexOf('$fn$;'))
+  assert.ok(!/SET workflow_status = 'PUBLISHED'/.test(fn),
+    'the script transitions workflow_status, so an earlier trigger answers '
+    + 'and the read-only guard is never reached')
+})
+
 test('225 reproduces 193 exactly, apart from chain_stage', () => {
   const strip = (t: string) => t.split('\n')
     .filter(l => l.trim() && !l.trim().startsWith('--')).map(l => l.trim())
