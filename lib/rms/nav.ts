@@ -18,6 +18,23 @@ export interface NavEntry {
   href: string
   /** The permission that opens it. null = everyone (Home). */
   module: Module | null
+  /** Opened by any of these modules instead of the one in `module` (a shared screen).
+   *  `module` still names the first of them, for whatever reads a single value. */
+  anyModule?: Module[]
+  /** Opened by ROLE instead of a module: shown to whoever holds any of these role codes
+   *  (and the super admin). Set together with `module: null`. */
+  roles?: string[]
+}
+
+/** Who gets the Help → TDS Calculator: the hiring and HR roles (Hiring Manager / Recruiter,
+ *  HR Executive, Branch HR, HR Manager, HR Head, CHRO). */
+export const TDS_CALCULATOR_ROLES = ['RECRUITER', 'HR_EXECUTIVE', 'BRANCH_HR', 'HR_MANAGER', 'HR_HEAD', 'CHRO']
+
+/** May someone holding these role codes open this entry? Module entries are decided by the
+ *  caller's module check; this answers only for role-gated ones. */
+export function roleEntryOpen(e: Pick<NavEntry, 'roles'>, roleCodes: string[], superAdmin: boolean): boolean {
+  if (!e.roles) return false
+  return superAdmin || roleCodes.some(c => e.roles!.includes(String(c).toUpperCase()))
 }
 export interface NavGroupDef { group: string; items: NavEntry[] }
 
@@ -30,9 +47,13 @@ export const NAV_GROUPS: NavGroupDef[] = [
     { key: 'onboarding',        label: 'Onboarding',              href: '/dashboard/onboarding',      module: 'Onboarding' },
     { key: 'pms',               label: 'Performance',             href: '/dashboard/pms',             module: 'Performance' },
     { key: 'employees',         label: 'Employees',               href: '/dashboard/employees',       module: 'Employees' },
-    { key: 'org-chart',         label: 'Org Chart',               href: '/dashboard/org-chart',       module: 'Employees' },
+    // Org Chart is not listed under People: everyone reaches it from the ESS sidebar (Org Chart).
     { key: 'bulk-upload',       label: 'Bulk Uploader',           href: '/dashboard/bulk-upload',     module: 'Bulk Upload' },
     { key: 'transfer',          label: 'Transfer',                href: '/dashboard/transfer',        module: 'Transfer' },
+    // Pending appointment letters and the twenty HR letters (EZER Letters & Documents spec).
+    { key: 'employee-letters',  label: 'Letters',                 href: '/dashboard/employee-letters', module: 'HR Letters' },
+    // EZER Learn. One screen for three permissions: each tab follows lib/lms/caps.ts.
+    { key: 'learning',          label: 'Learning',                href: '/dashboard/learning',        module: 'Learning Content', anyModule: ['Learning Content', 'Learning Assignment', 'Learning Reports'] },
   ]},
   { group: 'Time & Attendance', items: [
     { key: 'attendance',        label: 'Attendance & Leave',      href: '/dashboard/attendance',         module: 'Attendance' },
@@ -50,6 +71,7 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { group: 'Compliance & Docs', items: [
     { key: 'compliance',        label: 'Compliance',              href: '/dashboard/compliance',      module: 'Compliance' },
     { key: 'letters',           label: 'HR Letters',              href: '/dashboard/letters',         module: 'HR Letters' },
+    { key: 'esign',             label: 'E-Sign',                  href: '/dashboard/esign',           module: 'HR Letters' },
     { key: 'policies',          label: 'Company Policies',        href: '/dashboard/policies',        module: 'Policies' },
     { key: 'reports',           label: 'Reports',                 href: '/dashboard/reports',         module: 'Reports' },
   ]},
@@ -64,6 +86,9 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { group: 'Help', items: [
     { key: 'ai',                label: 'Ezer AI',                 href: '/dashboard/ai',              module: 'Ezer AI' },
     { key: 'support',           label: 'Support',                 href: '/dashboard/support',         module: 'Support' },
+    // A calculator for checking someone's TDS — the same Flexi & TDS engine employees declare
+    // with, in a mode that saves nothing. Role-gated, not module-gated.
+    { key: 'tds-calculator',    label: 'TDS Calculator',          href: '/dashboard/tds-calculator',  module: null, roles: TDS_CALCULATOR_ROLES },
   ]},
 ]
 
@@ -99,5 +124,8 @@ export const MODULE_TABS: Record<string, ModuleTab[]> = {
     { key: 'offers',        label: 'Offers',         screen: 'recruitment.offers',        keywords: 'offer accepted backout revision signed' },
     { key: 'preonboarding', label: 'Pre-onboarding', screen: 'recruitment.preonboarding', keywords: 'joining doj pre onboarding' },
     { key: 'jobstatus',     label: 'Job Status',     screen: 'recruitment.jobstatus',     keywords: 'job status openings' },
+    // Every recruitment report as an Excel download (app/api/recruitment/reports). Seeded for
+    // RECRUITER by migration 201; HR Head / HR Manager see it unconfigured, like every tab.
+    { key: 'reports',       label: 'Reports',        screen: 'recruitment.reports',       keywords: 'reports excel download mrf hiring interviews negotiation offers documents joining recruiter' },
   ],
 }

@@ -17,11 +17,13 @@ import InterviewPipeline from '@/components/recruitment/InterviewPipeline'
 import CandidateInterviewModal from '@/components/recruitment/CandidateInterviewModal'
 import MrfForm, { mrfToForm } from '@/components/ess/MrfForm'
 import { api as essApi } from '@/lib/ess/api'
-import { MIN_WAGE_STATES, WAGE_CATS, CAT_TO_DB, resolveMinWage, OLD_CODE_TO_STATE, DEFAULT_STATE, DEFAULT_CATEGORY, stateFromLocation } from '@/lib/recruitment/min-wages'
+import { MIN_WAGE_STATES, WAGE_CATS, resolveMinWage, OLD_CODE_TO_STATE, DEFAULT_STATE, DEFAULT_CATEGORY, stateFromLocation } from '@/lib/recruitment/min-wages'
 import { computeCtc, inr, EPF_WAGE_CEILING, hraMaxFor } from '@/lib/recruitment/ctc-model'
-import { ctcStatementRows, type StmtRow } from '@/lib/recruitment/ctc-statement'
+import { ctcStatementRows } from '@/lib/recruitment/ctc-statement'
+import { CtcStatementTable, MinWagesPopup } from '@/components/recruitment/CtcStatement'
 import { jobCodePrefix, nextJobCode, newMrfNumber } from '@/lib/recruitment/job-code'
 import RecruiterPicker, { toPickerPeople } from '@/components/recruitment/RecruiterPicker'
+import MrfPicker, { mrfOptionLabel } from '@/components/recruitment/MrfPicker'
 import { isHandOff } from '@/lib/recruitment/mrf-handoff'
 // Every recruitment API route is guarded (docs/security/open-endpoints.md), so the
 // browser hands over whichever session it holds. uploadAuthHeaders() is the same
@@ -49,6 +51,7 @@ import {
   CandCard, ApprovalTrail, EmptyState, metaLine, fullDate, type TrailStep,
   // MRF: the read-only approval tracker and the non-jumping wizard body.
   ApprovalTracker, trackerStepsOf, roleLabel, useWizardBody,
+  ReportsView,
 } from '@/components/recruitment/rx'
 // NOT imported: Ring and missingDocuments. Section 10 wants a documents ring
 // from document_collection_links, but PreOnboardTab reads preonboarding_links
@@ -278,8 +281,8 @@ export default function RecruitmentPage() {
   const { grant, loading: grantLoading } = useGrant()
   // The HR Head tab is for the HR Head alone (and super admin / legacy dashboard login).
   const isHrHead = grant.legacy || grant.isSuperAdmin || (grant.roles || []).some((r: any) => r.role_code === 'HR_HEAD')
-  type Tab = 'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'
-  const TAB_KEYS: Tab[] = ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus']
+  type Tab = 'dashboard'|'mrf'|'screening'|'pipeline'|'negotiation'|'offerapproval'|'hrhead'|'sendoffer'|'offers'|'preonboarding'|'jobstatus'|'reports'
+  const TAB_KEYS: Tab[] = ['dashboard','mrf','screening','pipeline','negotiation','offerapproval','hrhead','sendoffer','offers','preonboarding','jobstatus','reports']
   const [tab, setTabState] = useState<Tab>('dashboard')
   // THE TAB IS PART OF THE ADDRESS. Inside ESS it is the path (/ess/recruitment/mrf); at
   // /dashboard/recruitment it is ?tab=mrf. A click pushes a history entry (Back returns to
@@ -477,6 +480,9 @@ export default function RecruitmentPage() {
           Per Step 6 of the guide it is restyled in place inside RxPage
           rather than replaced by the view. */}
       {tab==='jobstatus' && <JobStatusTab {...props} />}
+      {/* Reports: every recruitment report as an Excel workbook, built on the server from the
+          data this viewer may see (app/api/recruitment/reports). */}
+      {tab==='reports' && <ReportsView companies={companies} canPickCompany={!!(grant.crossCompany || grant.isSuperAdmin || grant.legacy)} />}
       {/* MRF renders MrfListView, which is a genuine fit here in a way
           JobStatusView was not: it has a passthrough slot for the existing
           filter bar and its actions map one-to-one onto the tab's handlers.
@@ -701,6 +707,8 @@ function validateMrf(form:any, strict:boolean) {
     e.outgoing_employee_id = 'Select the outgoing employee for a replacement'
   if (strict) {
     if (!form.department_id) e.department_id = 'Pick a department before submitting'
+    // The offer letter states the work location too (lib/recruitment/position-required.ts).
+    if (!form.location_id) e.location_id = 'Pick the work location before submitting'
     if (!form.reason) e.reason = 'Reason for hire is required'
     if (!bMax) e.budget_max = 'Budget is needed for approval'
     if (!form.target_joining_date) e.target_joining_date = 'Target joining date is required'
@@ -1513,13 +1521,15 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
   // Per-field messages are already rendered by <Field error=…>; the rail only
   // decides whether a step may be left, so it counts keys rather than echoing
   // their text.
-  const stepErrs = validateMrf(form, false)
+  // Department and work location are also checked step by step (not only at submit): the offer
+  // letter states them, so the wizard does not move past a step that leaves either blank.
+  const stepErrs: Record<string, string> = { ...validateMrf(form, false), ...(form.department_id ? {} : { department_id: 'Department is required' }), ...(form.location_id ? {} : { location_id: 'Work location is required' }) }
   const MRF_STEPS: { id: string; title: string; keys: string[] }[] = [
     { id: 'meta',   title: 'Requisition Meta',      keys: [] },
-    { id: 'pos',    title: 'Position Details',      keys: ['company_id', 'designation', 'no_of_openings'] },
-    { id: 'emp',    title: 'Employment Details',    keys: [] },
+    { id: 'pos',    title: 'Position Details',      keys: ['company_id', 'department_id', 'designation', 'no_of_openings'] },
+    { id: 'emp',    title: 'Employment Details',    keys: ['location_id'] },
     { id: 'budget', title: 'Budget & Cost',         keys: ['budget_max', 'duration_months'] },
-    { id: 'just',   title: 'Justification',         keys: ['department_id', 'reason', 'outgoing_employee_id'] },
+    { id: 'just',   title: 'Justification',         keys: ['reason', 'outgoing_employee_id'] },
     { id: 'time',   title: 'Timeline',              keys: ['target_joining_date', 'validity_date'] },
     ...(!isQuick ? [{ id: 'cand', title: 'Candidate Requirements', keys: ['skills_required', 'experience_max'] }] : []),
     { id: 'appr',   title: 'Approval Workflow',     keys: [] },
@@ -2036,7 +2046,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 {companies.map((c:Company)=><option key={c.id} value={c.id}>{c.company_name||c.company_code}</option>)}
               </select>
             </Field>
-            <Field label="Department / Function" error={errors.department_id}>
+            <Field label="Department / Function" required error={errors.department_id}>
               <select className="rx-input" style={eb('department_id')} value={form.department_id} onChange={e=>F('department_id',e.target.value)}>
                 <option value="">Select Department</option>
                 {filtDepts.map((d:Department)=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
@@ -2095,8 +2105,8 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
                 {WORK_MODES.map(w=><option key={w} value={w}>{w}</option>)}
               </select>
             </Field>
-            <Field label="Work Location">
-              <select className="rx-input" value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
+            <Field label="Work Location" required error={errors.location_id}>
+              <select className="rx-input" style={eb('location_id')} value={form.location_id} onChange={e=>F('location_id',e.target.value)}>
                 <option value="">Select Location</option>
                 {filtLocs.map((l:Location)=><option key={l.id} value={l.id}>{l.location_name||l.location_code}</option>)}
               </select>
@@ -2359,7 +2369,7 @@ function MRFTab({ supabase, companies, locations, departments, mrfs, candidates,
               the problems and offer a jump to each — "3 fields need attention"
               on the last step left the reader hunting through ten sections. */}
           {(()=>{
-            const STEP_OF:Record<string,string> = { company_id:'pos', department_id:'pos', designation:'pos', no_of_openings:'pos',
+            const STEP_OF:Record<string,string> = { company_id:'pos', department_id:'pos', designation:'pos', no_of_openings:'pos', location_id:'emp',
               budget_max:'budget', duration_months:'budget', reason:'just', outgoing_employee_id:'just',
               target_joining_date:'time', validity_date:'time', skills_required:'cand', experience_max:'cand' }
             const bad = Object.keys(errors).filter(k=>errors[k])
@@ -3295,7 +3305,7 @@ function JobStatusTab({ companies, locations, departments, mrfs, candidates, sho
 }
 
 // ── AI SCREENING ──────────────────────────────────────────────────
-function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail }:any) {
+function ScreeningTab({ supabase, companies, departments, locations, mrfs, candidates, onRefresh, showNotify, rail }:any) {
   const [selMRF, setSelMRF] = useState('')
   const [files, setFiles] = useState<File[]>([])
   const [screening, setScreening] = useState(false)
@@ -3440,12 +3450,9 @@ function ScreeningTab({ supabase, mrfs, candidates, onRefresh, showNotify, rail 
           <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(240px,1fr))', gap:16, marginBottom:14 }}>
             <div>
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Job opening <em>*</em></label>
-              <select className="rx-input" value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
-                <option value="">Select an approved MRF</option>
-                {mrfs.filter((m:MRF)=>m.status==='APPROVED').map((m:MRF)=>(
-                  <option key={m.id} value={m.id}>{m.designation||m.position} · {m.no_of_openings||m.openings||0} openings</option>
-                ))}
-              </select>
+              <MrfPicker className="rx-input" aria-label="Job opening" placeholder="Select an approved MRF"
+                mrfs={mrfs.filter((m:MRF)=>m.status==='APPROVED')} value={selMRF} onChange={setSelMRF}
+                departments={departments} locations={locations} companies={companies} />
             </div>
             <div>
               <label className="rx-label" style={{ display:'block', marginBottom:6 }}>Resumes (PDF, Word or text)</label>
@@ -3845,7 +3852,7 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
     <select className="rx-input" style={{ width:280, flex:'0 1 280px', maxWidth:300 }} title="Opening" value={selMRF} onChange={e=>setSelMRF(e.target.value)}>
       <option value="all">All Openings ({candidates.length} candidates)</option>
       {approvedMRFs.map((m:MRF)=>(
-        <option key={m.id} value={m.id}>{m.designation||m.position} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
+        <option key={m.id} value={m.id}>{isConfidentialMrf(m)?'🔒 ':''}{mrfOptionLabel(m)} ({candidates.filter((c:Candidate)=>c.mrf_id===m.id).length})</option>
       ))}
     </select>
   )
@@ -3955,10 +3962,9 @@ function PipelineTab({ supabase, companies, departments, locations, mrfs, candid
               <div style={{ ...T.g2, marginBottom:14 }}>
                 <div style={{ gridColumn:'1 / -1' }}>
                   <label className="rx-label" style={{ display:'block', marginBottom:6 }}>For Opening (MRF){reqMark}</label>
-                  <select className="rx-input" style={sel('mrf_id')} value={cForm.mrf_id} onChange={e=>CF('mrf_id',e.target.value)}>
-                    <option value="">Select an approved opening</option>
-                    {addableMRFs.map((m:MRF)=><option key={m.id} value={m.id}>{isConfidentialMrf(m)?'🔒 ':''}{m.designation||m.position} ({m.no_of_openings||m.openings||0} openings){m.location_name?` · ${m.location_name}`:''}</option>)}
-                  </select>
+                  <MrfPicker className="rx-input" style={sel('mrf_id')} aria-label="For opening (MRF)" placeholder="Select an approved opening"
+                    mrfs={addableMRFs} value={cForm.mrf_id} onChange={(id:string)=>CF('mrf_id',id)}
+                    departments={departments} locations={locations} companies={companies} />
                   {addableMRFs.length===0 && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>No approved MRF yet. Approve one in the MRF tab first.</div>}
                   {cForm.mrf_id && confidentialIds.has(cForm.mrf_id) && <div style={{ fontSize:11, color:C.warning, marginTop:4 }}>🔒 Confidential search: this candidate will be visible only to the HR Head and HR Manager.</div>}
                 </div>
@@ -4435,77 +4441,8 @@ function FilterSelects({ companies, departments, locations, positions, f, setF }
 
 // ── NEGOTIATION CALCULATOR ────────────────────────────────────────
 // ── Stipend calculator (Intern / NATS / NAPS / Contract / Live Project / Consultant) ──
-// ── Minimum wages — read-only view of the payroll master (minimum_wage_config), opened from the
-// CTC calculator. HR edits the figures in Payroll → Minimum Wages; nothing here is editable.
-const MW_CAT_LABEL:Record<string,string> = { UNSKILLED:'Unskilled', SEMI_SKILLED:'Semi Skilled', SKILLED:'Skilled', HIGHLY_SKILLED:'Highly Skilled' }
-const MW_CAT_ORDER = ['UNSKILLED','SEMI_SKILLED','SKILLED','HIGHLY_SKILLED']
-function MinWagesPopup({ rates, state, category, onClose }:{ rates:any[]; state?:string; category?:string; onClose:()=>void }) {
-  const [q, setQ] = useState('')
-  const curCat = (CAT_TO_DB as any)[category||''] || ''
-  const list = (rates||[]).filter(r => !q.trim() || (r.state||'').toLowerCase().includes(q.trim().toLowerCase()))
-  // group by state (+ zone) → one row per category
-  const groups:Record<string, any[]> = {}
-  for (const r of list) { const k = `${r.state}${r.zone && r.zone!=='ALL' ? ` · ${r.zone}` : ''}`; (groups[k] ||= []).push(r) }
-  const keys = Object.keys(groups).sort((a,b)=>a.localeCompare(b))
-  const rs = (n:any) => n==null||n==='' ? '-' : `₹${Math.round(Number(n)).toLocaleString('en-IN')}`
-  const isCur = (r:any) => (r.state||'').toLowerCase()===(state||'').toLowerCase()
-  if (typeof document === 'undefined') return null
-  // Portalled to <body>: inside the calculator column it sat under the nav band and the
-  // calculator's own sticky header (an ancestor's stacking context capped its z-index).
-  return createPortal(
-    <div onMouseDown={e=>{ if (e.target===e.currentTarget) onClose() }}
-      style={{ position:'fixed', inset:0, background:'rgba(30,27,75,0.5)', zIndex:Z.modal, display:'flex', alignItems:'flex-start', justifyContent:'center', overflowY:'auto', padding:'28px 16px' }}>
-      <div style={{ background:C.surface, borderRadius:14, width:'min(960px, 100%)', boxShadow:'0 24px 70px rgba(30,27,75,0.35)', padding:'16px 18px', color:C.ink }}>
-        <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:10, flexWrap:'wrap' as const }}>
-          <div>
-            <div style={{ fontSize:15, fontWeight:800 }}>Minimum wages (payroll master)</div>
-            <div style={{ fontSize:11, color:C.faint, marginTop:2 }}>Monthly figures, currently effective · read-only here. HR maintains them under Payroll → Minimum Wages</div>
-          </div>
-          <input value={q} onChange={e=>setQ(e.target.value)} placeholder="Search state…" className="rx-input" style={{ width:200, marginLeft:'auto' }} />
-          <button onClick={onClose} style={T.btnOutline}>Close</button>
-        </div>
-        {keys.length===0 ? (
-          <div style={{ fontSize:12.5, color:C.faint, padding:'24px 0', textAlign:'center' as const }}>{rates?.length ? 'No state matches that search.' : 'No minimum-wage rows in the payroll master yet.'}</div>
-        ) : (
-          <div style={{ overflowX:'auto' }}>
-            <table style={{ width:'100%', borderCollapse:'collapse', fontSize:12 }}>
-              <thead>
-                <tr style={{ background:C.sunken }}>
-                  {['State','Category','Basic','VDA','Total / month','Effective from','Notification'].map(h=>(
-                    <th key={h} style={{ textAlign: ['Basic','VDA','Total / month'].includes(h)?'right':'left', padding:'8px 10px', fontSize:10.5, fontWeight:700, color:C.brandDeep, textTransform:'uppercase' as const, letterSpacing:'.05em', borderBottom:`1px solid ${C.line}`, whiteSpace:'nowrap' as const }}>{h}</th>
-                  ))}
-                </tr>
-              </thead>
-              <tbody>
-                {keys.map(k => {
-                  const rows = [...groups[k]].sort((a,b)=>MW_CAT_ORDER.indexOf(a.category)-MW_CAT_ORDER.indexOf(b.category))
-                  return rows.map((r,i) => {
-                    const hl = isCur(r)
-                    const exact = hl && r.category===curCat
-                    return (
-                      <tr key={`${k}-${r.category}-${i}`} style={{ background: exact ? C.brandTint : hl ? C.sunken : 'transparent' }}>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: i===0 ? 700 : 400, color: i===0 ? C.ink : 'transparent', whiteSpace:'nowrap' as const }}>{k}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, fontWeight: exact ? 700 : 500 }}>{MW_CAT_LABEL[r.category]||r.category}{exact && <span style={{ marginLeft:6, fontSize:9.5, fontWeight:700, color:C.brandDeep, background:C.surface, border:`1px solid ${C.brandEdge}`, borderRadius:99, padding:'1px 6px' }}>in use</span>}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.basic_amount)}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', ...numeric }}>{rs(r.vda_amount)}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, textAlign:'right', fontWeight:700, ...numeric }}>{rs(r.total_minimum_wage)}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, color:C.muted, whiteSpace:'nowrap' as const }}>{r.effective_from ? new Date(r.effective_from).toLocaleDateString('en-IN',{ day:'2-digit', month:'short', year:'numeric' }) : '-'}</td>
-                        <td style={{ padding:'7px 10px', borderBottom:`1px solid ${C.line}`, color:C.muted, fontSize:11 }}>{r.notification_reference||'-'}</td>
-                      </tr>
-                    )
-                  })
-                })}
-              </tbody>
-            </table>
-          </div>
-        )}
-        <div style={{ fontSize:10.5, color:C.faint, marginTop:10 }}>{rates?.length||0} rows · the highlighted state is the one selected in this negotiation.</div>
-      </div>
-    </div>,
-    document.body,
-  )
-}
-
+// The minimum-wage popup and the statement table live in components/recruitment/CtcStatement.tsx,
+// shared with Help → TDS Calculator.
 function StipendCalc({ sel, mrf, companies, supabase, showNotify, onRefresh, mwRates, locations }:any) {
   const [stipend, setStipend] = useState('')
   const [tds, setTds] = useState(false)
@@ -5505,54 +5442,6 @@ function NegotiationTab({ supabase, companies, departments, locations, mrfs, can
   )
 }
 
-// Module-scope (never re-mounts) — the statement table, themed like the reference studio.
-function CtcStatementTable({ rows }:{ rows:StmtRow[] }) {
-  const cell:React.CSSProperties = { padding:'6px 10px', fontSize:12 }
-  const num:React.CSSProperties = { ...cell, textAlign:'right' as const, whiteSpace:'nowrap' as const, fontVariantNumeric:'tabular-nums' }
-  const tone:Record<string,{ color?:string; bg?:string; weight?:number }> = {
-    row:{}, sum:{ bg:C.sunken, weight:700 }, emp:{ color:C.brandDeep }, grat:{ color:C.positive }, bonus:{ color:C.info },
-    muted:{ color:C.faint }, total:{ bg:C.brand, color:C.onAccent, weight:700 }, ded:{ color:C.critical }, net:{ bg:C.positive, color:C.onAccent, weight:700 },
-  }
-  // The ₹ columns are nowrap and cannot shrink, so once the grid track above
-  // was allowed a zero minimum this table became the thing that would overflow.
-  // A table is permitted to be wider than the page — but inside its own
-  // scroller, not by dragging the whole document sideways. Comment sits above
-  // the return: a JSX comment after `return (` parses as an empty object
-  // literal and breaks the file.
-  return (
-    <div style={{ overflowX:'auto' }}>
-    <table style={{ width:'100%', borderCollapse:'separate', borderSpacing:0 }}>
-      <thead>
-        <tr style={{ background:C.sunken }}>
-          <th style={{ ...cell, textAlign:'left' as const, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700, borderRadius:'8px 0 0 8px' }}>Component</th>
-          <th style={{ ...num, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700 }}>Monthly (₹)</th>
-          <th style={{ ...num, fontSize:10, textTransform:'uppercase' as const, letterSpacing:'.05em', color:C.faint, fontWeight:700, borderRadius:'0 8px 8px 0' }}>Annual (₹)</th>
-        </tr>
-      </thead>
-      <tbody>
-        {rows.map((r,i)=>{
-          if (r.kind==='head') return <tr key={i}><td colSpan={3} style={{ ...cell, paddingTop:16, paddingBottom:4, fontSize:11, fontWeight:700, color:C.muted }}>{r.label}</td></tr>
-          if (r.kind==='note') return <tr key={i}><td colSpan={3} style={{ ...cell, fontSize:10, color:C.faint, lineHeight:1.5 }}>{r.label}</td></tr>
-          const t = tone[r.kind]||{}
-          const big = r.kind==='total'||r.kind==='net'
-          const base:React.CSSProperties = { background:t.bg, color:t.color||C.ink, fontWeight:t.weight||500, borderBottom: t.bg?'none':`1px solid ${C.brandEdge}` }
-          const nil = (r.monthly||0)===0 && (r.kind==='emp'||r.kind==='ded')
-          return (
-            <tr key={i}>
-              <td style={{ ...cell, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?13:12, borderRadius: t.bg?'10px 0 0 10px':0 }}>
-                {r.label}{r.basis && <span style={{ fontSize:10, color: t.bg&&t.color===C.onAccent ? 'rgba(255,255,255,.75)' : C.faint, fontWeight:400, marginLeft:6 }}>· {r.basis}</span>}
-              </td>
-              <td style={{ ...num, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?13:12, opacity: nil?.55:1 }}>{nil?'Nil':`₹${Math.round(r.monthly||0).toLocaleString('en-IN')}`}</td>
-              <td style={{ ...num, ...base, padding: big?'9px 10px':cell.padding, fontSize: big?14:12, borderRadius: t.bg?'0 10px 10px 0':0, opacity: nil?.55:1 }}>{nil?'Nil':`₹${Math.round(r.annual||0).toLocaleString('en-IN')}`}</td>
-            </tr>
-          )
-        })}
-      </tbody>
-    </table>
-    </div>
-  )
-}
-
 // ── OFFERS TAB ────────────────────────────────────────────────────
 // ── OFFER APPROVAL TAB (Recruiter → HR Head) ──────────────────────
 function OfferApprovalTab({ supabase, companies, departments, locations, candidates, mrfs, onRefresh, rail }:any) {
@@ -5898,6 +5787,8 @@ async function openAcceptanceFile(candidateId: string, which: 'signed_offer' | '
     const r = await fetch(`/api/recruitment/offer-response?candidate_id=${encodeURIComponent(candidateId)}`, { headers: await authHeaders() })
     const j = await r.json()
     const url = j.acceptance?.[which]?.view
+    // An e-signed acceptance (EZER Sign) has no mail screenshot: its proof is the certificate in the signed letter.
+    if (!url && which === 'mail_proof' && j.acceptance?.type === 'DIGITAL') { showNotify('Accepted by e-signature — the signed letter carries the Certificate of Completion instead of a mail proof.'); return }
     if (url) window.open(url, '_blank', 'noopener'); else showNotify('No file recorded for this acceptance.', 'error')
   } catch { showNotify('Could not open the file.', 'error') }
 }

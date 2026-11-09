@@ -8,7 +8,7 @@
 // the run is older than its own inputs — a block that says re-run first (C4/C5/A3).
 // Generation is chunked; the combined PDF is merged in the browser with pdf-lib and
 // the per-employee ZIP is written by lib/zip-store (A2).
-import { useEffect, useState } from 'react'
+import { useEffect, useMemo, useState } from 'react'
 import { PDFDocument } from 'pdf-lib'
 import { authToken } from '@/lib/rms/client'
 import { zipStore } from '@/lib/zip-store'
@@ -74,10 +74,26 @@ const outlineBtn = (disabled: boolean) => ({
   opacity: disabled ? 0.55 : 1,
 })
 
-export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: RunRef[]; enabled: boolean; busyOutside: boolean }) {
+export default function PayslipDownload({ runs, enabled, busyOutside, only = null }: {
+  runs: RunRef[]; enabled: boolean; busyOutside: boolean
+  /** Employee codes HR has filtered the Run Cycle down to; null = the whole month. */
+  only?: string[] | null
+}) {
   // The parent keys this component on the month AND on the last run result, so a
   // month change or a re-run remounts it with fresh state — no in-effect resets needed.
-  const [pre, setPre] = useState<Preflight[] | null>(null)
+  const [preAll, setPre] = useState<Preflight[] | null>(null)
+  // With a filter on, every count, list and generated file covers only those employees —
+  // the server still checks each run in full, the narrowing happens here.
+  const onlyKey = only ? only.join('|') : ''
+  const pre = useMemo(() => {
+    if (!preAll || !onlyKey) return preAll
+    const want = new Set(onlyKey.split('|'))
+    const keep = <T extends { code: string }>(l: T[]) => l.filter(x => want.has(String(x.code)))
+    return preAll.map(p => {
+      const eligible = keep(p.eligible), missing = keep(p.missing)
+      return { ...p, eligible, missing, issues: keep(p.issues), total: eligible.length + missing.length }
+    }).filter(p => p.total > 0)
+  }, [preAll, onlyKey])
   const [open, setOpen] = useState(false)
   const [err, setErr] = useState('')
   const [progress, setProgress] = useState<{ done: number; total: number; phase: string } | null>(null)
@@ -94,7 +110,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
       .catch(e => { if (live) setErr(e?.message || String(e)) })
     return () => { live = false }
   }, [runKey, enabled])
-  const loading = enabled && !!runKey && pre === null && !err
+  const loading = enabled && !!runKey && preAll === null && !err
 
   const eligible = pre?.reduce((n, p) => n + p.eligible.length, 0) ?? 0
   const total = pre?.reduce((n, p) => n + p.total, 0) ?? 0
@@ -172,7 +188,7 @@ export default function PayslipDownload({ runs, enabled, busyOutside }: { runs: 
 
   const label = loading ? 'Checking payslips…'
     : progress ? `${progress.phase} ${progress.done}/${progress.total}…`
-    : pre ? `Download payslips (${eligible} of ${total})`
+    : pre ? `Download payslips (${eligible} of ${total}${only ? ' filtered' : ''})`
     : 'Download payslips'
 
   return (

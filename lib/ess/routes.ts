@@ -9,8 +9,8 @@
 //   /ess/<module>                 an admin module the person holds: /ess/onboarding, /ess/pms
 //   /ess/<module>/<tab>           a tab inside a module: /ess/recruitment/mrf, /ess/recruitment/sendoffer
 //
-// Five admin modules share a key with an employee screen (payroll, attendance, letters,
-// reports, loans); their module form carries an "-admin" suffix: /ess/payroll-admin.
+// Six admin modules share a key with an employee screen (payroll, attendance, letters,
+// reports, loans, learning); their module form carries an "-admin" suffix: /ess/payroll-admin.
 //
 // The portal pushes a history entry on every move (so Back returns to the previous
 // screen, including a module's tab) and reads the path on load and on popstate. A
@@ -22,7 +22,7 @@
 export const ESS_BASE = '/ess'
 
 /** Admin module keys that collide with an employee screen key. */
-const COLLIDING_MODULES = new Set(['payroll', 'attendance', 'letters', 'reports', 'loans'])
+const COLLIDING_MODULES = new Set(['payroll', 'attendance', 'letters', 'reports', 'loans', 'learning'])
 const ADMIN_SUFFIX = '-admin'
 
 export type EssLocation =

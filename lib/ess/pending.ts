@@ -12,6 +12,7 @@
 // off on those days, and whether the dates have already gone by. Attendance
 // corrections (migration 138) and cancellations of approved leave are queued
 // here too, stamped exactly like leave.
+import { STAGE_LABEL } from '@/lib/exit/lwd'
 import { rmsServiceClient as sb } from '@/lib/rms/server'
 import { employeesById, daysAgo, fmtDate, type EssContext } from './session'
 import { ledgersFor } from '@/lib/leave/ledger'
@@ -40,15 +41,21 @@ export interface PendingItem {
   lwd_policy?: string | null
   lwd_proposed?: string | null
   notice_days?: number | null
+  /** The date the employee proposed, and each earlier approver's date (resignation_stage_log). */
+  lwd_tentative?: string | null
+  lwd_trail?: { stage: string; label: string; by: string | null; lwd: string; at: string | null }[]
 }
 
 const RES_STAGE_LABEL: Record<string, string> = {
-  PENDING_RM_L1: 'Acknowledge (RM L1)', PENDING_RM_L2: 'Acknowledge (RM L2)', PENDING_HOD: 'Acknowledge (HOD)',
+  PENDING_RM_L1: 'Approve with LWD (RM L1)', PENDING_RM_L2: 'Approve with LWD (RM L2)', PENDING_HOD: 'Approve with LWD (HOD)',
   PENDING_HR_MANAGER: 'HR Manager: set final LWD', RETENTION_HOLD: 'On retention hold',
 }
-const RES_ACTIONS_RM = ['Acknowledge & forward', 'Accept with my date', 'Request retention']
+// Every approver sets a last working day (lib/exit/lwd.ts): approving always carries a date.
+const RES_ACTIONS_RM = ['Approve with LWD', 'Request retention']
 const RES_ACTIONS_HR = ['Set final LWD', 'View full chain']
 
+// Every column (tentative_lwd arrives with migration 207; '*' keeps this working before it).
+const RES_COLS = '*, exit_reason_master(label)'
 const LEAVE_COLS = 'id, employee_id, leave_type_id, from_date, to_date, days, half_day, reason, applied_at, approval_stage, current_approver_id, leave_types(name, short_name)'
 const CANCEL_COLS = 'id, employee_id, leave_type_id, from_date, to_date, days, cancel_reason, cancel_requested_at, cancel_approver_id, leave_types(name, short_name)'
 const REG_COLS = 'id, employee_id, attendance_date, recorded_in, recorded_out, requested_in, requested_out, reason, created_at, request_group, current_approver_id'
@@ -74,7 +81,7 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
     sb.from('leave_applications').select(LEAVE_COLS).eq('current_approver_id', me).eq('status', 'PENDING'),
     sb.from('travel_claims').select('id, employee_id, claim_no, total_claimed, status, submitted_at, period_from, period_to')
       .eq('current_approver_id', me).in('status', ['PENDING_RM', 'PENDING_HR', 'PENDING_FINANCE']),
-    sb.from('employee_resignation').select('id, employee_id, status, current_stage, date_of_resignation, notice_period_days, notice_shortfall_days, lwd_as_per_policy, proposed_lwd, submitted_at, created_at, reason_code, exit_reason_master(label)')
+    sb.from('employee_resignation').select(RES_COLS)
       .eq('current_approver_id', me).in('status', ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER', 'RETENTION_HOLD']),
     sb.from('leave_applications').select(CANCEL_COLS).eq('cancel_approver_id', me).eq('cancel_status', 'REQUESTED').eq('status', 'APPROVED'),
     sb.from('attendance_regularisation').select(REG_COLS).eq('current_approver_id', me).eq('status', 'PENDING'),
@@ -84,7 +91,7 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
   const extras: { rows: any[]; kind: PendingKind; via: string }[] = []
   if (ctx.menu.approval_types.includes('RESIGNATION') || ctx.grant.isSuperAdmin) {
     const { data } = await sb.from('employee_resignation')
-      .select('id, employee_id, status, current_stage, current_approver_id, date_of_resignation, notice_period_days, notice_shortfall_days, lwd_as_per_policy, proposed_lwd, submitted_at, created_at, reason_code, exit_reason_master(label)')
+      .select(RES_COLS)
       .in('status', ['PENDING_HR_MANAGER', 'RETENTION_HOLD'])
     extras.push({ rows: data || [], kind: 'RESIGNATION', via: 'RESIGNATION role' })
   }
@@ -99,7 +106,7 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
       const [{ data: l }, { data: t }, { data: r }, { data: g }] = await Promise.all([
         sb.from('leave_applications').select(LEAVE_COLS).in('employee_id', ids).eq('status', 'PENDING'),
         sb.from('travel_claims').select('id, employee_id, claim_no, total_claimed, status, submitted_at, period_from, period_to, current_approver_id').in('employee_id', ids).in('status', ['PENDING_RM', 'PENDING_HR', 'PENDING_FINANCE']),
-        sb.from('employee_resignation').select('id, employee_id, status, current_stage, current_approver_id, date_of_resignation, notice_period_days, notice_shortfall_days, lwd_as_per_policy, proposed_lwd, submitted_at, created_at, reason_code, exit_reason_master(label)').in('employee_id', ids).like('status', 'PENDING_%'),
+        sb.from('employee_resignation').select(RES_COLS).in('employee_id', ids).like('status', 'PENDING_%'),
         sb.from('attendance_regularisation').select(REG_COLS).in('employee_id', ids).eq('status', 'PENDING'),
       ])
       extras.push(
@@ -208,12 +215,12 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
       kind: 'RESIGNATION', id: r.id, employee_id: r.employee_id, who: who(r.employee_id),
       what: `Resignation: ${RES_STAGE_LABEL[r.status] || r.status}`,
       meta: [`Submitted ${fmtDate(r.submitted_at || r.created_at)}`, r.exit_reason_master?.label ? `reason: ${r.exit_reason_master.label}` : null,
-             `notice ${r.notice_period_days ?? '-'} days`, r.proposed_lwd ? `RM proposed LWD ${fmtDate(r.proposed_lwd)}` : null,
+             `notice ${r.notice_period_days ?? '-'} days`, r.tentative_lwd ? `employee's tentative LWD ${fmtDate(r.tentative_lwd)}` : null,
              shortfall ? `${shortfall} days shortfall` : null].filter(Boolean).join(' · '),
       stage: RES_STAGE_LABEL[r.status] || r.status, raised_at: r.submitted_at || r.created_at, surfaced_via: via, mine,
       actions: !mine ? ['View full chain'] : r.status === 'RETENTION_HOLD' ? ['Resume chain', 'View full chain'] : hr ? RES_ACTIONS_HR : RES_ACTIONS_RM,
       tone: hr ? 'w' : r.status === 'RETENTION_HOLD' ? 'd' : 'w',
-      lwd_policy: r.lwd_as_per_policy || null, lwd_proposed: r.proposed_lwd || null, notice_days: r.notice_period_days ?? null,
+      lwd_policy: r.lwd_as_per_policy || null, lwd_proposed: r.proposed_lwd || null, notice_days: r.notice_period_days ?? null, lwd_tentative: r.tentative_lwd || null,
     })
   }
 
@@ -232,6 +239,20 @@ export async function buildPending(ctx: EssContext): Promise<PendingItem[]> {
       if (x.kind === 'LEAVE') pushLeave(r, x.via, mine)
       else if (x.kind === 'TRAVEL') pushTravel(r, x.via, mine)
       else pushRes(r, x.via, mine || (x.via === 'RESIGNATION role' && r.status === 'PENDING_HR_MANAGER'))
+    }
+  }
+
+  // Each resignation's LWD trail: the dates the approvers before this one set, in order.
+  const resItems = items.filter(i => i.kind === 'RESIGNATION')
+  if (resItems.length) {
+    const { data: logs } = await sb.from('resignation_stage_log')
+      .select('resignation_id, stage, action, proposed_lwd, actioned_at, actor:employees!resignation_stage_log_actor_id_fkey(full_name, emp_code)')
+      .in('resignation_id', resItems.map(i => i.id)).not('proposed_lwd', 'is', null).in('action', ['ACCEPTED_WITH_DATE', 'FINAL_LWD_SET']).order('actioned_at')
+    for (const it of resItems) {
+      it.lwd_trail = ((logs || []) as any[]).filter(l => l.resignation_id === it.id).map(l => ({
+        stage: l.stage, label: STAGE_LABEL[l.stage] || l.stage, lwd: l.proposed_lwd, at: l.actioned_at,
+        by: l.actor?.full_name ? `${l.actor.full_name}${l.actor.emp_code ? ` (${l.actor.emp_code})` : ''}` : null,
+      }))
     }
   }
 

@@ -9,7 +9,8 @@
 import { useState, useEffect, useCallback } from 'react'
 import { supabase } from '@/lib/supabase'
 import { useGrant } from '@/lib/rms/client'
-import { companyFilter, scopedCompanies } from '@/lib/rms/resolve'
+import { companyFilter, scopedCompanies, canPickGroup } from '@/lib/rms/resolve'
+import { SalaryCalculatorButton } from './SalaryCalculatorPanel'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK , CountUp } from '@/lib/ui'
@@ -106,13 +107,18 @@ function GenderDonut({ male, female, other }: { male: number; female: number; ot
   )
 }
 
-export default function PayrollDashboard({ companyId, fy, companies }: { companyId: string; fy: string; companies: { id: string; company_name: string; group_name?: string | null }[] }) {
+export default function PayrollDashboard({ companyId, fy, month: headerMonth, companies }: { companyId: string; fy: string; month?: number; companies: { id: string; company_name: string; group_name?: string | null }[] }) {
   const { grant } = useGrant()
   // Non-cross-company users see only their own company in the dropdown.
   const scopedCos = scopedCompanies(grant, companies)
+  const groupOk = canPickGroup(grant, companies)
+  // '' is Group Companies: every company for whoever may pick it, else the caller's own.
+  const coOf = (v: string) => (v === '' && groupOk ? null : companyFilter(grant, v))
   const monthOpts = fyMonthOptions(fy)
-  const defMonth = monthOpts.find(m => m.value.startsWith('2026-07')) || monthOpts[3] || monthOpts[0]
-  const [month, setMonth] = useState(defMonth.value)
+  // The header's Month (1 = April) picks the month; the dashboard's own select still overrides it.
+  const headerOpt = monthOpts[(headerMonth || 1) - 1] || monthOpts[0]
+  const [month, setMonth] = useState(headerOpt.value)
+  useEffect(() => { setMonth(headerOpt.value) }, [headerOpt.value])
   const [coFilter, setCoFilter] = useState(companyId)   // dashboard's own company filter (seeded from header)
   const [deptId, setDeptId] = useState('')
   const [depts, setDepts] = useState<{ id: string; dept_name: string; company_id: string }[]>([])
@@ -120,9 +126,9 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
   // keep the dashboard's company filter in sync if the header company changes; a
   // non-cross-company user is forced onto their own company, never "All".
   useEffect(() => {
-    setCoFilter(!grant.crossCompany && grant.companyId ? grant.companyId : companyId)
+    setCoFilter(!groupOk && grant.companyId ? grant.companyId : companyId)
     setDeptId('')
-  }, [companyId, grant]) // eslint-disable-line react-hooks/exhaustive-deps
+  }, [companyId, grant, groupOk]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const [loading, setLoading] = useState(true)
   const [kpi, setKpi] = useState({ headcount: 0, gross: 0, basic: 0, statutory: 0, perquisites: 0, bonus: 0 })
@@ -136,7 +142,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
   // department options cascade from the selected company
   useEffect(() => {
     let q = supabase.from('departments').select('id, dept_name, company_id').eq('status', 'Active').order('dept_name')
-    { const co = companyFilter(grant, coFilter); if (co) q = q.eq('company_id', co) }
+    { const co = coOf(coFilter); if (co) q = q.eq('company_id', co) }
     q.then(({ data }) => setDepts(data || []), () => setDepts([]))
   }, [coFilter, grant]) // eslint-disable-line react-hooks/exhaustive-deps
 
@@ -146,7 +152,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
     let eq = supabase.from('employees')
       .select('id, gender, department_id, company_id, created_at, full_name')
       .eq('employment_status', 'Active').neq('is_test', true)
-    { const co = companyFilter(grant, coFilter); if (co) eq = eq.eq('company_id', co) }
+    { const co = coOf(coFilter); if (co) eq = eq.eq('company_id', co) }
     if (deptId) eq = eq.eq('department_id', deptId)
     const { data: emps } = await eq
     const empList = emps || []
@@ -220,7 +226,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
     // ── Branches per company ──
     try {
       let lq = supabase.from('locations').select('company_id').eq('status', 'Active')
-      { const co = companyFilter(grant, coFilter); if (co) lq = lq.eq('company_id', co) }
+      { const co = coOf(coFilter); if (co) lq = lq.eq('company_id', co) }
       const { data: locs } = await lq
       const cm: Record<string, string> = {}; companies.forEach(c => { cm[c.id] = c.company_name })
       const bc: Record<string, number> = {}; (locs || []).forEach((l: any) => { bc[l.company_id] = (bc[l.company_id] || 0) + 1 })
@@ -256,7 +262,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
     // ── Payroll month status (runs are empty today) ──
     try {
       let rq = supabase.from('payroll_runs').select('status')
-      { const co = companyFilter(grant, coFilter); if (co) rq = rq.eq('company_id', co) }
+      { const co = coOf(coFilter); if (co) rq = rq.eq('company_id', co) }
       const { data: runs } = await rq
       const statuses = Array.from(new Set((runs || []).map((r: any) => r.status).filter(Boolean)))
       setRunStatus(statuses.length ? statuses.join(', ') : '')
@@ -279,7 +285,7 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
           {(() => {
             const groups = Array.from(new Set(scopedCos.map(c => c.group_name || 'Companies')))
             return <>
-              {grant.crossCompany && <option value="">All companies</option>}
+              {groupOk && <option value="">Group Companies (all)</option>}
               {groups.map(g => (
                 <optgroup key={g} label={g}>
                   {scopedCos.filter(c => (c.group_name || 'Companies') === g).map(c => (
@@ -309,8 +315,11 @@ export default function PayrollDashboard({ companyId, fy, companies }: { company
         <select style={selStyle} value={month} onChange={e => setMonth(e.target.value)}>
           {monthOpts.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
         </select>
-        <span style={{ fontSize: 11, color: C.muted }}>FY set from the header above.</span>
-        {loading && <span style={{ fontSize: 11, color: C.purple, marginLeft: 'auto' }}>Refreshing…</span>}
+        <span style={{ fontSize: 11, color: C.muted }}>FY and month follow the header above.</span>
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 10 }}>
+          {loading && <span style={{ fontSize: 11, color: C.purple }}>Refreshing…</span>}
+          <SalaryCalculatorButton />
+        </div>
       </div>
 
       {/* KPI row */}

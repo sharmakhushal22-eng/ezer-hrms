@@ -12,6 +12,7 @@ import {
 import EmployeePortal from '@/components/ess/EmployeePortal'
 import { RolesPermissionsSection } from '@/app/dashboard/roles/page'
 import { useGrant } from '@/lib/rms/client'
+import { supabase } from '@/lib/supabase'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -399,11 +400,15 @@ function StepHead({ n, title, hint, done }: { n: number; title: string; hint?: s
   )
 }
 
-function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager }: {
+function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager, companies, mayGive }: {
   users: EssUser[]; roles: EssRole[]
   isMobile: boolean
-  onAssign: (u: EssUser, roleIds: string[]) => void
+  onAssign: (u: EssUser, roleIds: string[], companyIds: string[]) => void
   canGrantHiringManager: boolean
+  /** The group's companies, for the role scope. */
+  companies: { id: string; name: string; group_id: string | null }[]
+  /** Companies the person assigning may give a scope in (null = any). */
+  mayGive: Set<string> | null
 }) {
   const [empId, setEmpId] = useState('')
   const [empQ, setEmpQ] = useState('')
@@ -411,9 +416,20 @@ function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager
   const [picked, setPicked] = useState<Set<string>>(new Set())
 
   const selEmp = users.find(u => u.employee_id === empId) || null
+  // Role scope: the companies the roles are valid in. The employee's own is always in; the
+  // rest start from whatever their roles are scoped to today.
+  const [cos, setCos] = useState<Set<string>>(new Set())
 
   // seed checkboxes with the employee's current roles whenever the selection changes
-  useEffect(() => { setPicked(new Set((selEmp?.roles || []).map(r => r.id))) }, [empId])
+  useEffect(() => {
+    setPicked(new Set((selEmp?.roles || []).map(r => r.id)))
+    const now = new Set<string>(selEmp?.company_id ? [selEmp.company_id] : [])
+    for (const list of Object.values(selEmp?.role_companies || {})) for (const c of list || []) now.add(c)
+    setCos(now)
+  }, [empId])
+  const ownCo = selEmp?.company_id || null
+  const groupOf = companies.find(c => c.id === ownCo)?.group_id || null
+  const groupCos = companies.filter(c => !groupOf || c.group_id === groupOf)
 
   // Employee is the entry point now — search across everyone; Company & Branch fill in
   // from whoever is picked.
@@ -453,16 +469,35 @@ function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager
           </div>
         </div>
 
-        {/* 2 — Company (auto-filled from the employee) */}
+        {/* 2 — Companies the roles are valid in (role scope; the employee's own always) */}
         <div style={T.card}>
-          <StepHead n={2} title="Company" hint="auto-filled" done={!!selEmp} />
-          <div style={roField}>{selEmp?.company_name || 'Select an employee first'}</div>
+          <StepHead n={2} title="Company · roles valid in" hint={selEmp ? `${cos.size} selected` : 'pick an employee'} done={!!selEmp} />
+          {!selEmp ? <div style={roField}>Select an employee first</div> : (
+            <>
+              <div style={{ fontSize:11.5, color:TK.muted, marginBottom:8, lineHeight:1.5 }}>The roles ticked in step 4 apply in every company selected here. {selEmp.full_name}'s own company is always included; L1 Manager, L2 Manager, HOD and Employee never leave it.</div>
+              <div style={{ display:'flex', flexWrap:'wrap', gap:6 }}>
+                {groupCos.map(c => {
+                  const own = c.id === ownCo, on = own || cos.has(c.id), allowed = own || !mayGive || mayGive.has(c.id)
+                  return (
+                    <button key={c.id} type="button" aria-pressed={on} disabled={own || !allowed}
+                      title={own ? 'Their own company: always included' : !allowed ? 'You can only give a scope in companies you work in yourself' : undefined}
+                      onClick={() => setCos(s => { const n = new Set(s); if (n.has(c.id)) n.delete(c.id); else n.add(c.id); return n })}
+                      style={{ display:'inline-flex', alignItems:'center', gap:6, padding:'6px 11px', borderRadius:99, fontSize:12, fontWeight:600, fontFamily:'inherit',
+                        cursor: own || !allowed ? 'not-allowed' : 'pointer', opacity: allowed ? 1 : .5,
+                        border:`1px solid ${on ? TK.brand : TK.line}`, background: on ? TK.brandTint : TK.surface, color: on ? TK.brand : TK.inkSoft }}>
+                      <span aria-hidden>{on ? '✓' : '+'}</span>{c.name}{own && <span style={{ fontSize:10, color:TK.muted, fontWeight:500 }}>· own</span>}
+                    </button>
+                  )
+                })}
+              </div>
+            </>
+          )}
         </div>
 
         {/* 3 — Branch (auto-filled from the employee) */}
         <div style={T.card}>
           <StepHead n={3} title="Branch" hint="auto-filled" done={!!selEmp} />
-          <div style={roField}>{selEmp?.location_name || 'Select an employee first'}</div>
+          <div style={roField}>{selEmp ? (selEmp.location_name || 'Not set on the employee record') : 'Select an employee first'}</div>
         </div>
       </div>
 
@@ -479,7 +514,8 @@ function RoleAssignTab({ users, roles, isMobile, onAssign, canGrantHiringManager
               {roles.map(r => <RoleCheckbox key={r.id} r={r} picked={picked} onToggle={toggle} canGrantHiringManager={canGrantHiringManager} />)}
             </div>
             <div style={{ fontSize:11, color:TK.muted, marginBottom:10 }}>Salary visibility: <b>{salaryVis}</b></div>
-            <button onClick={() => onAssign(selEmp, [...picked])} style={{ ...T.btnPrimary, width:'100%' }}>Assign {picked.size} role(s)</button>
+            {cos.size > 1 && <div style={{ fontSize:11, color:TK.muted, marginBottom:10 }}>Valid in <b>{cos.size}</b> companies: {groupCos.filter(c => cos.has(c.id) || c.id === ownCo).map(c => c.name).join(', ')}</div>}
+            <button onClick={() => onAssign(selEmp, [...picked], [...cos])} style={{ ...T.btnPrimary, width:'100%' }}>Assign {picked.size} role(s){cos.size > 1 ? ` · ${cos.size} companies` : ''}</button>
           </>
         )}
       </div>
@@ -531,6 +567,14 @@ export default function ESSPage() {
   // Hiring Manager / Recruiter can only be handed out by an Implementation Manager
   // (or a super admin) — this gates that one checkbox for the current admin.
   const { grant } = useGrant()
+  // The group's companies, for a role's company scope (Assign Roles, step 2).
+  const [companies, setCompanies] = useState<{ id: string; name: string; group_id: string | null }[]>([])
+  useEffect(() => {
+    supabase.from('companies').select('id, company_name, company_code, group_id').order('company_name')
+      .then(({ data }) => setCompanies(((data as any[]) || []).map(c => ({ id: c.id, name: c.company_name || c.company_code, group_id: c.group_id || null }))))
+  }, [])
+  // Only companies the person assigning works in may be given (a cross-company admin: any).
+  const mayGive = grant.crossCompany || grant.isSuperAdmin || grant.legacy ? null : new Set(grant.companyIds?.length ? grant.companyIds : grant.companyId ? [grant.companyId] : [])
   const canGrantHiringManager = grant.isSuperAdmin || (grant.roles || []).some(r => r.role_code === IMPL_MANAGER_ROLE_CODE)
 
   useEffect(() => {
@@ -563,7 +607,7 @@ export default function ESSPage() {
     if (error) { notify('Failed: ' + error.message, 'error'); return }
     notify(`${u.full_name} deactivated. Login & password reset blocked.`); reload()
   }
-  async function doAssign(u: EssUser, roleIds: string[]) {
+  async function doAssign(u: EssUser, roleIds: string[], companyIds?: string[]) {
     // assignRoles replaces the whole set, so fold back the roles this screen locks:
     // the automatic EMPLOYEE base role (always), and any hierarchy role (L1/L2/HOD) the
     // person already held — those are owned by the reporting structure, not this screen,
@@ -573,9 +617,9 @@ export default function ESSPage() {
       (HIERARCHY_ROLE_CODES.includes(r.role_code) && u.roles.some(ur => ur.id === r.id))
     ).map(r => r.id)
     const finalIds = [...new Set([...roleIds, ...forcedIds])]
-    const { error } = await assignRoles(u, finalIds, 'Admin')
+    const { error } = await assignRoles(u, finalIds, 'Admin', companyIds)
     if (error) { notify('Failed: ' + error.message, 'error'); return }
-    notify(`Roles updated for ${u.full_name}.`); reload()
+    notify(`Roles updated for ${u.full_name}${companyIds && companyIds.length > 1 ? ` · valid in ${companyIds.length} companies` : ''}.`); reload()
   }
   async function doBulk(us: EssUser[], status: 'ACTIVE'|'INACTIVE') {
     if (!window.confirm(`${status === 'ACTIVE' ? 'Activate' : 'Deactivate'} ${us.length} user(s)?`)) return
@@ -630,7 +674,7 @@ export default function ESSPage() {
             {tab === 'dashboard' && <DashboardTab users={users} audit={audit} isMobile={isMobile} />}
             {tab === 'access' && <AccessTab users={users} isMobile={isMobile} onActivate={doActivate} onDeactivate={askDeactivate} onAssignOpen={(u)=>{ setSelUser(u); setTab('roles') }} onImpersonate={doImpersonate} onBulk={doBulk} />}
             {tab === 'roles' && <RolesTab users={users} roles={roles} isMobile={isMobile} selected={selUser} onSelect={setSelUser} onAssign={doAssign} canGrantHiringManager={canGrantHiringManager} />}
-            {tab === 'assign' && <RoleAssignTab users={users} roles={roles} isMobile={isMobile} onAssign={doAssign} canGrantHiringManager={canGrantHiringManager} />}
+            {tab === 'assign' && <RoleAssignTab users={users} roles={roles} isMobile={isMobile} onAssign={doAssign} canGrantHiringManager={canGrantHiringManager} companies={companies} mayGive={mayGive} />}
             {tab === 'audit' && <AuditTab audit={audit} />}
           </>
         )}

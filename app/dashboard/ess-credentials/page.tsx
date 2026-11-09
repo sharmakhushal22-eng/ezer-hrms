@@ -145,7 +145,7 @@ export default function EssCredentialsPage() {
             <div style={{ fontSize: 13, fontWeight: 600 }}>Credentials generated</div>
             <span style={{ fontSize: 11, color: C.green }}>✓ {summary.generated} issued</span>
             {summary.skipped > 0 && <span style={{ fontSize: 11, color: C.muted }}>· {summary.skipped} skipped (already set)</span>}
-            {issuedCount > 0 && <button style={{ ...pri, marginLeft: 'auto', padding: '7px 14px' }} onClick={exportExcel}>⬇ Download Excel</button>}
+            {issuedCount > 0 && <button style={{ ...pri, marginLeft: 'auto', padding: '7px 14px' }} onClick={exportExcel}>⬇ Download Excel ({issuedCount})</button>}
           </div>
           <div style={{ overflowX: 'auto', maxHeight: '55vh' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 12 }}>

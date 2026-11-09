@@ -65,7 +65,7 @@ export async function GET(req: NextRequest) {
   const sp = req.nextUrl.searchParams
   const decided = sp.get('status') === 'DECIDED'
   const kind = (sp.get('kind') || 'ALL').toUpperCase()
-  const co = companyFilter(grant, sp.get('company'))
+  const co = companyFilter(grant, sp.get('company'), 'Attendance')
 
   let eq = sb.from('employees').select('id, full_name, emp_code, company_id')
   if (co) eq = eq.eq('company_id', co)
@@ -173,7 +173,7 @@ export async function POST(req: NextRequest) {
   if (action === 'decline' && !note) return NextResponse.json({ error: 'Give a reason — the employee reads it.' }, { status: 400 })
 
   // Company scope: a caller pinned to one company decides only its requests.
-  const pinned = companyFilter(grant, null)
+  const pinned = companyFilter(grant, null, 'Attendance')
   if (pinned) {
     const { data: rows } = kind === 'REGULARISATION'
       ? await sb.from('attendance_regularisation').select('employee_id').or(`id.eq.${id},request_group.eq.${id}`).limit(1)

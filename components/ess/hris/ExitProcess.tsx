@@ -15,6 +15,7 @@ import { useCallback, useEffect, useState } from 'react'
 import type { ChainRow, ResignationRecord, ResignationState, StageApprover } from './types'
 import { Ic } from './icons'
 import { fmtDate, fmtDateTime, riseStyle, useToast } from './ui'
+import { MyExitDocuments } from './ExitFnf'
 
 const STAGE_LABEL: Record<string, string> = {
   INITIATED: 'Initiated by HR',
@@ -27,16 +28,26 @@ const STAGE_LABEL: Record<string, string> = {
   SETTLED: 'Settled',
   WITHDRAWN: 'Withdrawn',
 }
-/** The four the timeline walks, in order. */
-const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER']
+/** The stages the timeline walks, in order: L1, then HR (migration 208). L2 / HOD appear only on
+ *  an older resignation where they had already acted. */
+const STAGE_ORDER = ['PENDING_RM_L1', 'PENDING_HR_MANAGER']
+const ALL_STAGES = ['PENDING_RM_L1', 'PENDING_RM_L2', 'PENDING_HOD', 'PENDING_HR_MANAGER']
 const CLOSED = ['SETTLED', 'WITHDRAWN']
 
+/** HR Services → Exit: the employee's own exit. Exiting somebody else is the red Exit button on
+ *  People → Employees → employee → HR Actions (components/employees/HrExitSection). */
 export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
+  return <OwnExit api={api} />
+}
+
+function OwnExit({ api }: { api: (path: string, init?: RequestInit) => Promise<any> }) {
   const [d, setD] = useState<ResignationState | null>(null)
   const [err, setErr] = useState('')
   const [reason, setReason] = useState('')
   const [date, setDate] = useState(new Date().toISOString().slice(0, 10))
   const [remarks, setRemarks] = useState('')
+  // The employee's proposed last working day: starts at the policy date (resignation + notice).
+  const [tentative, setTentative] = useState('')
   const [confirm, setConfirm] = useState(false)
   const [busy, setBusy] = useState(false)
   const toast = useToast()
@@ -51,11 +62,14 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
 
   const cur = d.current
   const open = !!cur && !CLOSED.includes(cur.status)
+  const policyLwd = (() => { const t = new Date(`${date}T00:00:00Z`); if (isNaN(t.getTime())) return ''; t.setUTCDate(t.getUTCDate() + (Number(d.notice_period_days) || 0)); return t.toISOString().slice(0, 10) })()
+  const tentativeLwd = tentative || policyLwd
+  const tentativeBad = !tentativeLwd ? 'Enter your tentative last working day.' : tentativeLwd < date ? 'It cannot be before the date of resignation.' : ''
 
   async function submit() {
     setBusy(true)
     try {
-      await api('/api/ess/resignation', { method: 'POST', body: JSON.stringify({ reason_code: reason, date, remarks }) })
+      await api('/api/ess/resignation', { method: 'POST', body: JSON.stringify({ reason_code: reason, date, remarks, tentative_lwd: tentativeLwd }) })
       toast('Resignation submitted'); setConfirm(false); void load()
     } catch (e) { toast((e as Error).message, 'error') } finally { setBusy(false) }
   }
@@ -78,9 +92,10 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
     const kpis = [
       { k: 'Status', v: STAGE_LABEL[cur.status] || cur.status, tone: cur.status === 'RETENTION_HOLD' ? 'warn' : '' },
       { k: 'Submitted', v: fmtDate(cur.submitted_at || cur.created_at) },
-      { k: 'Notice period', v: `${cur.notice_period_days ?? '-'} days` },
+      { k: 'Notice period', v: `${cur.notice_period_days ?? '-'} days`, note: Number(cur.notice_waived_days) > 0 ? `${cur.notice_waived_days} days waived by HR` : undefined },
+      ...(cur.tentative_lwd ? [{ k: 'Your tentative LWD', v: fmtDate(cur.tentative_lwd), note: 'what you proposed' }] : []),
       { k: 'Last working day', v: lwd ? fmtDate(lwd) : '-', note: lwdNote },
-    ]
+    ] as { k: string; v: string; tone?: string; note?: string }[]
     return (
       <>
         <div className="hx-kpis">
@@ -108,12 +123,16 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
             Retention pauses the chain; only you can withdraw it. Your last working day becomes final at the HR stage.
           </div>
         </div>
+        <MyExitDocuments api={api} resignationId={cur.id} />
       </>
     )
   }
 
   /* ----------------------------------------------------------------- form */
   return (
+    <>
+    {/* A settled exit keeps its F&F statement and letters downloadable (12 months, spec §11.2). */}
+    {cur?.status === 'SETTLED' && <MyExitDocuments api={api} resignationId={cur.id} />}
     <div className="hx-card pad">
       <div className="hx-sec"><h2>Resign</h2></div>
       {cur && (
@@ -133,6 +152,16 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
           <label className="hx-label">Date of resignation</label>
           <input type="date" className="hx-input" value={date} onChange={e => setDate(e.target.value)} />
         </div>
+        <div>
+          <label className="hx-label">Tentative last working day *</label>
+          <input type="date" className="hx-input" value={tentativeLwd} min={date} onChange={e => { setTentative(e.target.value); setConfirm(false) }}
+            style={tentativeBad ? { borderColor: 'var(--ez-critical)' } : undefined} />
+          <div style={{ fontSize: 11.5, marginTop: 4, color: tentativeBad ? 'var(--ez-critical)' : 'var(--ez-muted)' }}>
+            {tentativeBad || (policyLwd && tentativeLwd !== policyLwd
+              ? `As per your notice period it would be ${fmtDate(policyLwd)}. ${tentativeLwd < policyLwd ? 'An earlier date may mean notice recovery, unless HR waives it.' : ''}`
+              : 'As per your notice period. Your approvers see it and confirm their own date.')}
+          </div>
+        </div>
       </div>
       <div style={{ marginTop: 12 }}>
         <label className="hx-label">Anything you want to say (optional)</label>
@@ -140,12 +169,12 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
           onChange={e => setRemarks(e.target.value)} />
       </div>
       <div className="hx-note w" style={{ marginTop: 12 }}>
-        Your notice period: <b>{d.notice_period_days ?? '-'} days</b>{(d as any).on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the acknowledgement
-        chain: your reporting manager first, then L2 / HOD, then HR sets the final last working day.
+        Your notice period: <b>{d.notice_period_days ?? '-'} days</b>{(d as any).on_probation ? ' (on probation)' : ' (confirmed)'}. Submitting starts the approval
+        chain: your reporting manager approves it with a last working day (seeing your tentative date), then HR sets the final last working day.
       </div>
       <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
         {!confirm ? (
-          <button className="hx-btn" disabled={!reason} onClick={() => setConfirm(true)}>Submit resignation</button>
+          <button className="hx-btn" disabled={!reason || !!tentativeBad} onClick={() => setConfirm(true)}>Submit resignation</button>
         ) : (
           <>
             <button className="hx-btn solidred" disabled={busy} onClick={() => void submit()}>Yes, submit</button>
@@ -154,6 +183,7 @@ export function ExitProcess({ api }: { api: (path: string, init?: RequestInit) =
         )}
       </div>
     </div>
+    </>
   )
 }
 
@@ -167,13 +197,15 @@ function Timeline({ status, chain, approvers }: { status: string; chain: ChainRo
   const byStage: Record<string, ChainRow> = {}
   // The last row per stage (STAMPED first, then the decision); the decision wins.
   for (const c of chain) if (!byStage[c.stage] || c.action !== 'STAMPED') byStage[c.stage] = c
-  const curIdx = STAGE_ORDER.indexOf(status)
+  const stages = ALL_STAGES.filter(st => STAGE_ORDER.includes(st) || st === status
+    || (byStage[st.replace('PENDING_', '')] && !['SKIPPED', 'STAMPED'].includes(byStage[st.replace('PENDING_', '')].action)))
+  const curIdx = stages.indexOf(status)
   const hold = status === 'RETENTION_HOLD'
 
   return (
     <div className="hx-tl">
-      {STAGE_ORDER.map((stg, i) => {
-        const c = byStage[stg]
+      {stages.map((stg, i) => {
+        const c = byStage[stg.replace('PENDING_', '')] || byStage[stg]
         const key = stg.replace('PENDING_', '')
         const decided = c && c.action !== 'STAMPED'
         const skipped = c?.action === 'SKIPPED'
@@ -198,7 +230,7 @@ function Timeline({ status, chain, approvers }: { status: string; chain: ChainRo
         )
       })}
       {hold && (
-        <div className="hx-tl-item cur hx-rise" style={riseStyle(STAGE_ORDER.length)}>
+        <div className="hx-tl-item cur hx-rise" style={riseStyle(stages.length)}>
           <span className="hx-tl-dot" />
           <div className="st">{STAGE_LABEL.RETENTION_HOLD}</div>
           <div className="ac">chain paused: your manager wants to talk</div>

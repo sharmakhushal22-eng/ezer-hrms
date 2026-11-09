@@ -986,6 +986,10 @@
   overflow-x: auto; border: 1px solid var(--ez-line); border-radius: 14px;
   min-width: 0; max-width: 100%; background: var(--ez-surface);
   box-shadow: 0 1px 2px color-mix(in oklab, var(--ez-ink) 4%, transparent);
+  /* The containing block for the .sr-only labels in the cells. Without it they are
+   * placed against the page instead, escape this scroller, and on a phone pushed
+   * the document out to the table's full width (~770px). */
+  position: relative;
 }
 .pms table { width: 100%; border-collapse: separate; border-spacing: 0; font-size: 12px; }
 .pms th {

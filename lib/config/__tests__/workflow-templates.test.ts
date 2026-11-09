@@ -207,9 +207,9 @@ ${uploaded} document${uploaded === 1 ? '' : 's'} ${uploaded === 1 ? 'has' : 'hav
     const joinBits = (l: string, p: string) => `${l ? ` Join: ${l}` : ''}${p ? ` · Passcode: ${p}` : ''}`
     for (const [l, p] of [['https://m', '12'], ['', '']]) {
       assert.equal(render('notify.interview.main', { candidate_name: 'Priya', round: 'L1', interview_time: 'Mon', meet_link: l, meet_passcode: p }).body,
-        `You are the main interviewer for the L1 round on Mon.${joinBits(l, p)} Acknowledge it in Tasks & Approvals, then give your feedback after the interview.`)
+        `You are the main interviewer for the L1 round on Mon.${joinBits(l, p)} Acknowledge it from your ESS notifications, then give your feedback there after the interview.`)
       assert.equal(render('notify.interview.panel', { candidate_name: 'Priya', round: 'L1', interview_time: 'Mon', meet_link: l, meet_passcode: p, main_interviewer: 'Rahul' }).body,
-        `You've been added as a panelist for the L1 round on Mon.${joinBits(l, p)} Main interviewer: Rahul. Acknowledge it in Tasks & Approvals.`)
+        `You've been added as a panelist for the L1 round on Mon.${joinBits(l, p)} Main interviewer: Rahul. Acknowledge it from your ESS notifications.`)
     }
     assert.equal(render('notify.offer.approved', { candidate_name: 'Priya', role: 'Analyst', ctc_lakh: '₹10 L', mrf_number: 'M-1', comment: 'ok' }).body,
       'The HR Head approved the ₹10 L offer for Priya · M-1. Comment: “ok” Send the offer letter from Recruitment → Send Offers.')

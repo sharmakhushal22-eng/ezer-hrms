@@ -20,6 +20,10 @@ import { supabase } from '@/lib/supabase'
 import { getGeneratedLetterDownloadUrl, publishLetterToEss } from '@/lib/letters/actions'
 // Both letter routes are guarded server-side; the session has to go along.
 import { authHeaders } from '@/lib/auth-headers'
+import dynamic from 'next/dynamic'
+import type { ComposerPrefill } from '@/components/esign/Composer'
+// EZER Sign's composer, loaded only when HR sends a letter for signature (it pulls in pdf.js).
+const Composer = dynamic(() => import('@/components/esign/Composer'), { ssr: false })
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK } from '@/lib/ui'
@@ -69,6 +73,9 @@ function ResultRow({ r }: { r: GenResult }) {
   const [emailNote, setEmailNote] = useState<{ ok: boolean; text: string } | null>(null)
   const [publishing, setPublishing] = useState(false)
   const [published, setPublished] = useState(false)
+  const [esign, setEsign] = useState<ComposerPrefill | null>(null)
+  const [esignBusy, setEsignBusy] = useState(false)
+  const [esignSent, setEsignSent] = useState(false)
 
   const statusMeta: Record<string, [string, string, string]> = {
     GENERATED: [C.greenBg, C.green, 'Generated'],
@@ -100,6 +107,27 @@ function ResultRow({ r }: { r: GenResult }) {
       setEmailNote(res.ok ? { ok: true, text: `Emailed to ${d.to}` } : { ok: false, text: d.error || `HTTP ${res.status}` })
     } catch { setEmailNote({ ok: false, text: 'Network error' }) }
     setEmailing(false)
+  }
+
+  // Send this letter for e-signature: the composer opens with the PDF and the employee
+  // already filled in; HR places the box(es) and sends.
+  async function handleEsign() {
+    if (!r.generated_letter_id) return
+    setEsignBusy(true)
+    try {
+      const { data } = await supabase.from('generated_letters').select('file_url').eq('id', r.generated_letter_id).single()
+      const url = data?.file_url ? await getGeneratedLetterDownloadUrl(data.file_url) : null
+      if (!url) throw new Error('letter file not found')
+      const blob = await (await fetch(url)).blob()
+      const { data: emp } = await supabase.from('employees').select('id, full_name, designation, office_email, personal_email').eq('emp_code', r.employee_code).maybeSingle()
+      const name = emp?.full_name || r.employee_name || r.employee_code
+      setEsign({
+        file: new File([blob], `${(name || 'letter').replace(/[^A-Za-z0-9]+/g, '_')}_letter.pdf`, { type: 'application/pdf' }),
+        title: `Letter for ${name}`, category: 'HR_LETTER', source: 'HR_LETTER', sourceRef: r.generated_letter_id,
+        signers: emp ? [{ name: emp.full_name, email: (emp.office_email || emp.personal_email || '').toLowerCase(), employee_id: emp.id, designation: emp.designation, role_label: 'Employee', auth_method: 'EMAIL_OTP' }] : [],
+      })
+    } catch (e: any) { setEmailNote({ ok: false, text: `E-sign: ${e?.message || e}` }) }
+    setEsignBusy(false)
   }
 
   async function handlePublish() {
@@ -134,8 +162,13 @@ function ResultRow({ r }: { r: GenResult }) {
               style={{ padding: '4px 9px', fontSize: 10, borderRadius: 7, border: `1px solid ${published ? C.greenBd : C.border}`, background: published ? C.greenBg: TK.surface, color: published ? C.green : C.navy, cursor: published ? 'default' : 'pointer' }}>
               {published ? 'Published to ESS' : publishing ? '…' : 'Publish to ESS'}
             </button>
+            <button onClick={handleEsign} disabled={esignBusy} title="Send this letter for e-signature (EZER Sign)"
+              style={{ padding: '4px 9px', fontSize: 10, borderRadius: 7, border: `1px solid ${esignSent ? C.greenBd : TK.brandEdge}`, background: esignSent ? C.greenBg : TK.brandTint, color: esignSent ? C.green : TK.brandDeep, cursor: 'pointer', fontWeight: 600 }}>
+              {esignBusy ? '…' : esignSent ? 'Sent for e-sign' : 'Send for e-sign'}
+            </button>
           </div>
         )}
+        {esign && <Composer prefill={esign} onClose={() => setEsign(null)} onSent={() => setEsignSent(true)} />}
         {emailNote && <div style={{ fontSize: 10, marginTop: 4, color: emailNote.ok ? C.green : C.red }}>{emailNote.text}</div>}
       </td>
     </tr>

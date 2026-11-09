@@ -31,5 +31,5 @@
     ".next/dev/types/**/*.ts",
     "**/*.mts"
 , "app/dashboard/admin/Master/Page"  ],
-  "exclude": ["node_modules"]
+  "exclude": ["node_modules", "apps"]
 }

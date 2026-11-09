@@ -17,7 +17,7 @@ export async function GET(req: NextRequest) {
   const gate = await requireModule(req, 'Onboarding')
   if (gate.error) return gate.error
   const grant = await grantForRequest(req)
-  const company = companyFilter(grant, req.nextUrl.searchParams.get('company_id') || null)
+  const company = companyFilter(grant, req.nextUrl.searchParams.get('company_id') || null, 'Onboarding')
   const people = await trackedEmployees(sb as any, company || null)
   return NextResponse.json({ people, generated_at: new Date().toISOString() })
 }

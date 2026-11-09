@@ -16,6 +16,7 @@
 //                  LEGACY_SUPABASE_BRIDGE to false to close it; nothing else depends on
 //                  it.
 import { createClient } from '@supabase/supabase-js'
+import { resilientFetch } from '@/lib/resilient-fetch'
 import { verifyEssToken } from '@/lib/ess-session'
 import { resolveGrant, emptyGrant, type Grant, type RoleRef } from '@/lib/rms/resolve'
 import { buildChain, type ManagerSlot, type ManagerRef, type Relationship, type RelationshipType } from '@/lib/rms/hierarchy'
@@ -28,6 +29,9 @@ export const LEGACY_SUPABASE_BRIDGE = true
 const sb = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
   (process.env.SUPABASE_SERVICE_ROLE_KEY || process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY)!,
+  // Every signed-in request passes through here: a read stuck on a dead connection gives up
+  // after a few seconds and tries once more, instead of holding the request for a minute.
+  { global: { fetch: resilientFetch() } },
 )
 
 export { sb as rmsServiceClient }
@@ -109,13 +113,17 @@ export async function grantForEmployee(employeeId: string): Promise<Grant> {
 
   // Whatever was explicitly assigned (needs an account) …
   let heldRoleIds: string[] = []
+  // Each role's company scope (migration 203); read without it while that column is missing.
+  const roleCompanies: Record<string, string[] | null> = {}
   if (acct?.id) {
-    const { data: ur } = await sb
+    let { data: ur, error } = await sb
       .from('ess_user_roles')
-      .select('role_id')
+      .select('role_id, company_ids')
       .eq('ess_account_id', acct.id)
       .eq('is_active', true)
+    if (error) ({ data: ur } = await sb.from('ess_user_roles').select('role_id').eq('ess_account_id', acct.id).eq('is_active', true) as any)
     heldRoleIds = (ur || []).map((r: any) => r.role_id as string)
+    for (const r of (ur || []) as any[]) roleCompanies[r.role_id] = Array.isArray(r.company_ids) ? r.company_ids : null
   }
   // … plus the automatic EMPLOYEE base role, always. A newly-added employee gets its
   // permissions the moment they exist, with no account, backfill or assignment step.
@@ -136,6 +144,7 @@ export async function grantForEmployee(employeeId: string): Promise<Grant> {
   return resolveGrant({
     ...base,
     roles: (roles || []) as RoleRef[],
+    roleCompanies,
     permissions: (perms || []) as { role_id: string; module: string; access_level: AccessLevel }[],
     approvals: (rights || []) as any[],
     screens: ((screensRes as any)?.data || []) as { role_id: string; screen_key: string; can_view: boolean }[],

@@ -2,7 +2,7 @@
 //
 // What a round's decision does to the candidate. Shared by the recruiter's
 // route (Telephonic feedback recorded directly, final Shortlist) and the ESS
-// route (a main interviewer submitting feedback from Tasks & Approvals).
+// route (a main interviewer submitting feedback from the ESS notification panel).
 //
 //   REJECT    -> candidate.stage = 'Rejected'
 //   HOLD      -> candidate.stage = 'Hold'   (the hiring manager may still add a round)

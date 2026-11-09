@@ -11,6 +11,7 @@ import { companyFilter, scopedCompanies, defaultCompanyId } from '@/lib/rms/reso
 // send-magic-link / resend-link are guarded server-side now, so the session goes along.
 import { authHeaders } from '@/lib/auth-headers'
 import GenerateCodeModal from '@/components/onboarding/GenerateCodeModal'
+import { CODE_QUEUE_ENFORCED } from '@/lib/onboarding/code-series'
 import { TRACKS, requiredDocCodes, trackOf } from '@/lib/onboarding/hiring-track'
 import ReviewDrawer from '@/components/onboarding/ReviewDrawer'
 // Design tokens, aliased as TK — many of these files already declare
@@ -318,6 +319,9 @@ export default function OnboardingDashboard() {
   // Modal state
   const [linkModal,    setLinkModal]  = useState(false)
   const [codeModal,    setCodeModal]  = useState<Candidate|null>(null)   // Generate code — team, roles, code (GenerateCodeModal)
+  // Joiners whose Letter of Appointment has gone out (onboarding_audit_log APPOINTMENT_LETTER_SENT).
+  // A coded joiner stays on the default list, with the letter as their next step, until it has.
+  const [apptSent,     setApptSent]   = useState<Map<string, { at: string; to: string | null; by: string | null }>>(new Map())
   const [saving,       setSaving]     = useState(false)
   const [dateModal,    setDateModal]  = useState<Candidate|null>(null)
   const [dateVal,      setDateVal]    = useState('')
@@ -336,8 +340,9 @@ export default function OnboardingDashboard() {
   // New link form
   const [companies, setCompanies] = useState<{id:string;company_name?:string;company_code?:string}[]>([])
   const [departments, setDepartments] = useState<{id:string;dept_name:string;company_id:string}[]>([])
+  const [locations, setLocations] = useState<{id:string;location_name:string;company_id:string}[]>([])
   const [newForm, setNewForm] = useState({
-    company_id:'', full_name:'', designation:'', department:'', department_id:'', email:'', mobile:'',
+    company_id:'', full_name:'', designation:'', department:'', department_id:'', location_id:'', email:'', mobile:'',
     date_of_joining:'', offered_ctc:'', employment_type:'Employee',
     hiring_track:'DOMESTIC', work_country:'', payroll_currency:'INR', employing_entity:'', notice_period_days:'',
   })
@@ -354,6 +359,8 @@ export default function OnboardingDashboard() {
       })
     supabase.from('departments').select('id,dept_name,company_id').order('dept_name')
       .then(({data})=>setDepartments(data || []))
+    supabase.from('locations').select('id,location_name,company_id').order('location_name')
+      .then(({data})=>setLocations(data || []))
   },[grantLoading]) // eslint-disable-line react-hooks/exhaustive-deps
 
   const showToast = (msg:string, type:'ok'|'err'='ok') => setToast({msg,type})
@@ -391,6 +398,10 @@ export default function OnboardingDashboard() {
       )
       return parts.flatMap(p => (p.data as any[]) || [])
     }
+    // Which coded joiners have had their Letter of Appointment sent.
+    const codedIds = (cands || []).filter((c: any) => c.status === 'EMPLOYEE_CREATED').map((c: any) => c.id)
+    void Promise.all(chunk(codedIds, 150).map(part => supabase.from('onboarding_audit_log').select('onboarding_id, created_at, details').eq('action', 'APPOINTMENT_LETTER_SENT').in('onboarding_id', part).order('created_at')))
+      .then(parts => setApptSent(new Map(parts.flatMap(p => ((p.data as any[]) || []).map(r => [r.onboarding_id, { at: r.created_at, to: r.details?.to || null, by: r.details?.by_name || null }] as const)))))
     const [allDocs, allForms, allAssets, allApprovals, allAcks] = await Promise.all([
       fetchAll('onboarding_documents',       'onboarding_id,doc_code,ai_status,hr_verified'),
       fetchAll('onboarding_statutory_forms', 'onboarding_id,form_type'),
@@ -562,6 +573,9 @@ export default function OnboardingDashboard() {
     if (!/^[^\s@]+@[^\s@]+\.[^\s@]{2,}$/.test(String(email || '').trim())) need.push('a valid email (the link and the login go there)')
     if (!date_of_joining) need.push('date of joining')
     if (!designation?.trim()) need.push('designation')
+    // The offer letter, the statutory forms and the employee record carry these too.
+    if (!newForm.department_id) need.push('department')
+    if (newForm.hiring_track !== 'OVERSEAS' && !newForm.location_id) need.push('work location')
     if (!employment_type) need.push('employment type')
     if (newForm.hiring_track === 'OVERSEAS' && !newForm.work_country?.trim()) need.push('work country (overseas employee)')
     if (need.length) { showToast(`Required: ${need.join(', ')}.`,'err'); return }
@@ -575,7 +589,7 @@ export default function OnboardingDashboard() {
       if (!res.ok) throw new Error(data.error||'Failed')
       showToast(data.emailed ? `Onboarding link emailed for ${full_name}! ✉️` : `Link created (email NOT sent: ${data.email_error || '-'}). Share manually: ${data.magic_link}`, data.emailed ? 'ok' : 'err')
       setLinkModal(false)
-      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee',hiring_track:'DOMESTIC',work_country:'',payroll_currency:'INR',employing_entity:'',notice_period_days:''}))
+      setNewForm(f=>({company_id:f.company_id,full_name:'',designation:'',department:'',department_id:'',location_id:'',email:'',mobile:'',date_of_joining:'',offered_ctc:'',employment_type:'Employee',hiring_track:'DOMESTIC',work_country:'',payroll_currency:'INR',employing_entity:'',notice_period_days:''}))
       load()
     } catch(e:any) { showToast(e.message,'err') }
     setSaving(false)
@@ -705,7 +719,8 @@ export default function OnboardingDashboard() {
   const openCodeModal = (candidate: Candidate) => setCodeModal(candidate)
   // FIFO (lib/onboarding/code-series.ts): codes go out in the order candidates came into
   // Onboarding. Earlier arrivals of the same company still without a code block this one.
-  const aheadOf = (c: Candidate) => candidates
+  // The queue is switched off for now (CODE_QUEUE_ENFORCED): nobody waits behind anybody.
+  const aheadOf = (c: Candidate) => !CODE_QUEUE_ENFORCED ? [] : candidates
     .filter(o => !o.id.startsWith('rec_') && o.id !== c.id && o.company_id === c.company_id && o.status !== 'EMPLOYEE_CREATED' && !o.employee_code)
     .filter(o => o.created_at < c.created_at || (o.created_at === c.created_at && o.id < c.id))
     .sort((a, b) => a.created_at.localeCompare(b.created_at))
@@ -733,6 +748,8 @@ export default function OnboardingDashboard() {
   const awaitingReview = candidates.filter(c=>c.status==='SUBMITTED').length
   const highRisk    = candidates.filter(c=>c.ai_risk==='HIGH').length
   const joined      = candidates.filter(c=>c.status==='EMPLOYEE_CREATED').length
+  // Hidden from the default list: coded (they are on the Send appointment letter tab).
+  const doneHidden  = joined
   const thisWeek    = candidates.filter(c=>{ const d=daysLeft(c.date_of_joining); return d!==null&&d>=0&&d<=7 }).length
   const notInvitedCount = candidates.filter(c=>c.status==='NOT_INVITED').length
   /** Open All candidates with exactly these filters (the rest cleared). */
@@ -742,8 +759,8 @@ export default function OnboardingDashboard() {
 
   // ── Filter candidates ─────────────────────────────────────────
   const filtered = candidates.filter(c=>{
-    // Once the employee code is generated (onboarding 100% complete), drop the card
-    // from the default list — still reachable by explicitly filtering the stage.
+    // Once the employee code is generated the joiner moves to the "Send appointment letter" tab;
+    // here they are reachable only by filtering the stage explicitly.
     if (c.status==='EMPLOYEE_CREATED' && filterStage!=='EMPLOYEE_CREATED') return false
     if (filterStage!=='ALL' && c.status!==filterStage) return false
     if (filterRisk!=='ALL'  && c.ai_risk!==filterRisk)  return false
@@ -778,6 +795,9 @@ export default function OnboardingDashboard() {
       actions.push(aheadOf(c).length
         ? {priority:'MEDIUM',label:`Approved by all three teams, in the code queue behind ${aheadOf(c)[0].full_name} (codes go out in order of arrival)`,candidate:c.full_name,action:'generate',cid:c.id}
         : {priority:'HIGH',label:'IT, Admin and Payroll approved — generate the employee code (their team, ESS roles and the code; the login is mailed to them)',candidate:c.full_name,action:'generate',cid:c.id})
+    }
+    if (c.status==='EMPLOYEE_CREATED' && !apptSent.has(c.id)) {
+      actions.push({priority:'HIGH',label:`Employee code ${c.employee_code || ''} generated: send the Letter of Appointment from People → Letters`,candidate:c.full_name,action:'appt',cid:c.id})
     }
     if (c.status==='IN_PROGRESS' && c.hr_review?.outcome==='RETURNED') {
       const n = (c.hr_review.documents||[]).length, m = (c.hr_review.details||[]).length
@@ -1130,7 +1150,7 @@ export default function OnboardingDashboard() {
       </div>
       <div style={{fontSize:12,color:TK.muted,marginTop:10,lineHeight:1.6}}>
         The HR Manager reviews the submitted form, IT, Admin and Payroll then confirm their checklists (ESS → HRIS → Tasks &amp; Approvals), and the HR Manager generates the code. Hover or click a row&apos;s approvals to see who has it.
-        {filterStage!=='EMPLOYEE_CREATED' && joined>0 && <> Completed onboardings are hidden: <button type="button" onClick={()=>setFilterStage('EMPLOYEE_CREATED')} style={{border:'none',background:'none',padding:0,color:TK.brand,fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit'}}>show {joined}</button>.</>}
+        {filterStage!=='EMPLOYEE_CREATED' && doneHidden>0 && <> Completed onboardings are hidden: <button type="button" onClick={()=>setFilterStage('EMPLOYEE_CREATED')} style={{border:'none',background:'none',padding:0,color:TK.brand,fontWeight:600,cursor:'pointer',fontFamily:'inherit',fontSize:'inherit'}}>show {doneHidden}</button>. Their appointment letters are sent from People → Letters.</>}
       </div>
     </div>
     )
@@ -1166,7 +1186,7 @@ export default function OnboardingDashboard() {
                 return (
                   <div key={i} style={{display:'flex',alignItems:'center',gap:14,padding:'12px 16px',background:TK.surface,borderRadius:14,border:`1px solid ${TK.line}`,borderLeft:`4px solid ${gMeta[pri].color}`,boxShadow:'0 1px 2px rgba(16,24,40,.04)'}}>
                     <span style={{width:36,height:36,borderRadius:11,display:'grid',placeItems:'center',background:gMeta[pri].bg,color:gMeta[pri].color,flexShrink:0}}>
-                      <Ti n={a.action==='generate'?'bolt':a.action==='review'?'file-alert':a.action==='followup'||a.action==='send'||a.action==='returned'?'send':a.action==='policy'?'list-check':'shield-check'} s={17}/>
+                      <Ti n={a.action==='appt'?'send':a.action==='generate'?'bolt':a.action==='review'?'file-alert':a.action==='followup'||a.action==='send'||a.action==='returned'?'send':a.action==='policy'?'list-check':'shield-check'} s={17}/>
                     </span>
                     <div style={{flex:1,minWidth:0}}>
                       <div style={{fontSize:13.5,fontWeight:650,color:TK.ink}}>{a.label}</div>
@@ -1179,6 +1199,11 @@ export default function OnboardingDashboard() {
                       <button className="ezob-btn" onClick={()=>{openCodeModal(cand)}} disabled={aheadOf(cand).length>0} title={fifoTitle(cand)} style={{...btnSm('primary'),height:34,opacity:aheadOf(cand).length?.5:1,cursor:aheadOf(cand).length?'not-allowed':'pointer'}}>
                         <Ti n="bolt" s={12}/>{aheadOf(cand).length ? 'In queue' : 'Generate code'}
                       </button>
+                    )}
+                    {a.action==='appt' && cand && (
+                      <a className="ezob-btn" href={typeof window !== 'undefined' && window.location.pathname.startsWith('/ess') ? '/ess/employee-letters' : '/dashboard/employee-letters'} style={{...btnSm('primary'),height:34,textDecoration:'none'}}>
+                        <Ti n="send" s={12}/>Open Letters
+                      </a>
                     )}
                     {a.action==='review' && cand && (
                       <button className="ezob-btn" onClick={()=>setReviewing({ id: cand.id, readOnly: false })} style={{...btnSm('primary'),height:34}}>
@@ -1513,11 +1538,19 @@ export default function OnboardingDashboard() {
                 </div>
               ))}
               <div style={{marginBottom:8}}>
-                <div style={labelCss}>Department</div>
+                <div style={labelCss}>Department *</div>
                 <select value={newForm.department_id} onChange={e=>{ const d = departments.find(x=>x.id===e.target.value); setNewForm(f=>({...f, department_id:e.target.value, department: d?.dept_name || ''})) }}
                   style={{...inputCss,width:'100%'}}>
                   <option value="">Select department…</option>
                   {departments.filter(d=>!newForm.company_id||d.company_id===newForm.company_id).map(d=><option key={d.id} value={d.id}>{d.dept_name}</option>)}
+                </select>
+              </div>
+              <div style={{marginBottom:8}}>
+                <div style={labelCss}>Work location{newForm.hiring_track === 'OVERSEAS' ? '' : ' *'}</div>
+                <select value={newForm.location_id} onChange={e=>setNewForm(f=>({...f, location_id:e.target.value}))}
+                  style={{...inputCss,width:'100%'}}>
+                  <option value="">Select work location…</option>
+                  {locations.filter(l=>!newForm.company_id||l.company_id===newForm.company_id).map(l=><option key={l.id} value={l.id}>{l.location_name}</option>)}
                 </select>
               </div>
               <div style={{marginBottom:8}}>
@@ -1615,7 +1648,8 @@ export default function OnboardingDashboard() {
         <GenerateCodeModal onboardingId={codeModal.id}
           candidate={{ ...codeModal, approvals: ['HR_MANAGER','IT','ADMIN','PAYROLL'].map(team => ({ team, status: (codeModal.approvals||[]).find(a=>a.team===team)?.status || 'PENDING' })) }}
           onClose={() => setCodeModal(null)}
-          onDone={(m,t)=>{ showToast(m,t); load() }} />
+          onDone={(m,t)=>{ showToast(m,t); load() }}
+          onGenerated={() => showToast('Employee code generated. Send their appointment letter from People → Letters → Pending letters.')} />
       )}
 
       {/* ── HR MANAGER REVIEW (Review form / View form on the card) ── */}

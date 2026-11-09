@@ -335,6 +335,7 @@
   .ezt .day.today .bar i { background:var(--ez-brand); }
   .ezt .day.off { opacity:.55; }
   .ezt .day.next .dd { color:var(--ez-faint); }
+  .ezt .day .st-code { display:none; font-size:11px; font-weight:750; line-height:1.35; color:var(--ez-muted); }
 
   /* pending list */
   .ezt .todo { list-style:none; margin:0; padding:0; display:flex; flex-direction:column; gap:8px; }
@@ -479,6 +480,16 @@
     .ezt .clock b { font-size:22px; }
     .ezt .punchbar { max-width:100%; }
     .ezt .mgrid { font-size:10px; }
+    /* Two tiles a row left each one ~170px: the label pill wrapped, the leave
+       breakdown cut off, and the third tile sat alone. One a row reads cleanly. */
+    .ezt .stats { grid-template-columns:1fr; gap:10px; }
+    /* A seventh of a phone cannot hold "Weekly off" or a punch time: the words were
+       cut to "Ab…" and "Up…". The cell shows the calendar's code instead; the full
+       words stay in its title and on the Attendance screen. */
+    .ezt .day .st { display:none; }
+    .ezt .day .st-code { display:block; }
+    .ezt .day .dd { font-size:16px; }
+    .ezt .day .bar { margin-top:5px; }
   }
 
 /* ── Corner radii, re-asserted ───────────────────────────────────────────────
@@ -578,6 +589,7 @@
 .ezt .day:is(.present, .late, .half, .miss, .absent, .leave, .holiday) .dd { color: var(--d); }
 .ezt .day:is(.present, .late, .half, .miss, .absent, .leave, .holiday) .st + .st { color: var(--d); }
 .ezt .day.absent .st { color: var(--d); }
+.ezt .day:is(.present, .late, .half, .miss, .absent, .leave, .holiday) .st-code { color: var(--d); }
 .ezt .day:is(.present, .late, .half, .miss, .absent, .leave, .holiday) .bar { background: color-mix(in srgb, var(--d) 18%, var(--ez-surface)); }
 .ezt .day:is(.present, .late, .half, .miss) .bar i { background: var(--d); }
 .ezt .day.off { background: var(--ez-sunken); }

@@ -53,6 +53,9 @@ export interface PendingItem {
   lwd_policy?: string | null
   lwd_proposed?: string | null
   notice_days?: number | null
+  /** The employee's tentative LWD, and each earlier approver's date (lib/ess/pending.ts). */
+  lwd_tentative?: string | null
+  lwd_trail?: { stage: string; label: string; by: string | null; lwd: string; at: string | null }[]
 }
 
 /** A stage entry, as both /api/ess/approvals?resignation_id= and
@@ -79,6 +82,11 @@ export interface ResignationRecord {
   lwd_as_per_policy?: string | null
   proposed_lwd?: string | null
   final_lwd?: string | null
+  /** The date the employee proposed when resigning (migration 207). */
+  tentative_lwd?: string | null
+  /** Notice days the HR Manager waived, and why (migration 207). */
+  notice_waived_days?: number | null
+  notice_waiver_reason?: string | null
   reason_code?: string | null
   exit_reason_master?: { label?: string | null } | null
   submitted_by_employee?: boolean | null

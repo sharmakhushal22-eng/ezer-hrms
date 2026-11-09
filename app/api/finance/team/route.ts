@@ -23,7 +23,7 @@ export async function GET(req: NextRequest) {
     // Pin to the caller's own company unless cross-company. null = every company
     // (a cross caller who asked for all).
     const grant = await grantForRequest(req);
-    const company = companyFilter(grant, req.nextUrl.searchParams.get('company_id'));
+    const company = companyFilter(grant, req.nextUrl.searchParams.get('company_id'), 'Finance');
 
     let tq = sb.from('finance_team').select('*').order('role').order('created_at');
     if (company) tq = tq.eq('company_id', company);

@@ -112,6 +112,29 @@ interface PendingItem {
   kind: 'LEAVE' | 'LEAVE_CANCEL' | 'REGULARISATION' | 'TRAVEL' | 'RESIGNATION'; id: string; employee_id: string; who: string; what: string; meta: string; stage: string
   raised_at: string | null; surfaced_via: string; mine: boolean; actions: string[]; tone?: 'w' | 'd'; link?: string
   facts?: string[]; alert?: string | null; lwd_policy?: string | null; lwd_proposed?: string | null; notice_days?: number | null
+  lwd_tentative?: string | null; lwd_trail?: { stage: string; label: string; by: string | null; lwd: string; at: string | null }[]
+}
+
+const shortDate = (d?: string | null) => d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' }) : '-'
+
+/** A resignation's last working day so far: the employee's tentative date, the policy date and
+ *  the date each approver before this one set (lib/exit/lwd.ts). */
+function LwdTrail({ tentative, policy, notice, trail }: { tentative?: string | null; policy?: string | null; notice?: number | null; trail?: { label: string; by: string | null; lwd: string }[] }) {
+  const rows: [string, string, string?][] = []
+  if (tentative) rows.push(['Employee’s tentative LWD', shortDate(tentative)])
+  if (policy) rows.push([`As per notice${notice != null ? ` (${notice} days)` : ''}`, shortDate(policy)])
+  for (const t of trail || []) rows.push([t.label, shortDate(t.lwd), t.by || undefined])
+  if (!rows.length) return null
+  return (
+    <div style={{ marginTop: 8, border: `1px solid ${C.border}`, borderRadius: 8, overflow: 'hidden' }}>
+      {rows.map(([k, v, by], i) => (
+        <div key={i} style={{ display: 'flex', gap: 10, alignItems: 'baseline', padding: '6px 10px', fontSize: 12, background: i % 2 ? 'transparent' : C.bg, borderTop: i ? `1px solid ${C.border}` : 'none' }}>
+          <span style={{ color: C.muted, flex: 1, minWidth: 0 }}>{k}{by ? <span style={{ color: C.faint }}> · {by}</span> : null}</span>
+          <b style={{ color: C.ink, whiteSpace: 'nowrap' }}>{v}</b>
+        </div>
+      ))}
+    </div>
+  )
 }
 
 /** One pending item with its actions. Resignation actions that need input (a date,
@@ -125,7 +148,9 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
   const [err, setErr] = useState('')
   const [chain, setChain] = useState<any[] | null>(null)
 
-  const needsInput = (a: string) => ['Accept with my date', 'Request retention', 'Set final LWD', 'Decline'].includes(a)
+  const needsInput = (a: string) => ['Approve with LWD', 'Accept with my date', 'Request retention', 'Set final LWD', 'Decline'].includes(a)
+  const datedAction = (a: string | null) => a === 'Approve with LWD' || a === 'Accept with my date' || a === 'Set final LWD'
+  const lastSet = item.lwd_trail?.length ? item.lwd_trail[item.lwd_trail.length - 1].lwd : null
   async function fire(a: string) {
     setErr('')
     if (a === 'Open claim') { go(item.link || 'claims'); return }
@@ -135,11 +160,12 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
       return
     }
     if (needsInput(a) && ask !== a) {
-      // The date starts from the RM's proposal, else the policy LWD (resignation date + notice period).
-      if (a === 'Set final LWD' || a === 'Accept with my date') setLwd(item.lwd_proposed || item.lwd_policy || '')
+      // The date starts from the last approver's date, else the employee's tentative one, else
+      // the policy LWD (resignation date + notice period).
+      if (datedAction(a)) setLwd(lastSet || item.lwd_proposed || item.lwd_tentative || item.lwd_policy || '')
       setAsk(a); return
     }
-    if (a === 'Set final LWD' && !lwd) { setErr('Pick the final last working day'); return }
+    if (datedAction(a) && !lwd) { setErr(a === 'Set final LWD' ? 'Pick the final last working day' : 'Pick the last working day you approve'); return }
     setBusy(true)
     try {
       await api('/api/ess/approvals', employeeId, { method: 'POST', body: JSON.stringify({ kind: item.kind, id: item.id, action: a, note: note || null, lwd: lwd || null, regrettable: regret }) })
@@ -163,6 +189,7 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
         </ul>
       )}
       {item.alert && <div style={{ ...S.note('w'), marginTop: 8 }}>{item.alert}</div>}
+      {item.kind === 'RESIGNATION' && <LwdTrail tentative={item.lwd_tentative} policy={item.lwd_policy} notice={item.notice_days} trail={item.lwd_trail} />}
       <div style={{ display: 'flex', gap: 6, marginTop: 10, flexWrap: 'wrap' }}>
         {item.actions.map((a, i) => (
           <button key={a} disabled={busy} onClick={() => fire(a)}
@@ -171,9 +198,14 @@ function PendingCard({ item, employeeId, go, onDone }: { item: PendingItem; empl
       </div>
       {ask && (
         <div style={{ marginTop: 10, padding: 10, borderRadius: 8, background: C.bg, display: 'grid', gap: 8 }}>
-          {(ask === 'Accept with my date' || ask === 'Set final LWD') && (
-            <div><label style={S.label}>{ask === 'Set final LWD' ? 'Final last working day' : 'Proposed last working day'}</label><input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} />
-              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>{item.lwd_proposed && lwd === item.lwd_proposed ? `Filled from the manager's proposal (${item.lwd_proposed}); policy LWD is ${item.lwd_policy || '-'}.` : item.lwd_policy && lwd === item.lwd_policy ? `Filled as per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}: ${item.lwd_policy}.` : item.lwd_policy ? `Policy LWD ${item.lwd_policy}${item.lwd_proposed ? ` · manager proposed ${item.lwd_proposed}` : ''}${lwd && lwd < item.lwd_policy ? ' · earlier than policy: notice shortfall recovery applies' : ''}` : ''}</div>
+          {datedAction(ask) && (
+            <div><label style={S.label}>{ask === 'Set final LWD' ? 'Final last working day' : 'Last working day you approve'}</label><input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} />
+              <div style={{ fontSize: 11.5, color: C.muted, marginTop: 4 }}>
+                {lwd && lastSet && lwd === lastSet ? `Filled from the previous approver's date (${shortDate(lastSet)}).`
+                  : lwd && item.lwd_tentative && lwd === item.lwd_tentative ? `Filled from the employee's tentative date (${shortDate(item.lwd_tentative)}).`
+                  : lwd && item.lwd_policy && lwd === item.lwd_policy ? `As per the notice period${item.notice_days != null ? ` of ${item.notice_days} days` : ''}.` : ''}
+                {lwd && item.lwd_policy && lwd < item.lwd_policy ? ' Earlier than the notice period: shortfall recovery applies unless HR waives it.' : ''}
+              </div>
             </div>
           )}
           {ask === 'Set final LWD' && (
@@ -807,37 +839,39 @@ export function OfferApprovals({ employeeId, notify, focusId, onDone }: { employ
 // a PANELIST. Everyone sees the details and acknowledges; only the main
 // interviewer's row turns into a blue "Give feedback" (8 parameters + a
 // Hold / Reject / Shortlist decision). A panelist's row is done once acknowledged.
+// It lives in the ESS notification panel (the bell), not Tasks & Approvals: the
+// interviewer acknowledges and gives feedback from the notification itself.
 const isMain = (i: any) => (i.role || 'MAIN') === 'MAIN'
 
-export function InterviewInvites({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+export function InterviewInvites({ employeeId, notify, onDone }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void; onDone?: () => void }) {
   const [invites, setInvites] = useState<any[] | null>(null)
   const [busy, setBusy] = useState<string | null>(null)
   const [fbFor, setFbFor] = useState<any | null>(null)
   const [saving, setSaving] = useState(false)
   const load = useCallback(() => api('/api/ess/interview', employeeId).then(d => setInvites(d.invites || [])).catch(() => setInvites([])), [employeeId])
   useEffect(() => { load() }, [load])
-  if (!invites || invites.length === 0) return null
-
   // Main interviewers are done once feedback is in; panelists once they've acknowledged.
-  const pending = invites.filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  // Only what still needs doing is listed; a finished interview leaves the panel.
+  const pending = (invites || []).filter((i: any) => isMain(i) ? i.status !== 'submitted' : i.status === 'invited')
+  if (pending.length === 0) return null
   const ack = async (id: string) => {
     setBusy(id)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify('Acknowledged. Record your feedback after the interview.'); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'acknowledge', invite_id: id }) }); notify(isMain(pending.find((i: any) => i.id === id)) ? 'Acknowledged. Give your feedback here after the interview.' : 'Acknowledged.'); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setBusy(null)
   }
   const submit = async (fb: InterviewFeedback) => {
     if (!fbFor) return
     setSaving(true)
-    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load() }
+    try { await api('/api/ess/interview', employeeId, { method: 'POST', body: JSON.stringify({ action: 'feedback', invite_id: fbFor.id, feedback: fb }) }); notify('Feedback submitted. Thank you.'); setFbFor(null); await load(); onDone?.() }
     catch (e: any) { notify(e.message, 'error') }
     setSaving(false)
   }
 
   return (
     <div style={S.card}>
-      <div style={S.section}>Interviews to conduct ({pending.length || invites.length})</div>
-      {invites.map((i: any) => {
+      <div style={S.section}>Interviews to conduct ({pending.length})</div>
+      {pending.map((i: any) => {
         const when = i.scheduled_at ? new Date(i.scheduled_at).toLocaleString('en-IN', { dateStyle: 'medium', timeStyle: 'short' }) : 'time to be confirmed'
         return (
           <div key={i.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 0', borderTop: `1px solid ${C.border}`, flexWrap: 'wrap' }}>
@@ -864,7 +898,7 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
       })}
 
       {fbFor && createPortal(
-        <div onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
+        <div data-ez-keep-open onMouseDown={e => { if (e.target === e.currentTarget && !saving) setFbFor(null) }}
           style={{ position: 'fixed', inset: 0, background: 'rgba(30,27,75,0.45)', zIndex: 4000, display: 'flex', alignItems: 'flex-start', justifyContent: 'center', overflowY: 'auto', padding: '24px 16px' }}>
           <div style={{ background: C.card, borderRadius: 16, width: 'min(1000px, 100%)', boxShadow: '0 24px 70px rgba(30,27,75,0.3)', padding: '18px 20px', margin: '0 auto' }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14 }}>
@@ -877,6 +911,102 @@ export function InterviewInvites({ employeeId, notify }: { employeeId: string; n
               onSubmit={submit} onClose={() => !saving && setFbFor(null)} />
           </div>
         </div>, document.body)}
+    </div>
+  )
+}
+
+// ── Exits to approve — the company-started exits (People → Employees → HR Actions → Exit)
+// waiting on you. Same chain and same buttons as a resignation: the Reporting Manager, L2 and
+// HOD acknowledge, accept with their date or request retention (then resume); the HR Manager
+// sets the final last working day, which puts the exit into effect. The chain itself is
+// app/api/ess/exit-employee (lib/exit/hr-exit.ts).
+const fmtDay = (d?: string | null) => d ? new Date(`${String(d).slice(0, 10)}T00:00:00`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : '-'
+const stepText = (s: any) => s.status === 'HOLD' ? 'retention requested' : s.status === 'PENDING' ? 'waiting' : s.status === 'SKIPPED' ? 'skipped'
+  : s.status === 'REJECTED' ? 'rejected' : s.status === 'WAITING' ? 'next'
+  : s.action === 'STARTED' ? 'started it' : s.action === 'ACCEPTED_WITH_DATE' ? `accepted with ${fmtDay(s.lwd)}` : s.action === 'FINAL_LWD_SET' ? `final LWD ${fmtDay(s.lwd)}` : 'acknowledged'
+
+export function HrExitApprovals({ employeeId, notify }: { employeeId: string; notify: (m: string, t?: 'success' | 'error') => void }) {
+  const [items, setItems] = useState<any[] | null>(null)
+  const [busy, setBusy] = useState<string | null>(null)
+  // The input an action collects before it fires: a date, or a retention note.
+  const [open, setOpen] = useState<{ id: string; act: string } | null>(null)
+  const [note, setNote] = useState('')
+  const [lwd, setLwd] = useState('')
+  const load = useCallback(() => api('/api/ess/exit-employee?inbox=1', employeeId).then(d => setItems(d.items || [])).catch(() => setItems([])), [employeeId])
+  useEffect(() => { load() }, [load])
+  if (!items || items.length === 0) return null
+  const fire = async (x: any, act: string) => {
+    setBusy(x.id)
+    try {
+      const d = await api('/api/ess/exit-employee', employeeId, { method: 'POST', body: JSON.stringify({ action: 'act', id: x.id, act, note, lwd }) })
+      notify(act === 'FINAL_LWD_SET' ? `Final last working day set: ${fmtDay(lwd)}. The exit is in effect.`
+        : act === 'REQUESTED_RETENTION' ? 'Retention requested. The exit is on hold until you resume it.'
+        : act === 'RESUMED' ? 'Chain resumed.' : d.request?.status === 'APPROVED' ? 'Done. The exit is in effect.' : 'Forwarded to the next approver.')
+      setOpen(null); setNote(''); setLwd(''); await load()
+    } catch (e: any) { notify(e.message, 'error') }
+    setBusy(null)
+  }
+  const needs = (act: string) => act === 'ACCEPTED_WITH_DATE' || act === 'FINAL_LWD_SET' || act === 'REQUESTED_RETENTION'
+  return (
+    <div style={S.card}>
+      <div style={S.section}>Exits waiting on you ({items.length})</div>
+      {items.map((x: any) => {
+        const step = (x.chain || []).find((s: any) => s.status === 'PENDING' || s.status === 'HOLD')
+        const acts: { code: string; label: string }[] = x.actions || []
+        const isOpen = open?.id === x.id
+        return (
+          <div key={x.id} style={{ padding: '10px 0', borderTop: `1px solid ${C.border}` }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+              <div style={{ flex: 1, minWidth: 220 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, color: C.ink }}>{x.employee?.full_name} <span style={{ color: C.muted, fontWeight: 500 }}>{x.employee?.emp_code}{x.employee?.designation ? ` · ${x.employee.designation}` : ''}</span>
+                  <span style={{ ...pill('dang'), marginLeft: 6 }}>{x.reason_label}{x.sub_reason ? ` · ${x.sub_reason}` : ''}</span>
+                  {step?.status === 'HOLD' && <span style={{ ...pill('warn'), marginLeft: 6 }}>Retention hold</span>}</div>
+                <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>
+                  Last working day {fmtDay(x.last_working_day)}{x.proposed_lwd ? ` · proposed ${fmtDay(x.proposed_lwd)}` : ''} · started by {x.initiated_by_name || 'HR'} · waiting on you as {step?.label || 'approver'}
+                </div>
+                {x.remarks && <div style={{ fontSize: 12, color: C.ink, marginTop: 4 }}>{x.remarks}</div>}
+                {(x.documents || []).length > 0 && (
+                  <div style={{ fontSize: 11.5, marginTop: 4 }}>Documents: {x.documents.map((d: any) => (
+                    <button key={d.path} type="button" onClick={() => api(`/api/exit/documents?request_id=${x.id}&path=${encodeURIComponent(d.path)}`, employeeId).then(j => window.open(j.url, '_blank', 'noopener')).catch((e: any) => notify(e.message, 'error'))}
+                      style={{ border: 'none', background: 'none', padding: 0, marginRight: 8, color: C.blue, cursor: 'pointer', textDecoration: 'underline', font: 'inherit' }}>{d.name}</button>
+                  ))}</div>
+                )}
+                <div style={{ fontSize: 11, color: C.faint, marginTop: 4 }}>
+                  {(x.chain || []).map((s: any) => `${s.label}: ${stepText(s)}`).join(' → ')}
+                </div>
+                <LwdTrail trail={[
+                  { label: 'Proposed when the exit started', by: x.initiated_by_name || null, lwd: x.last_working_day },
+                  ...(x.chain || []).filter((s: any) => s.status === 'APPROVED' && s.lwd && s.action !== 'STARTED').map((s: any) => ({ label: s.label, by: s.acted_by?.full_name || null, lwd: s.lwd })),
+                ].filter(t => t.lwd)} />
+              </div>
+              {!isOpen && acts.map(a => (
+                <button key={a.code} disabled={busy === x.id}
+                  onClick={() => { if (needs(a.code)) { setOpen({ id: x.id, act: a.code }); setNote(''); setLwd(a.code === 'REQUESTED_RETENTION' ? '' : (x.proposed_lwd || x.last_working_day || '')) } else void fire(x, a.code) }}
+                  style={a.code === 'REQUESTED_RETENTION' ? S.btnO : { ...S.btn, background: a.code === 'FINAL_LWD_SET' || a.code === 'ACCEPTED_WITH_DATE' || a.code === 'RESUMED' ? C.green : undefined, opacity: busy === x.id ? .6 : 1 }}>
+                  {busy === x.id ? '…' : a.label}
+                </button>
+              ))}
+            </div>
+            {isOpen && (
+              <div style={{ marginTop: 8, display: 'grid', gap: 6 }}>
+                {open!.act !== 'REQUESTED_RETENTION' && (
+                  <label style={{ fontSize: 12, color: C.muted, display: 'grid', gap: 4, maxWidth: 240 }}>{open!.act === 'FINAL_LWD_SET' ? 'Final last working day' : 'Last working day you approve'}
+                    <input type="date" value={lwd} onChange={e => setLwd(e.target.value)} style={S.input} /></label>
+                )}
+                <textarea style={{ ...S.input, minHeight: 50, resize: 'vertical' }} value={note} onChange={e => setNote(e.target.value)}
+                  placeholder={open!.act === 'REQUESTED_RETENTION' ? 'Why the employee should be retained (optional)' : 'Note (optional)'} />
+                <div style={{ display: 'flex', gap: 8, justifyContent: 'flex-end' }}>
+                  <button onClick={() => { setOpen(null); setNote(''); setLwd('') }} disabled={busy === x.id} style={S.btnO}>Back</button>
+                  <button onClick={() => fire(x, open!.act)} disabled={busy === x.id || (open!.act !== 'REQUESTED_RETENTION' && !lwd)}
+                    style={{ ...S.btn, opacity: busy === x.id || (open!.act !== 'REQUESTED_RETENTION' && !lwd) ? .6 : 1 }}>
+                    {busy === x.id ? '…' : acts.find(a => a.code === open!.act)?.label || 'Confirm'}
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        )
+      })}
     </div>
   )
 }
@@ -895,7 +1025,7 @@ export function ApprovalsSection({ employeeId, go, notify }: { employeeId: strin
     <div>
       <MrfApprovals employeeId={employeeId} notify={notify} />
       <OfferApprovals employeeId={employeeId} notify={notify} />
-      <InterviewInvites employeeId={employeeId} notify={notify} />
+      <HrExitApprovals employeeId={employeeId} notify={notify} />
       <OnboardingApprovals employeeId={employeeId} notify={notify} />
       <Kpis items={[
         { label: 'Waiting on you', value: mine, tone: mine ? 'warn' : 'ok' },

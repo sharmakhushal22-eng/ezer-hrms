@@ -33,7 +33,9 @@ export interface Managers {
 export interface HrAssignment {
   managers?: Managers
   /** `auto`: a manager role the team's depth decided (L1 / L2 / HOD), not ticked by hand. */
-  roles?: { role_id: string; role_code: string; role_name: string; auto?: boolean }[]
+  roles?: { role_id: string; role_code: string; role_name: string; auto?: boolean; company_ids?: string[] | null }[]
+  /** The companies the hand-picked roles are valid in (the manager roles stay own-company). */
+  company_ids?: string[] | null
   /** The union of the roles' module permissions, as granted. */
   permissions?: { module: string; access_level: string }[]
   team?: { direct: string[]; exclude: string[]; summary: string; count: number }
@@ -91,10 +93,15 @@ const ref = (people: Map<string, TeamPerson>, id: string | null): ManagerRef | n
 export async function assignmentOptions(sb: SupabaseClient, onboardingId: string) {
   const { data: oc } = await sb.from('onboarding_candidates').select(CAND).eq('id', onboardingId).maybeSingle()
   if (!oc) return null
-  const [people, { data: roles }, { data: perms }] = await Promise.all([
+  // The group's companies, for the role scope ("Valid in companies").
+  const { data: own } = await sb.from('companies').select('id, group_id').eq('id', oc.company_id).maybeSingle()
+  let coQ = sb.from('companies').select('id, company_name, company_code').order('company_name')
+  if ((own as any)?.group_id) coQ = coQ.eq('group_id', (own as any).group_id)
+  const [people, { data: roles }, { data: perms }, { data: companies }] = await Promise.all([
     companyPeople(sb, oc.company_id),
     sb.from('ess_roles').select('id, role_code, role_name, scope, salary_visibility, sort_order').order('sort_order'),
     sb.from('role_permissions').select('role_id, module, access_level'),
+    coQ,
   ])
   const byRole = new Map<string, { module: string; access_level: string }[]>()
   for (const p of (perms || []) as any[]) { if (p.access_level === 'NONE') continue; const l = byRole.get(p.role_id) || []; l.push({ module: p.module, access_level: p.access_level }); byRole.set(p.role_id, l) }
@@ -103,6 +110,7 @@ export async function assignmentOptions(sb: SupabaseClient, onboardingId: string
     candidate: { ...cand, assignment: (ra || null) as HrAssignment | null },
     managers: { l1: ref(people, oc.l1_manager_id), l2: ref(people, oc.l2_manager_id), hod: ref(people, oc.hod_id) },
     employees: [...people.values()].map(asOption),
+    companies: ((companies || []) as any[]).map(c => ({ id: c.id, name: c.company_name || c.company_code, own: c.id === oc.company_id })),
     roles: ((roles || []) as any[]).filter(r => !HIDDEN_ROLES.has(r.role_code)).map(r => ({ id: r.id, role_code: r.role_code, role_name: r.role_name, scope: r.scope, salary_visibility: r.salary_visibility, permissions: (byRole.get(r.id) || []).sort((a, b) => a.module.localeCompare(b.module)) })) as RoleOption[],
   }
 }
@@ -191,7 +199,9 @@ export async function teamPlanFor(sb: SupabaseClient, onboardingId: string, code
 
 // ── 2. Roles + team, recorded just before the code is generated ──────────────────────────────
 
-export interface CodeAssignmentInput { onboardingId: string; roleIds: string[]; team: { direct: string[]; exclude: string[] }; actorId: string | null; actorName: string | null }
+export interface CodeAssignmentInput { onboardingId: string; roleIds: string[]; team: { direct: string[]; exclude: string[] }; actorId: string | null; actorName: string | null
+  /** Companies the picked roles are valid in; empty = the joiner's own company. */
+  companyIds?: string[] }
 
 export async function saveCodeAssignment(sb: SupabaseClient, i: CodeAssignmentInput): Promise<{ ok: boolean; error?: string; status?: number; code?: string; assignment?: HrAssignment }> {
   const { data: oc } = await sb.from('onboarding_candidates').select(CAND).eq('id', i.onboardingId).maybeSingle()
@@ -216,9 +226,14 @@ export async function saveCodeAssignment(sb: SupabaseClient, i: CodeAssignmentIn
   const union = new Map<string, string>()
   for (const p of (perms || []) as any[]) { const cur = union.get(p.module); if (!cur || (rank[p.access_level] || 0) > (rank[cur] || 0)) union.set(p.module, p.access_level) }
   const prev = (oc.role_assignment || {}) as HrAssignment
+  // The joiner's own company is always in scope; the manager roles and EMPLOYEE never leave it.
+  const scope = [...new Set([oc.company_id, ...(i.companyIds || [])].filter(Boolean))] as string[]
+  const ownOnly = (code: string) => (MANAGER_ROLE_CODES as readonly string[]).includes(code) || code === 'EMPLOYEE'
   const assignment: HrAssignment = {
     managers: prev.managers,
-    roles: found.map(r => ({ role_id: r.id, role_code: r.role_code, role_name: r.role_name, auto: auto.some(a => a.id === r.id) || undefined })),
+    roles: found.map(r => ({ role_id: r.id, role_code: r.role_code, role_name: r.role_name, auto: auto.some(a => a.id === r.id) || undefined,
+      company_ids: ownOnly(r.role_code) || scope.length <= 1 ? null : scope })),
+    company_ids: scope.length > 1 ? scope : null,
     permissions: [...union.entries()].map(([module, access_level]) => ({ module, access_level })).sort((a, b) => a.module.localeCompare(b.module)),
     team: { direct: plan?.direct.map(d => d.id) || [], exclude: i.team?.exclude || [], summary: plan?.summary || summarisePlan([]), count: plan?.members.length || 0 },
     by: i.actorId, by_name: i.actorName, at: new Date().toISOString(),
@@ -313,10 +328,16 @@ export async function applyAssignment(sb: SupabaseClient, onboardingId: string, 
   }
   if (acct && roles.length) {
     for (const r of roles) {
-      const { error } = await sb.from('ess_user_roles').upsert({ ess_account_id: acct, role_id: r.role_id, is_active: true, assigned_by: by, assigned_at: new Date().toISOString() }, { onConflict: 'ess_account_id,role_id' })
+      const row = { ess_account_id: acct, role_id: r.role_id, is_active: true, assigned_by: by, assigned_at: new Date().toISOString() }
+      // With the role's company scope (migration 203); without it if that column is not there yet.
+      let { error } = await sb.from('ess_user_roles').upsert({ ...row, company_ids: (r as any).company_ids || null }, { onConflict: 'ess_account_id,role_id' })
+      if (error && /company_ids/.test(error.message)) {
+        ({ error } = await sb.from('ess_user_roles').upsert(row, { onConflict: 'ess_account_id,role_id' }))
+        if (!error && (r as any).company_ids?.length) out.warnings.push(`role ${r.role_code}: company scope not saved — run migration 203_role_company_scope.sql`)
+      }
       if (error) out.warnings.push(`role ${r.role_code}: ${error.message}`); else out.applied.push(`role ${r.role_code}`)
     }
-    await sb.from('ess_access_audit').insert({ ess_account_id: acct, action: 'ROLE_ASSIGN', performed_by: by, performed_by_name: ra.by_name || 'Onboarding', reason: 'Assigned at onboarding (Generate code)', details: { employee_id: employeeId, roles: roles.map(r => r.role_code), mode: 'add' } }).then(() => null, () => null)
+    await sb.from('ess_access_audit').insert({ ess_account_id: acct, action: 'ROLE_ASSIGN', performed_by: by, performed_by_name: ra.by_name || 'Onboarding', reason: 'Assigned at onboarding (Generate code)', details: { employee_id: employeeId, roles: roles.map(r => r.role_code), companies: ra.company_ids || null, mode: 'add' } }).then(() => null, () => null)
   }
   return out
 }

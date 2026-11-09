@@ -60,6 +60,17 @@ const D = (
 
 // ── 1. Employee (baseline — everyone) ───────────────────────────────────────
 export const EMPLOYEE: NotificationDef[] = [
+  // EZER Learn. LMS_ASSIGNED and LMS_RENEWAL are written in bulk by the database (207),
+  // and listed here so the catalogue stays the whole list.
+  D('LMS_ASSIGNED',                'Training assigned',                      'SELF', 'NORMAL', true,  '/learning'),
+  D('LMS_RENEWAL',                 'Recertification due',                    'SELF', 'HIGH',   true,  '/learning'),
+  D('LMS_DUE_SOON',                'Training due soon',                      'SELF', 'NORMAL', true,  '/learning'),
+  D('LMS_OVERDUE',                 'Training overdue',                       'SELF', 'HIGH',   true,  '/learning'),
+  D('LMS_COMPLETED',               'Course completed',                       'SELF', 'NORMAL', false, '/learning'),
+  D('LMS_FAILED',                  'Assessment attempts used up',            'SELF', 'HIGH',   false, '/learning'),
+  D('LMS_ENROL_DECIDED',           'Course request decided',                 'SELF', 'NORMAL', false, '/learning'),
+  D('LMS_TEAM_OVERDUE',            'Team training overdue',                  'SELF', 'NORMAL', true,  '/learning/team'),
+  D('LMS_ENROL_REQUEST',           'Course request to approve',              'SELF', 'NORMAL', false, '/learning/team'),
   D('LEAVE_APPROVED',              'Leave request approved',                 'SELF', 'NORMAL', false, '/ess?tab=leave'),
   D('LEAVE_REJECTED',              'Leave request rejected',                 'SELF', 'HIGH',   true,  '/ess?tab=leave'),
   D('TRAVEL_APPROVED',             'Travel claim approved',                  'SELF', 'NORMAL', false, '/ess?tab=travel'),

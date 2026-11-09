@@ -14,6 +14,7 @@
 
 import { onboardingToEmployee } from './to-employee'
 import { applyAssignment } from './hr-assignment'
+import { writeCtcMaster } from './ctc-master'
 import { isValidEmpCode } from '@/lib/employee-code'
 import { nextCompanyCode, queueAheadOf, type Blocker } from './code-series'
 import { sendAckEmail } from './ack-email'
@@ -87,6 +88,22 @@ export async function createEmployeeFromOnboarding(supa: any, o: { onboardingId:
     if (applied.warnings.length) console.error('assignment warnings', o.onboardingId, applied.warnings)
   }
   await supa.from('onboarding_statutory_enrollment').update({ enrolled_at: new Date().toISOString(), enrolled_by: o.by || null }).eq('onboarding_id', o.onboardingId)
+  // The payroll CTC (ctc_master) from the agreed salary — payroll and ESS Flexi read it from
+  // there (lib/onboarding/ctc-master.ts). Best effort: reported, never blocking.
+  if (sync.employee_id) {
+    const ctc = await writeCtcMaster(supa, o.onboardingId, sync.employee_id).catch((e: any) => ({ ok: false, error: e?.message || 'failed' }))
+    if (!ctc.ok) applied.warnings.push(`Payroll CTC not recorded: ${(ctc as any).error}`)
+  }
+
+  // Pre-joining learning carries over, and onboarding courses follow. Best effort, with a
+  // dynamic import so this path loads nothing of the LMS until it is needed: the employee
+  // record is the outcome here, and the LMS daily job picks up anything this misses.
+  if (sync.employee_id) {
+    try {
+      const { onEmployeeCreated } = await import('@/lib/lms/preboarding')
+      await onEmployeeCreated(o.onboardingId, sync.employee_id)
+    } catch (e: any) { console.warn('lms join hook', e?.message) }
+  }
 
   const scope = await onboardingScope(o.onboardingId).catch(() => ({ companyId: cand.company_id, locationId: null }))
   const companyName = company?.company_name || ''

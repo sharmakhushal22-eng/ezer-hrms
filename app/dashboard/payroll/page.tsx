@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { usePathname } from 'next/navigation'
 import { useGrant } from '@/lib/rms/client'
 import { canSeeScreen } from '@/lib/rms/resolve'
 import * as XLSX from 'xlsx'
@@ -34,6 +35,7 @@ import Appraisal from '@/components/payroll/Appraisal'
 import LockUnlock from '@/components/payroll/LockUnlock'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
 import NpsReport from '@/components/payroll/NpsReport'
+import StatutoryComponentReport from '@/components/payroll/StatutoryComponentReport'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
 // The design system. This file owns C, S and F already, so the tokens are
@@ -311,13 +313,13 @@ function BuiltPanel({ s }: { s: SubTab }) {
 }
 
 // Resolve the sub-section list for a main tab. companyId '' = Group Companies (all companies at once).
-function subsForTab(tab: string, ctx: { companyId: string; fy: string; subView: string }): SubTab[] {
+function subsForTab(tab: string, ctx: { companyId: string; fy: string; month: number; subView: string }): SubTab[] {
   switch (tab) {
     case 'config': return configSubs(ctx.companyId, ctx.subView, ctx.fy)
-    case 'attendance': return attendanceSubs(ctx.companyId, ctx.fy)
+    case 'attendance': return attendanceSubs(ctx.companyId, ctx.fy, ctx.month)
     case 'employees': return employeeSubs(ctx.companyId)
-    case 'run': return runSubs(ctx.companyId, ctx.fy)
-    case 'statutory': return statutorySubs(ctx.fy)
+    case 'run': return runSubs(ctx.companyId, ctx.fy, ctx.month)
+    case 'statutory': return statutorySubs(ctx.companyId, ctx.fy, ctx.month)
     case 'benefits': return benefitsSubs()
     case 'offcycle': return offcycleSubs()
     case 'reports': return reportsSubs()
@@ -343,9 +345,8 @@ function configSubs(companyId: string, subView: string, fy: string): SubTab[] {
         { id: 'create', label: 'Create Month' },
         { id: 'freeze', label: 'Freeze Month' },
         { id: 'unfreeze', label: 'Unfreeze Month' },
-        // PayrollMonthTab always supported this mode; it just had no menu entry, so the
-        // only way to lock a month was the Advance button that Run Cycle no longer has.
-        { id: 'lock', label: 'Lock / Unlock Month' },
+        // No Lock / Unlock Month here: locking a month is Payroll Run → Lock / Unlock, one
+        // place for it, with the employee-level view that screen has.
       ],
       render: () => <PayrollMonthTab companyId={companyId} fy={fy} mode={(['create', 'freeze', 'unfreeze'].includes(subView) ? subView : 'create') as PmMode} /> },
     { id: 'categories', label: 'Department · Sub-dept · Location', icon: '', built: true, render: () => <CompanyStructureView companyId={companyId} /> },
@@ -360,11 +361,11 @@ function configSubs(companyId: string, subView: string, fy: string): SubTab[] {
   ]
 }
 
-function attendanceSubs(companyId: string, fy: string): SubTab[] {
+function attendanceSubs(companyId: string, fy: string, month: number): SubTab[] {
   return [
-    { id: 'upload', label: 'Attendance Upload', icon: '', built: true, render: () => <AttendanceUpload companyId={companyId} fy={fy} /> },
+    { id: 'upload', label: 'Attendance Upload', icon: '', built: true, render: () => <AttendanceUpload companyId={companyId} fy={fy} month={month} /> },
     { id: 'ot', label: 'OT Upload', icon: '', built: true, render: () => <OtUpload companyId={companyId} fy={fy} /> },
-    { id: 'edit', label: 'Attendance Edit', icon: '', built: true, render: () => <AttendanceEditTab companyId={companyId} fy={fy} /> },
+    { id: 'edit', label: 'Attendance Edit', icon: '', built: true, render: () => <AttendanceEditTab companyId={companyId} fy={fy} month={month} /> },
     { id: 'arrear', label: 'Arrear Days', icon: '', built: true, render: () => <AttendanceEdit companyId={companyId} fy={fy} mode="arrear" /> },
   ]
 }
@@ -377,32 +378,39 @@ function employeeSubs(companyId: string): SubTab[] {
   ]
 }
 
-function runSubs(companyId: string, fy: string): SubTab[] {
+function runSubs(companyId: string, fy: string, month: number): SubTab[] {
   return [
-    { id: 'cycle', label: 'Run Cycle', icon: '', built: true, render: () => <RunCycle companyId={companyId} headerFy={fy} /> },
-    { id: 'sync', label: 'Data Sync', icon: '', built: true, render: () => <MonthSync companyId={companyId} fy={fy} /> },
-    { id: 'uploaders', label: 'Bulk Uploaders', icon: '', built: true, render: () => <ManualVoucher companyId={companyId} fy={fy} /> },
-    { id: 'arrearpay', label: 'Arrear & Payments', icon: '', built: true, render: () => <ArrearPayments companyId={companyId} fy={fy} /> },
-    { id: 'lock', label: 'Lock / Unlock', icon: '', built: true, render: () => <LockUnlock companyId={companyId} fy={fy} /> },
+    { id: 'cycle', label: 'Run Cycle', icon: '', built: true, render: () => <RunCycle companyId={companyId} headerFy={fy} month={month} /> },
+    { id: 'sync', label: 'Data Sync', icon: '', built: true, render: () => <MonthSync companyId={companyId} fy={fy} month={month} /> },
+    { id: 'uploaders', label: 'Bulk Uploaders', icon: '', built: true, render: () => <ManualVoucher companyId={companyId} fy={fy} month={month} /> },
+    { id: 'arrearpay', label: 'Arrear & Payments', icon: '', built: true, render: () => <ArrearPayments companyId={companyId} fy={fy} month={month} /> },
+    { id: 'lock', label: 'Lock / Unlock', icon: '', built: true, render: () => <LockUnlock companyId={companyId} fy={fy} month={month} /> },
     { id: 'minwage', label: 'Minimum Wages Check', icon: '', desc: 'Flags employees whose gross falls below the applicable state minimum wage before payroll is processed.' },
   ]
 }
 
-function statutorySubs(fy: string): SubTab[] {
+function statutorySubs(companyId: string, fy: string, month: number): SubTab[] {
+  // Each statutory opens on its employee-wise register (lib/payroll/statutory-report): every
+  // component it is worked from and every figure it produces, from the month Run Payroll froze.
+  const reg = (kind: 'pf' | 'esic' | 'pt' | 'lwf' | 'tds') => <StatutoryComponentReport key={kind} kind={kind} companyId={companyId} fy={fy} month={month} />
   return [
-    { id: 'pf', label: 'PF / EPF + VPF', icon: '', built: true, href: '/dashboard/ess', desc: 'EPF @12% of capped wage is computed in the engine; VPF opt-in is available in the employee ESS portal.' },
-    { id: 'esic', label: 'ESIC', icon: '', built: true, desc: '0.75% employee / 3.25% employer, auto-applied for gross ≤ ₹21,000 during Calculate. Challan export is planned.' },
-    // Same components the Configuration menu shows — one screen each, not copies:
-    // two LWF or PT screens would eventually disagree, and whichever one HR happened to
-    // open would decide what they believed.
-    { id: 'lwf', label: 'LWF', icon: '', built: true, render: () => <LwfConfig /> },
-    { id: 'ptlwf', label: 'Professional Tax', icon: '', built: true, render: () => <PtConfig /> },
+    { id: 'pf', label: 'PF / EPF + VPF', icon: '', built: true, render: () => reg('pf') },
+    { id: 'esic', label: 'ESIC', icon: '', built: true, render: () => reg('esic') },
+    // LWF and PT keep their slab screens under the register. They are the same components
+    // the Configuration menu shows — one screen each, not copies: two LWF or PT screens would
+    // eventually disagree, and whichever one HR happened to open would decide what they believed.
+    { id: 'lwf', label: 'LWF', icon: '', built: true, render: () => <>{reg('lwf')}<SlabsHead title="LWF rates by state" /><LwfConfig /></> },
+    { id: 'ptlwf', label: 'Professional Tax', icon: '', built: true, render: () => <>{reg('pt')}<SlabsHead title="PT slabs by state" /><PtConfig /></> },
     // Enrolment itself happens in ESS; this is the report side — who is in, who is not.
     { id: 'nps', label: 'NPS', icon: '', built: true, render: () => <NpsReport fy={fy} /> },
-    { id: 'tds', label: 'TDS Calculation', icon: '', built: true, desc: 'Monthly TDS from each employee’s investment declaration feeds directly into the payroll run.' },
+    { id: 'tds', label: 'TDS Calculation', icon: '', built: true, render: () => reg('tds') },
     { id: 'form16', label: 'Form 16 / 24Q', icon: '', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },
     { id: 'perq', label: 'Perquisite Tax', icon: '', built: true, render: () => <PerquisiteStatutoryPanel fy={fy} /> },
   ]
+}
+
+function SlabsHead({ title }: { title: string }) {
+  return <div style={{ fontSize: TF.lead, fontWeight: W.bold, color: C.navy, margin: `${SP.xl}px 0 ${SP.md}px`, paddingTop: SP.lg, borderTop: `1px solid ${C.border}` }}>{title}</div>
 }
 
 function benefitsSubs(): SubTab[] {
@@ -1061,7 +1069,7 @@ function EmployeesTab({ companyId }: { companyId: string }) {
           <select style={{ ...S.input, width: 180 }} value={dept} onChange={e => setDept(e.target.value)}>
             <option value="">All departments</option>{depts.map(d => <option key={d} value={d}>{d}</option>)}
           </select>
-          <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel}>Export Excel</button>
+          <button style={{ ...S.btnPrimary, marginLeft: 'auto' }} onClick={exportExcel} title={filtered.length < emps.length ? `Only the ${filtered.length} employees matching the search / department` : undefined}>Export Excel ({filtered.length})</button>
         </div>
         {missingCtc > 0 && <div style={{ fontSize: 12, color: C.amber, marginTop: 8 }}>⚠ {missingCtc} employee(s) have no CTC in ctc_master, so CTC/Basic show ₹0. Seed ctc_master to populate.</div>}
       </div>
@@ -1110,18 +1118,31 @@ function PlannedTab({ title, items }: { title: string; items: string[] }) {
 
 // ── Parent ────────────────────────────────────────────────────────
 const FY_OPTIONS = ['2026-27', '2025-26', '2024-25']
+// Payroll months are financial-year months: 1 = April … 12 = March (lib/payroll/core MONTHS).
+const fyMonthOf = (d: Date) => { const m = d.getMonth() + 1; return m >= 4 ? m - 3 : m + 9 }
+const fyOfDate = (d: Date) => { const y = d.getMonth() >= 3 ? d.getFullYear() : d.getFullYear() - 1; return `${y}-${String(y + 1).slice(-2)}` }
+const calYearOf = (fy: string, m: number) => (Number(fy.split('-')[0]) || 2026) + (m >= 10 ? 1 : 0)
 interface CompanyOpt { id: string; company_name: string; group_id?: string | null; group_name?: string | null }
 
 export default function PayrollPage() {
   const { grant } = useGrant()
   const [companies, setCompanies] = useState<CompanyOpt[]>([])
   const [companyId, setCompanyId] = useState('')   // '' = Group Companies
-  const [fy, setFy] = useState('2026-27')
+  const [fy, setFy] = useState(() => FY_OPTIONS.includes(fyOfDate(new Date())) ? fyOfDate(new Date()) : '2026-27')
+  // The month every screen opens on: this month when the financial year is the current
+  // one, else April. Each screen still falls back to a month it has when this one is not
+  // created there yet.
+  const [month, setMonth] = useState(() => fyMonthOf(new Date()))
+  const pickFy = (v: string) => { setFy(v); setMonth(v === fyOfDate(new Date()) ? fyMonthOf(new Date()) : 1) }
   const [tab, setTab] = useState('dashboard')
+  // Configuration is set up from the admin dashboard only: opened from ESS (the same page,
+  // hosted by components/ess/AdminModules under /ess/…) Payroll has no Configuration tab.
+  const onAdmin = (usePathname() || '').startsWith('/dashboard')
+  const tabOpen = (k: string) => (k !== 'config' || onAdmin) && canSeeScreen(grant, 'payroll.' + k)
   useEffect(() => {
-    const vis = ['dashboard','config','attendance','employees','run','statutory','benefits','offcycle','reports','admin'].filter(k => canSeeScreen(grant, 'payroll.'+k))
+    const vis = ['dashboard','config','attendance','employees','run','statutory','benefits','offcycle','reports','admin'].filter(tabOpen)
     if (vis.length && !vis.includes(tab)) setTab(vis[0])
-  }, [grant, tab])
+  }, [grant, tab, onAdmin])   // eslint-disable-line react-hooks/exhaustive-deps
   const [sub, setSub] = useState('')                // active sub-section id within the current tab
   const [subView, setSubView] = useState('catalog') // active nested sub-view (e.g. Pay Heads → Standard)
 
@@ -1130,7 +1151,7 @@ export default function PayrollPage() {
   }, [])
 
   // companyId '' = Group Companies → the scoped tabs show/act on all companies at once.
-  const ctx = { companyId, fy, subView }
+  const ctx = { companyId, fy, month, subView }
   const sections = subsForTab(tab, ctx)
   const activeSub = sections.find(s => s.id === sub) || sections[0]
   const tabMeta = TABS.find(t => t.id === tab)!
@@ -1145,8 +1166,14 @@ export default function PayrollPage() {
           </div>
           <div>
             <label style={S.label}>Financial Year</label>
-            <select style={{ ...S.input, minWidth: 130 }} value={fy} onChange={e => setFy(e.target.value)}>
+            <select style={{ ...S.input, minWidth: 130 }} value={fy} onChange={e => pickFy(e.target.value)}>
               {FY_OPTIONS.map(y => <option key={y} value={y}>FY {y}</option>)}
+            </select>
+          </div>
+          <div>
+            <label style={S.label}>Month</label>
+            <select style={{ ...S.input, minWidth: 130 }} value={month} onChange={e => setMonth(Number(e.target.value))}>
+              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m} {calYearOf(fy, i + 1)}</option>)}
             </select>
           </div>
           <div>
@@ -1173,7 +1200,7 @@ export default function PayrollPage() {
         {/* Tab bar — each main tab is a dropdown of its sub-sections; pick one to enter it.
             Wraps onto multiple rows so every section is always visible without scrolling. */}
         <div style={{ display: 'flex', flexWrap: 'wrap', gap: 8, rowGap: 8, marginBottom: 16, paddingBottom: 8, position: 'sticky', top: 0, zIndex: 30, background: C.bg, paddingTop: 8, boxShadow: 'var(--ez-shadow-flat)' }}>
-          {TABS.filter(t => canSeeScreen(grant, 'payroll.'+t.id)).map(t => (
+          {TABS.filter(t => tabOpen(t.id)).map(t => (
             <MainTabDropdown
               key={t.id}
               label={t.label}
@@ -1193,7 +1220,7 @@ export default function PayrollPage() {
               <div style={{ fontSize: 17, fontWeight: 700, color: C.navy }}>Dashboard</div>
               <div style={{ fontSize: 12, color: C.muted, marginTop: 2 }}>{tabMeta.subtitle}</div>
             </div>
-            <PayrollDashboard companyId={companyId} fy={fy} companies={companies} />
+            <PayrollDashboard companyId={companyId} fy={fy} month={month} companies={companies} />
           </>
         ) : (
           <>

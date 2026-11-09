@@ -1,11 +1,12 @@
 // app/api/flexi/claims/route.ts — Flexi Claims API.
 // POST actions: SUBMIT · APPROVE · REJECT · REQUEST_LIMIT · APPROVE_LIMIT_REQUEST ·
-//               OVERRIDE_LIMIT · TOGGLE_WINDOW
+//               OVERRIDE_LIMIT  (TOGGLE_WINDOW is refused: the window runs the 1st–20th on its own)
 // GET: claims by employee_id or company_id (+ month/year/status filters).
 import { NextRequest, NextResponse } from 'next/server'
 import { createClient } from '@supabase/supabase-js'
 import { grantForRequest } from '@/lib/rms/server'
 import { companyFilter } from '@/lib/rms/resolve'
+import { resolveFlexi, COMP_NAMES } from '@/lib/flexi/resolve-server'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -18,10 +19,20 @@ export async function POST(req: NextRequest) {
     const { action } = body
 
     if (action === 'SUBMIT') {
-      const { window_id, employee_id, company_id, component_code, claim_amount, bill_date, bill_no, agency_name, vendor_desc, remark, supporting_remark } = body
-      const { data: win } = await supa.from('flexi_windows').select('status').eq('id', window_id).single()
-      if (!win || win.status !== 'OPEN') return NextResponse.json({ error: 'Submission window is closed.' }, { status: 400 })
+      const { employee_id, component_code, claim_amount, bill_date, bill_no, agency_name, vendor_desc, remark, supporting_remark } = body
       if (!(claim_amount > 0)) return NextResponse.json({ error: 'Claim amount must be greater than zero.' }, { status: 400 })
+      // The window is the 1st–20th of every month, on its own (lib/flexi/window): the claim
+      // goes on this month's window for the employee's company, whatever window_id the caller
+      // sent. Inside it, what refuses a bill is the balance — the same resolver /api/ess/flexi
+      // enforces, so the web and the app agree on what is left.
+      const f = await resolveFlexi(String(employee_id || ''))
+      if (!f.companyId || !f.window?.id) return NextResponse.json({ error: 'The employee’s company could not be found.' }, { status: 400 })
+      if (!f.windowOpen) return NextResponse.json({ error: `Bills can be submitted from the 1st to the 20th of the month. The window opens again on ${new Date(`${f.diagnostics.reopensOn}T00:00:00Z`).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', timeZone: 'UTC' })}.` }, { status: 400 })
+      const head = f.heads.find(h => h.code === String(component_code || '').toUpperCase())
+      if (!head) return NextResponse.json({ error: `${COMP_NAMES[component_code] || component_code} is not one of this employee’s flexi components this year.` }, { status: 400 })
+      if (head.available <= 0) return NextResponse.json({ error: `Nothing is left on ${head.name}: the balance is ₹0, so no more bills can be submitted for it.` }, { status: 409 })
+      if (Number(claim_amount) > head.available) return NextResponse.json({ error: `Only ₹${Math.round(head.available).toLocaleString('en-IN')} is left on ${head.name}; this bill is ₹${Math.round(Number(claim_amount)).toLocaleString('en-IN')}.` }, { status: 409 })
+      const window_id = f.window.id, company_id = f.companyId
 
       // Rule-based AI flag (OCR service can override later).
       const ai_flag = claim_amount > 15000 ? 'flag' : 'clear'
@@ -125,11 +136,9 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ success: true, count: rows.length })
     }
 
+    // The claim window runs the 1st–20th on its own (lib/flexi/window); nobody closes it by hand.
     if (action === 'TOGGLE_WINDOW') {
-      const { window_id, new_status } = body
-      const { error } = await supa.from('flexi_windows').update({ status: new_status, closed_manually: new_status !== 'OPEN' }).eq('id', window_id)
-      if (error) return NextResponse.json({ error: error.message }, { status: 500 })
-      return NextResponse.json({ success: true })
+      return NextResponse.json({ error: 'The flexi claim window opens on the 1st and closes after the 20th of every month on its own; it is not closed by hand.' }, { status: 410 })
     }
 
     return NextResponse.json({ error: `Unknown action: ${action}` }, { status: 400 })
@@ -157,7 +166,7 @@ export async function GET(req: NextRequest) {
     // Pin to the caller's own company unless a cross-company (super-admin) role. A
     // non-cross caller asking for another company — or 'ALL' — is forced back to theirs.
     const grant = await grantForRequest(req)
-    const company = companyFilter(grant, compId)
+    const company = companyFilter(grant, compId, 'Flexi Claims')
     let q = supa.from('flexi_claims')
       .select('*, employees(emp_code, full_name, department_id, location_id, company_id, departments!employees_department_id_fkey(dept_name), locations!location_id(location_name)), flexi_claim_files(id, file_name, file_type, file_url)')
     if (company) q = q.eq('company_id', company)

@@ -86,7 +86,7 @@ export default function BankDetailsTab({ companyId }: { companyId: string }) {
           </label>
           <button onClick={exportXlsx} disabled={!filtered.length}
             style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: `linear-gradient(120deg,#10B981,${C.green})`, color: TK.onAccent, fontWeight: 700, fontSize: 13, cursor: filtered.length ? 'pointer' : 'not-allowed', opacity: filtered.length ? 1 : 0.5 }}>
-            ⬇ Export
+            ⬇ Export ({filtered.length})
           </button>
         </div>
         <div style={{ fontSize: 11, color: C.muted, marginTop: 8 }}>

@@ -41,6 +41,8 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   'org-chart':          lazy(() => import('@/app/dashboard/org-chart/page')),
   'bulk-upload':        lazy(() => import('@/app/dashboard/bulk-upload/page')),
   transfer:             lazy(() => import('@/app/dashboard/transfer/page')),
+  'employee-letters':   lazy(() => import('@/app/dashboard/employee-letters/page')),
+  learning:             lazy(() => import('@/app/dashboard/learning/page')),
   // Time & Attendance
   attendance:           lazy(() => import('@/app/dashboard/attendance/page')),
   'attendance-reports': lazy(() => import('@/app/dashboard/attendance-reports/page')),
@@ -55,6 +57,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   // Compliance & Docs
   compliance:           lazy(() => import('@/app/dashboard/compliance/page')),
   letters:              lazy(() => import('@/app/dashboard/letters/page')),
+  esign:                lazy(() => import('@/app/dashboard/esign/page')),
   policies:             lazy(() => import('@/app/dashboard/policies/page')),
   reports:              lazy(() => import('@/app/dashboard/reports/page')),
   // Setup
@@ -67,6 +70,7 @@ export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string
   // Help
   ai:                   lazy(() => import('@/app/dashboard/ai/page')),
   support:              lazy(() => import('@/app/dashboard/support/page')),
+  'tds-calculator':     lazy(() => import('@/app/dashboard/tds-calculator/page')),
 }
 
 export function AdminModuleHost({ moduleKey }: { moduleKey: string }) {

@@ -35,7 +35,7 @@ export async function GET(req: NextRequest) {
     // Pin to the caller's own company unless they are a cross-company (super-admin)
     // role. companyFilter returns null only for a cross caller who asked for all.
     const grant = await grantForRequest(req);
-    const company = companyFilter(grant, p.get('company_id'));
+    const company = companyFilter(grant, p.get('company_id'), 'Finance');
 
     let q = sb.from('finance_work_items').select('*');
     if (company) q = q.eq('company_id', company);

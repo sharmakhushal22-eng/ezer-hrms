@@ -4,7 +4,7 @@
 // somebody's L1 does not appear here at all, because managing people is not the same as
 // being allowed into Payroll. The two live in different tables and meet only where a
 // screen chooses to use both.
-import { MODULES, atLeast, higher, type AccessLevel, type Module } from './modules.ts'
+import { MODULES, atLeast, higher, moduleForPath, type AccessLevel, type Module } from './modules.ts'
 import { moduleKeyOf } from './screens.ts'
 
 export interface RoleRef {
@@ -30,6 +30,13 @@ export interface Grant {
    *  company_id unless the caller is a group-level (super-admin) role. Null for the legacy
    *  shared login, which has no employee row — treated as "no company gate", see server.ts. */
   companyId: string | null
+  /** Every company any held role is valid in (own company always first). A role's scope is
+   *  chosen when it is assigned (ess_user_roles.company_ids, migration 203); with none it is
+   *  the employee's own company, as before. */
+  companyIds: string[]
+  /** Per module, the companies a role granting it is valid in — what that module's screens
+   *  may show and pick from. The manager roles and EMPLOYEE are always own-company. */
+  companiesByModule: Record<string, string[]>
   roles: RoleRef[]
   modules: Record<string, AccessLevel>
   /** Sub-module (tab) visibility. `screenAllow['recruitment.mrf'] === true` means at least
@@ -66,21 +73,49 @@ export interface Grant {
  * blank/'ALL'. Everyone else is forced to their own company and `requested` is ignored —
  * this is the single choke-point that stops '' / 'ALL' from leaking other companies.
  */
-export function companyFilter(grant: Grant, requested?: string | null): string | null {
+export function companyFilter(grant: Grant, requested?: string | null, module?: Module | null): string | null {
   // Cross-company callers, and callers whose own company is unknown (the legacy shared
   // login has no employee row), are not pinned — they may narrow to a requested company
-  // or see all. Everyone else is forced to their own company.
+  // or see all. Everyone else is pinned to a company their roles are valid in: the one they
+  // picked when it is one of those, else their own.
   if (grant.crossCompany || !grant.companyId) {
     return requested && requested !== 'ALL' && requested !== '' ? requested : null
   }
-  return grant.companyId
+  const allowed = allowedCompanies(grant, module)
+  if (requested && allowed.includes(requested)) return requested
+  return allowed.includes(grant.companyId) ? grant.companyId : (allowed[0] || grant.companyId)
+}
+
+/** The companies this person's roles are valid in — for `module` when given, else for the
+ *  module of the page in view (in the browser), else for any of their roles. */
+export function allowedCompanies(grant: Grant, module?: Module | null): string[] {
+  const own = grant.companyId ? [grant.companyId] : []
+  const m = module !== undefined ? module : (typeof window !== 'undefined' ? pageModule() : null)
+  const list = m ? grant.companiesByModule?.[m] : grant.companyIds
+  return list && list.length ? list : (grant.companyIds?.length ? grant.companyIds : own)
+}
+
+/** The module of the screen in view: /dashboard/<x> or the same screen inside ESS, /ess/<x>. */
+function pageModule(): Module | null {
+  const p = window.location.pathname
+  return moduleForPath(p.startsWith('/ess/') ? `/dashboard/${p.slice(5)}` : p)
 }
 
 /** The companies a caller may choose in a dropdown. A cross-company caller sees all;
- *  everyone else sees only their own. Pure — safe on client and server. */
-export function scopedCompanies<T extends { id: string }>(grant: Grant, all: T[]): T[] {
+ *  everyone else the companies their roles are valid in (their own, unless a role was
+ *  given more). Pure — safe on client and server. */
+export function scopedCompanies<T extends { id: string }>(grant: Grant, all: T[], module?: Module | null): T[] {
   if (grant.crossCompany || !grant.companyId) return all
-  return all.filter(c => c.id === grant.companyId)
+  const allowed = allowedCompanies(grant, module)
+  return all.filter(c => allowed.includes(c.id))
+}
+
+/** Whether a company selector may offer "Group Companies" (every company at once): a
+ *  cross-company caller, or one whose roles are valid in every company there is. A caller
+ *  scoped to some of the companies never gets it — '' means all of them, not "all of mine". */
+export function canPickGroup<T extends { id: string }>(grant: Grant, all: T[], module?: Module | null): boolean {
+  if (grant.crossCompany || !grant.companyId) return true
+  return all.length > 1 && scopedCompanies(grant, all, module).length === all.length
 }
 
 /** What a company selector should default to: '' (All) for a cross-company caller, else
@@ -97,7 +132,7 @@ export const ROLE_ADMIN_CODES = [...SUPER_ADMIN_CODES, 'HR_HEAD', 'CHRO']
 
 export function emptyGrant(): Grant {
   return {
-    employeeId: null, empCode: null, name: null, companyId: null,
+    employeeId: null, empCode: null, name: null, companyId: null, companyIds: [], companiesByModule: {},
     roles: [], modules: {}, screenAllow: {}, screenConfigured: {}, approvals: [],
     isSuperAdmin: false, crossCompany: false, enforced: true, legacy: false, resolved: true,
   }
@@ -112,9 +147,14 @@ export interface ResolveInput {
   permissions: { role_id: string; module: string; access_level: AccessLevel }[]
   approvals: (ApprovalRight & { role_id: string })[]
   screens?: { role_id: string; screen_key: string; can_view: boolean }[]
+  /** role_id → the companies that role is valid in (null / empty = own company). */
+  roleCompanies?: Record<string, string[] | null>
   enforced?: boolean
   legacy?: boolean
 }
+
+/** Roles that come from the reporting structure or are automatic: always own-company. */
+export const OWN_COMPANY_ROLE_CODES = ['EMPLOYEE', 'L1_MANAGER', 'L2_MANAGER', 'HOD']
 
 /**
  * Combine every role a person holds into one answer.
@@ -152,6 +192,24 @@ export function resolveGrant(input: ResolveInput): Grant {
     }
   }
 
+  // Company scope, per role and so per module.
+  const own = g.companyId
+  const codeOf = new Map(input.roles.map(r => [r.id, String(r.role_code || '').toUpperCase()]))
+  const scopeOf = (roleId: string): string[] => {
+    const list = OWN_COMPANY_ROLE_CODES.includes(codeOf.get(roleId) || '') ? null : input.roleCompanies?.[roleId]
+    const out = (list && list.length ? list : own ? [own] : []).filter(Boolean) as string[]
+    return [...new Set(out)]
+  }
+  const all = new Set<string>(own ? [own] : [])
+  for (const r of input.roles) for (const c of scopeOf(r.id)) all.add(c)
+  g.companyIds = [...all]
+  for (const p of input.permissions) {
+    if (!held.has(p.role_id) || !atLeast((p.access_level || 'NONE') as AccessLevel, 'VIEW')) continue
+    const cur = new Set(g.companiesByModule[p.module] || [])
+    for (const c of scopeOf(p.role_id)) cur.add(c)
+    g.companiesByModule[p.module] = [...cur]
+  }
+
   // Screen (sub-module tab) visibility, unioned across the person's roles. A module is
   // "configured" the moment ANY held role has a screen row for it — and only then are its
   // tabs restricted; otherwise every tab stays visible. Super admin is never restricted.
@@ -185,6 +243,12 @@ export function canSee(g: Grant, m: Module | null): boolean {
   if (!g.enforced) return true
   if (m === null) return true                       // dashboard landing page
   return atLeast(g.modules[m], 'VIEW')
+}
+
+/** The same question for a screen several modules open: any one of them is enough. */
+export function canSeeAny(g: Grant, modules: Module[]): boolean {
+  if (!g.enforced) return true
+  return !modules.length || modules.some(m => atLeast(g.modules[m], 'VIEW'))
 }
 
 /** May this person see this sub-module tab? Reliability-first, default-VISIBLE:

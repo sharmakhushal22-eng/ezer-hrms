@@ -30,7 +30,7 @@ export async function POST(req: NextRequest) {
   const { employee_ids, company_id, all, reset, performedBy } = body
 
   const grant = await grantForRequest(req)
-  const company = companyFilter(grant, company_id ?? null)
+  const company = companyFilter(grant, company_id ?? null, 'ESS & Roles')
 
   // Target employee set.
   let q = sb.from('employees').select('id, emp_code, full_name, office_email, personal_email, employment_status').neq('is_test', true)

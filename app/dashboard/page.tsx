@@ -316,7 +316,7 @@ export default function Dashboard() {
     const co = companyFilter(grant, grant.companyId)
     let empQ = supabase.from('employees').select('id, full_name, emp_code, first_name, employment_status, blacklisted, date_of_birth, group_doj, last_working_date, company_id, location_id, companies!employees_company_id_fkey(company_name), locations!location_id(location_name)').neq('is_test', true)
     let candQ = supabase.from('candidates').select('id, full_name, stage, onboarding_date, blacklisted, created_at, designation, mrf_id, offer_accepted')
-    let mrfQ = supabase.from('manpower_requisitions').select('id, status, no_of_openings, openings, designation, position, department_id, location_id')
+    let mrfQ = supabase.from('manpower_requisitions').select('id, mrf_number, status, no_of_openings, openings, designation, position, department_id, location_id')
     if (co) { empQ = empQ.eq('company_id', co); candQ = candQ.eq('company_id', co); mrfQ = mrfQ.eq('company_id', co) }
     const [empR, compR, candR, mrfR, audR, deptR, locR] = await Promise.all([
       empQ,
@@ -373,7 +373,7 @@ export default function Dashboard() {
         .map((e: any) => ({ name: e.full_name || '—', sub: e.companies?.company_name || '—', meta: isLeft(e) ? 'Exited' : (e.employment_status || 'Active'), tone: isLeft(e) ? C.critical : C.positive })),
       active: [...activeEmps].sort((a: any,b: any) => (a.full_name||'').localeCompare(b.full_name||''))
         .map((e: any) => ({ name: e.full_name || '—', sub: e.companies?.company_name || '—', meta: e.locations?.location_name || '—', tone:C.positive })),
-      open: approvedMrfs.map((m: any) => ({ name: m.designation || m.position || '—', sub: `${Number(m.no_of_openings || m.openings || 0)} opening(s)`, meta: m.status || 'APPROVED', tone:C.info })),
+      open: approvedMrfs.map((m: any) => ({ name: m.designation || m.position || '—', sub: `${(n => `${n} opening${n === 1 ? '' : 's'}`)(Number(m.no_of_openings || m.openings || 0))}${m.mrf_number ? ` · ${m.mrf_number}` : ''}`, meta: m.status || 'APPROVED', tone:C.info })),
       pipeline: [...pipelineCands].sort((a: any,b: any) => RECRUIT_STAGES.indexOf(a.stage) - RECRUIT_STAGES.indexOf(b.stage))
         .map((c: any) => ({ name: c.full_name || '—', dept: deptOf(c), status: c.stage || '—', location: locOf(c), tone: STAGE_COLOR[c.stage] || C.brand })),
       // already ordered by joining date (undated last) when joiningCands was built

@@ -46,8 +46,16 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, canDelete =
   const budgetAmount = m.budgetLabel ?? (m.budgetMaxRupees != null ? formatLakh(m.budgetMaxRupees, 1) : '-');
   const budgetCaption = m.budgetCaption ?? (m.budgetLabel ? null : m.budgetMaxRupees != null ? 'max per year' : 'Not set');
   const budgetTitle = [budgetAmount, budgetCaption].filter(Boolean).join(' · ');
+  // The whole card opens the detail (the eye button it used to carry is gone). A click on
+  // one of its own controls — Review, Edit, Close, the menu — does that control's job only.
+  const open = (e: React.MouseEvent | React.KeyboardEvent) => {
+    if ((e.target as HTMLElement).closest('button, a, input, select, textarea, label, [role="menu"]')) return
+    if ('key' in e) { if (e.key !== 'Enter' && e.key !== ' ') return; e.preventDefault() }
+    onView()
+  }
   return (
-    <article ref={tilt} className="rx-mc" style={{ ['--st' as string]: MRF_COLOR[m.status] }}>
+    <article ref={tilt} className="rx-mc rx-mc-click" style={{ ['--st' as string]: MRF_COLOR[m.status] }}
+      role="button" tabIndex={0} aria-label={`Open ${m.title} (${m.code})`} title="Open the requisition" onClick={open} onKeyDown={open}>
       <div className="rx-mc-in">
         {/* The number and the status share the top row; every other badge gets
             its own wrapping row below. Four or five badges beside the number
@@ -99,7 +107,6 @@ export function MrfCard({ m, onView, onEdit, onMore, canEdit = true, canDelete =
           <div className="rx-mc-act">
             {onReview && canReview && (
               <button type="button" className="rx-btn sm p" onClick={onReview} aria-label={`Review the approval request for ${m.title}`} title="It is waiting on you. Open the request to approve, send back or reject">Review request</button>)}
-            <button type="button" className="rx-btn g" onClick={onView} aria-label={`View ${m.title}`} title="View"><Icon name="eye" /></button>
             {onCloseMrf && canCloseReopen && m.status === 'APPROVED' && (
               <button type="button" className="rx-btn g" onClick={onCloseMrf} aria-label={`Close ${m.title}`} title="Close MRF"><Icon name="lock" /></button>)}
             {onReopen && canCloseReopen && m.status === 'CLOSED' && (

@@ -4,7 +4,7 @@
 //   POST { action:'acknowledge', invite_id }
 //   POST { action:'feedback', invite_id, feedback }   (MAIN interviewer only)
 //
-// The interviewer's half of the flow, reached from ESS → Tasks & Approvals.
+// The interviewer's half of the flow, reached from the ESS notification panel (the bell).
 // Every invitee (main interviewer + panelists) sees the details and acknowledges;
 // only the MAIN interviewer may submit feedback. The feedback carries a decision
 // (Hold / Reject / Shortlist) that moves the candidate, and the hiring manager who

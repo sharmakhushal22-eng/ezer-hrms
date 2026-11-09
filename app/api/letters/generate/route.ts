@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
   const { template_id, employee_codes, generated_by } = body
 
   const grant = await grantForRequest(req)
-  const company_id = companyFilter(grant, body.company_id) || body.company_id
+  const company_id = companyFilter(grant, body.company_id, 'HR Letters') || body.company_id
 
   if (!template_id || !company_id || !employee_codes?.length) {
     return NextResponse.json({ error: 'template_id, company_id, and employee_codes are required' }, { status: 400 })

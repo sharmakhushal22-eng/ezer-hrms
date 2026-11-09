@@ -24,6 +24,16 @@ const C = {
 }
 const font = '"DM Sans","Segoe UI",sans-serif'
 
+// The categories Data Sync shows: the ones with a Sync button.
+//  • TDS is not one. It reads this month's arrear, professional tax and earned income — all
+//    of which only mean anything once Run Payroll has settled them — so syncing it ahead of
+//    time would show a number the run is about to overwrite. Run Payroll calls
+//    sync_month_tds() itself, last.
+//  • Nor are Earned salary, EPF · EPS, ESIC, Professional Tax and LWF (syncable: false). Run
+//    Payroll recomputes them every run, in an order that matters; a row here could only show
+//    "Run Payroll", so they are left out.
+const DATA_SYNC_CATEGORIES = SYNC_CATEGORIES.filter(c => c.key !== 'tds' && c.syncable !== false)
+
 // ── Month-over-month change table ──────────────────────────────────────────
 // Sits under the sync card: for the selected payroll month, compares every frozen
 // Month Master column against the previous month's and counts, per category, how many
@@ -185,21 +195,10 @@ function CategoryRow({ cat, count, extra, busy, busyText, disabled, onSync, onDo
           <span style={{ fontSize: 12, fontWeight: 700, color: C.purpleD, background: C.purpleBg, borderRadius: 99, padding: '3px 11px', whiteSpace: 'nowrap' }}>
             {count == null ? '-' : count}
           </span>
-          {/* Run Payroll owns these five and recomputes them every run, in an order that
-              matters. A Sync button here could only produce a figure the next run
-              overwrites — or, pressed out of order, a wrong one. The Download stays:
-              this is where the EPF, ESIC, PT and LWF registers come from. */}
-          {cat.syncable === false ? (
-            <span title="Run Payroll computes this every time it runs. It is not synced by hand"
-              style={{ fontSize: 11, fontWeight: 700, color: C.muted, background: TK.sunken, border: `1px solid ${C.border}`, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>
-              Run Payroll
-            </span>
-          ) : (
-            <button onClick={onSync} disabled={busy || disabled}
-              style={{ padding: '7px 15px', borderRadius: 10, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
-              {busy ? (busyText || 'Syncing…') : 'Sync'}
-            </button>
-          )}
+          <button onClick={onSync} disabled={busy || disabled}
+            style={{ padding: '7px 15px', borderRadius: 10, border: 'none', background: busy || disabled ? TK.brandTint : C.purple, color: TK.onAccent, fontWeight: 700, fontSize: 12, fontFamily: font, cursor: busy || disabled ? 'not-allowed' : 'pointer', whiteSpace: 'nowrap' }}>
+            {busy ? (busyText || 'Syncing…') : 'Sync'}
+          </button>
           <button onClick={onDownload} disabled={disabled} title={`Download ${cat.label} as frozen in this month`}
             style={{ padding: '7px 10px', borderRadius: 10, border: `1px solid ${C.border}`, background: TK.surface, color: C.muted, fontSize: 12, fontFamily: font, cursor: disabled ? 'not-allowed' : 'pointer' }}></button>
         </>
@@ -211,6 +210,80 @@ function CategoryRow({ cat, count, extra, busy, busyText, disabled, onSync, onDo
       ) : (
         <span style={{ fontSize: 11, fontWeight: 700, color: TK.critical, background: TK.criticalTint, borderRadius: 99, padding: '4px 12px', whiteSpace: 'nowrap' }}>Planned</span>
       )}
+    </div>
+  )
+}
+
+
+// ── What changed since the month was frozen ────────────────────────────────
+// One box per category that has a Sync button: how many employees' data changed in HRMS
+// since this month was frozen (payroll_sync_pending, migration 086), so 3 bank accounts
+// changed reads Bank 3 and an untouched category reads 0. The categories the database
+// cannot diff (they recompute from the month itself: NPS, arrear, loan…) say so instead
+// of showing a number they do not have. A box with changes opens that category's Sync.
+// Defined outside MonthSync so a refresh does not remount it.
+type Pending = Record<string, number | null>   // category key → changed employees; null = not tracked
+function PendingStrip({ cats, pending, loading, locked, onOpen }: {
+  cats: SyncCategory[]; pending: Pending | null; loading: boolean; locked: boolean
+  onOpen: (cat: SyncCategory) => void
+}) {
+  const tracked = cats.filter(c => c.diffable)
+  const total = tracked.reduce((n, c) => n + (pending?.[c.key] || 0), 0)
+  const known = !!pending && tracked.some(c => pending[c.key] != null)
+  return (
+    <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 16, padding: '16px 18px', marginBottom: 14, boxShadow: 'var(--ez-shadow-flat)' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 14 }}>
+        <div style={{ flex: 1, minWidth: 220 }}>
+          <div style={{ fontSize: 14, fontWeight: 800, color: C.navy, letterSpacing: '-.01em' }}>Updates waiting to sync</div>
+          <div style={{ fontSize: 11.5, color: C.muted, marginTop: 2 }}>Employees whose data changed in HRMS since this month was frozen, per component.</div>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'baseline', gap: 6, padding: '6px 14px', borderRadius: 99, whiteSpace: 'nowrap',
+          background: loading || !known ? TK.sunken : total ? C.amberBg : C.greenBg,
+          border: `1px solid ${loading || !known ? C.border : total ? TK.warningEdge : TK.positiveEdge}` }}>
+          {loading ? <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Checking HRMS…</span>
+            : !known ? <span style={{ fontSize: 12, color: C.muted, fontWeight: 600 }}>Change tracking unavailable</span>
+              : total ? <><b style={{ fontSize: 17, color: C.amber }}>{total}</b><span style={{ fontSize: 12, color: C.amber, fontWeight: 600 }}>update{total === 1 ? '' : 's'} pending</span></>
+                : <span style={{ fontSize: 12, color: C.green, fontWeight: 700 }}>✓ Everything in sync</span>}
+        </div>
+      </div>
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(150px, 1fr))', gap: 10 }}>
+        {cats.map(cat => {
+          const n = pending?.[cat.key]
+          const tracks = !!cat.diffable && n != null
+          const hot = tracks && (n as number) > 0
+          const clickable = hot && !locked
+          return (
+            <button key={cat.key} type="button" disabled={!clickable} onClick={() => clickable && onOpen(cat)}
+              className={clickable ? 'ez-lift' : undefined}
+              title={clickable ? `Review and sync the ${n} employee${n === 1 ? '' : 's'} whose ${cat.label.toLowerCase()} changed` : undefined}
+              style={{
+                textAlign: 'left', fontFamily: font, padding: '12px 13px', borderRadius: 12, minHeight: 104,
+                display: 'flex', flexDirection: 'column', gap: 6, cursor: clickable ? 'pointer' : 'default',
+                background: hot ? C.amberBg : TK.surface,
+                border: `1px solid ${hot ? TK.warningEdge : C.border}`,
+                boxShadow: hot ? 'var(--ez-shadow-raised)' : 'none',
+              }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                <span style={{ width: 26, height: 26, borderRadius: 8, background: hot ? TK.surface : TK.sunken, display: 'grid', placeItems: 'center', fontSize: 13, flexShrink: 0 }}>{cat.icon}</span>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: C.navy, lineHeight: 1.25, overflow: 'hidden', textOverflow: 'ellipsis' }}>{cat.label}</span>
+              </div>
+              {loading && cat.diffable ? (
+                <div style={{ height: 26, width: 44, borderRadius: 7, background: TK.sunken, marginTop: 2 }} />
+              ) : tracks ? (
+                <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, color: hot ? C.amber : TK.faint, fontVariantNumeric: 'tabular-nums', marginTop: 2 }}>{n}</div>
+              ) : (
+                <div style={{ fontSize: 26, fontWeight: 800, lineHeight: 1, color: TK.faint, marginTop: 2 }}>–</div>
+              )}
+              <div style={{ fontSize: 10.5, fontWeight: 600, color: hot ? C.amber : tracks ? C.green : C.muted, marginTop: 'auto' }}>
+                {loading && cat.diffable ? ' '
+                  : hot ? `employee${n === 1 ? '' : 's'} updated · sync →`
+                    : tracks ? '✓ up to date'
+                      : cat.diffable ? 'not checked' : 'recalculated on every sync'}
+              </div>
+            </button>
+          )
+        })}
+      </div>
     </div>
   )
 }
@@ -344,7 +417,7 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
           <div style={{ display: 'flex', gap: 8, marginTop: 13, flexWrap: 'wrap' }}>
             {companies.length > 1 && (
               <select style={{ ...inp, flex: '0 1 170px' }} value={company} onChange={e => setCompany(e.target.value)}>
-                <option value="">All companies</option>
+                <option value="">Group Companies (all)</option>
                 {companies.map(c => <option key={c} value={c}>{c}</option>)}
               </select>
             )}
@@ -465,7 +538,7 @@ function EmployeePicker({ cat, pool, pending, busy, onCancel, onConfirm }: {
 }
 
 
-export default function MonthSync({ companyId, fy }: { companyId: string; fy: string }) {
+export default function MonthSync({ companyId, fy, month }: { companyId: string; fy: string; month?: number }) {
   const [runs, setRuns] = useState<PayrollRun[]>([])
   const [monthVal, setMonthVal] = useState('')        // month number — one entry per month, not per company
   const [status, setStatus] = useState<SyncStatus | null>(null)
@@ -480,6 +553,8 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
   // moment Sync is pressed, so the list is what changed as of NOW, not page load.
   const [pendingMap, setPendingMap] = useState<Map<string, string> | null>(null)
   const [checkingKey, setCheckingKey] = useState('')
+  const [pending, setPending] = useState<Pending | null>(null)
+  const [pendingBusy, setPendingBusy] = useState(false)
   const [msg, setMsg] = useState('')
   const [err, setErr] = useState('')
 
@@ -489,6 +564,9 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
       setMonthVal(p => (list.some(r => String(r.month) === p) ? p : String(list[0]?.month ?? '')))
     }).catch(e => setErr(e.message))
   }, [companyId, fy])
+
+  // The header's Month (Payroll → Month) leads; a month not created here yet leaves the pick alone.
+  useEffect(() => { if (month && runs.some(r => r.month === month)) setMonthVal(String(month)) }, [month, runs])   // eslint-disable-line react-hooks/exhaustive-deps
 
   // In Group Companies mode one calendar month spans several runs — one per company.
   // The screen works off that whole set, so the month appears once instead of three times.
@@ -507,6 +585,19 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
     } catch (e: any) { setErr(e.message || String(e)) }
   }, [runIds.join(',')])   // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => { refresh() }, [refresh])
+
+  // The counters at the top: one payroll_sync_pending call per change-tracked category.
+  // A category whose diff fails (086 not applied) reads null, which the box shows as "–".
+  const refreshPending = useCallback(async () => {
+    if (!runIds.length) { setPending(null); return }
+    setPendingBusy(true)
+    const out: Pending = {}
+    await Promise.all(DATA_SYNC_CATEGORIES.map(async cat => {
+      out[cat.key] = cat.diffable ? await loadPendingChanges(cat, runIds).then(m => (m ? m.size : null)).catch(() => null) : null
+    }))
+    setPending(out); setPendingBusy(false)
+  }, [runIds.join(',')])   // eslint-disable-line react-hooks/exhaustive-deps
+  useEffect(() => { refreshPending() }, [refreshPending])
 
   useEffect(() => {
     if (!monthRuns.length) { setPool([]); return }
@@ -534,7 +625,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
     setMsg(`${cat.label} synced: ${count} employee${count === 1 ? '' : 's'} refreshed from HRMS`
       + (codes ? ` (the ${codes.length} you selected)` : ' (the whole month)')
       + `, into ${label}. Every other category is untouched.`)
-    refresh()
+    refresh(); refreshPending()
   }
 
   async function syncEverything() {
@@ -544,7 +635,7 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
     setBusyKey('')
     if (error) { setErr(error); return }
     setMsg(`Full re-sync done: ${count} employees frozen from current HRMS data.`)
-    refresh()
+    refresh(); refreshPending()
   }
 
   async function download(cat: SyncCategory) {
@@ -565,16 +656,9 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
 
   const isGroup = !companyId
   const label = sel ? periodLabel(sel) : ''
-  // TDS is deliberately not a button here. It reads this month's arrear, professional tax
-  // and earned income — all of which only mean anything once Run Payroll has settled
-  // them — so syncing it on its own ahead of time would show a number the run is about
-  // to overwrite anyway. Run Payroll calls sync_month_tds() itself, last, and the figure
-  // shows up on the downloaded sheet from there.
-  const DATA_SYNC_CATEGORIES = SYNC_CATEGORIES.filter(c => c.key !== 'tds')
-  const readyCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready' && c.syncable !== false).length
-  const runOwnedCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready' && c.syncable === false).length
+  const readyCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'ready').length
   const globalCount = DATA_SYNC_CATEGORIES.filter(c => c.status === 'global').length
-  const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - runOwnedCount - globalCount
+  const plannedCount = DATA_SYNC_CATEGORIES.length - readyCount - globalCount
   const inp: React.CSSProperties = { padding: '9px 11px', border: `1px solid ${C.border}`, borderRadius: 10, fontSize: 13, background: TK.surface, color: C.navy, fontFamily: font, outline: 'none' }
   const monthOpts = Array.from(new Map(runs.map(r => [r.month, r])).values()).sort((a, b) => (a.month || 0) - (b.month || 0))
 
@@ -590,11 +674,13 @@ export default function MonthSync({ companyId, fy }: { companyId: string; fy: st
         </div>
         <div style={{ fontSize: 11, color: C.muted, whiteSpace: 'nowrap', paddingTop: 4 }}>
           <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: C.green, marginRight: 5 }} />{readyCount} ready
-          {runOwnedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{runOwnedCount} run by payroll</>}
           <span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.positiveTint, margin: '0 5px 0 12px' }} />{globalCount} whole-year
           {plannedCount > 0 && <><span style={{ display: 'inline-block', width: 7, height: 7, borderRadius: '50%', background: TK.line, margin: '0 5px 0 12px' }} />{plannedCount} planned</>}
         </div>
       </div>
+
+      <PendingStrip cats={DATA_SYNC_CATEGORIES} pending={pending} loading={pendingBusy} locked={!runIds.length || needsMigration || !!status?.is_locked || !!busyKey}
+        onOpen={cat => openPicker(cat)} />
 
       <div style={{ background: C.card, border: `1px solid ${C.border}`, borderRadius: 14, padding: '16px 18px', boxShadow: 'var(--ez-shadow-flat)' }}>
         <div style={{ display: 'flex', gap: 12, alignItems: 'end', flexWrap: 'wrap', marginBottom: 6 }}>

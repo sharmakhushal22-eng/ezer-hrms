@@ -295,6 +295,7 @@ const MAIL_VAR_LABEL: Record<string, string> = {
   document_name: 'Letter name ("offer letter", "internship offer letter" …)', annexure_a: 'Annexure A name ("compensation details" …)',
   pay_line: 'Pay line ("• Annual CTC: ₹…" / "• Monthly stipend: ₹…")', start_label: 'Start label ("Proposed Date of Joining" …)', start_date: 'Start date',
   period_line: 'Period line (fixed-term only, may be empty)',
+  designation: 'Designation (same as role)', annual_ctc: 'Annual CTC, digits only ("18,00,000") — write ₹ before it', joining_date: 'Date of joining (same as start date)',
 }
 
 export const OFFER_EMAIL_TEMPLATES: TemplateDef[] = KINDS.map(kind => {

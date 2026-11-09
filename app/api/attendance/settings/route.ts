@@ -40,7 +40,7 @@ export async function GET(req: NextRequest) {
   let q = sb.from('leave_backdate_config').select('company_id, window_days, updated_at')
   // A caller pinned to one company sees only their own row. companyFilter
   // returns null for a cross-company role, which leaves the query unfiltered.
-  const co = companyFilter(grant, null)
+  const co = companyFilter(grant, null, 'Attendance')
   if (co) q = q.eq('company_id', co)
 
   const { data, error } = await q
@@ -80,7 +80,7 @@ export async function POST(req: NextRequest) {
   // only write their own, whatever the body asks for — the same choke point
   // every other dashboard write uses.
   const grant = await grantForRequest(req)
-  const pinned = companyFilter(grant, requested)
+  const pinned = companyFilter(grant, requested, 'Attendance')
   const company_id = pinned || requested
   if (pinned && pinned !== requested) {
     return NextResponse.json({ error: 'That company is outside your access.' }, { status: 403 })

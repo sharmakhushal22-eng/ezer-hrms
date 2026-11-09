@@ -981,7 +981,7 @@ export default function HRHeadApprovalView(props: HRHeadApprovalViewProps) {
                 <QueueRow
                   key={m.id}
                   title={m.designation}
-                  line={`${plural(m.openings, 'opening', 'openings')} · ${m.location}`}
+                  line={`${m.mrfNumber && m.mrfNumber !== '-' && m.mrfNumber !== '—' ? `${m.mrfNumber} · ` : ''}${plural(m.openings, 'opening', 'openings')} · ${m.location}`}
                   companyId={m.companyId}
                   companyCode={m.companyCode}
                   days={waitingDays(m.waitingSince)}

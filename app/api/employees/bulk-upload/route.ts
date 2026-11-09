@@ -268,7 +268,7 @@ export async function POST(req: NextRequest) {
     // passed companyId for another company is overridden, and rows resolving to other
     // companies are dropped below.
     const grant = await grantForRequest(req)
-    const companyId = companyFilter(grant, body.companyId) || body.companyId
+    const companyId = companyFilter(grant, body.companyId, 'Bulk Upload') || body.companyId
 
     // The org-chart workbook has a different shape from the seven flat templates, so it
     // takes a different path — but the same endpoint, the same log and the same

@@ -49,6 +49,12 @@ export function offerMailVars(r: any, f: { name?: string | null; designation?: s
     start_label: startLabel,
     start_date: doj ? new Date(doj).toLocaleDateString('en-IN') : '—',
     period_line: months ? `\n• Period: ${months} month${months === 1 ? '' : 's'}` : '',
+    // Older names. Templates published before the variables were renamed (Oct 2026) still
+    // quote these, and an unknown name is printed as-is — the candidate received the literal
+    // "{{annual_ctc}}". Kept so those templates render; new ones should use the names above.
+    designation: role,
+    annual_ctc: r?.offered_ctc ? fmt(r.offered_ctc) : '—',
+    joining_date: doj ? new Date(doj).toLocaleDateString('en-IN') : '—',
   }
 }
 

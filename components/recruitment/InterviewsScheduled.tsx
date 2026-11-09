@@ -14,7 +14,7 @@
 // THE INTERVIEWER'S HALF IS SOMEWHERE ELSE, ON PURPOSE
 //
 // L1 / L2 managers do not use this tab — migration 123 restricts them to
-// recruitment.mrf, and their feedback happens in ESS -> Tasks & Approvals,
+// recruitment.mrf, and their feedback happens in the ESS notification panel,
 // where components/ess/RoleTabs.tsx (InterviewInvites) already lists every
 // interview assigned to them with the join link, Acknowledge and Give feedback.
 // This is the mirror of that list for the person who scheduled it, not a second

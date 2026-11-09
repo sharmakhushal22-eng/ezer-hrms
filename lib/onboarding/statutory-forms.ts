@@ -26,6 +26,20 @@ export const FORMS: Record<FormKey, { file: string | null; label: string; filena
   esic1:  { file: 'esi1.pdf',   label: 'ESIC Form 1 — Declaration', filename: d => `ESIC_Form1_${slug(d.name)}.pdf`, imgW: 1080 },
   formf:  { file: null,         label: 'Gratuity Form F — Nomination', filename: d => `Gratuity_FormF_${slug(d.name)}.pdf`, imgW: 595 },
 }
+/** Where the EMPLOYEE signs, for e-signing (lib/onboarding/esign.ts): 1-based page within the
+ *  form, fractions of the page from the top-left. Measured on the official blanks next to the
+ *  printed "Signature of member / subscriber / I.P." labels, in the white space each leaves.
+ *  Form F is drawn here, so its spot is reported by the drawing code instead. Witnesses and
+ *  the employer still sign by hand where the forms ask for them. */
+export interface SignSpot { page: number; x: number; y: number; w: number; h: number }
+const SIGN_SPOTS: Record<Exclude<FormKey, 'formf'>, SignSpot[]> = {
+  form11: [{ page: 1, x: 0.727, y: 0.641, w: 0.245, h: 0.053 }],                    // above "Signature of Member"
+  form2:  [{ page: 1, x: 0.672, y: 0.905, w: 0.31, h: 0.055 },                      // under "Signature or thumb impression of the" (Part A)
+           { page: 2, x: 0.595, y: 0.648, w: 0.34, h: 0.045 }],                     // under the subscriber's label (Part B)
+  esic1:  [{ page: 1, x: 0.704, y: 0.578, w: 0.263, h: 0.047 },                     // under "Signature / T.I. of IP" (declaration)
+           { page: 1, x: 0.352, y: 0.927, w: 0.259, h: 0.034 }],                    // above "Signature / T.I. of I.P." (identity card)
+}
+
 export const isFormKey = (k: any): k is FormKey => k === 'form11' || k === 'form2' || k === 'esic1' || k === 'formf'
 const slug = (n: string) => (n || 'candidate').replace(/[^\w]+/g, '_').replace(/^_|_$/g, '')
 
@@ -136,16 +150,22 @@ function drawForm11(s: Sheet, d: StatutoryData) {
   s.text(d.marital, 848, 425, { size: 10 })
   s.text(d.email, 848, 457, { size: 9, w: 430 })
   s.text(d.mobile, 848, 494, { size: 10 })
-  s.tick(d.has_uan ? 1008 : 1179, 524)          // 7. earlier a member of EPF 1952
-  s.tick(d.has_uan ? 1008 : 1179, 552)          // 8. earlier a member of EPS 1995
+  // Ticks sit ON the printed boxes (re-measured: Yes box centre x 1013, No x 1180).
+  s.tick(d.has_uan ? 1013 : 1180, 515, 13)      // 7. earlier a member of EPF 1952
+  s.tick(d.has_uan ? 1013 : 1180, 543, 13)      // 8. earlier a member of EPS 1995
   if (d.has_uan) {
     s.text(d.uan, 848, 607, { size: 10, bold: true, w: 430 })
-    s.text(d.prev_pf_id, 848, 646, { size: 9, w: 430 })
+    // 9(b): the form splits the PF number into AP | HYD | EST.CODE | EXTN | PF NO cells
+    // (x 838-897 | 897-963 | 963-1127 | 1127-1167 | 1167-1290). A number that does not parse
+    // stays on one line, shrunk to fit inside the row.
+    const pf = String(d.prev_pf_id || '').replace(/[\s/]/g, '').toUpperCase().match(/^([A-Z]{2})([A-Z]{3})(\d{1,7})([A-Z0-9]{3})(\d{1,7})$/)
+    if (pf) [[pf[1], 867, 55], [pf[2], 930, 62], [pf[3], 1045, 158], [pf[4], 1147, 36], [pf[5], 1228, 116]].forEach(([v, x, w]) => s.text(v as string, x as number, 646, { size: 9, align: 'center', w: w as number }))
+    else s.text(d.prev_pf_id, 848, 646, { size: 9, w: 438 })
     const ex = dmy(d.prev_exit)
     if (ex) { s.text(ex.d, 932, 679, { size: 10, align: 'center' }); s.text(ex.m, 1100, 679, { size: 10, align: 'center' }); s.text(ex.y, 1235, 679, { size: 10, align: 'center' }) }
     else s.text(d.prev_exit, 848, 679, { size: 10 })
   }
-  s.tick(d.is_foreign ? 1008 : 1179, 782)       // 10. international worker
+  s.tick(d.is_foreign ? 1013 : 1180, 777, 13)   // 10. international worker
   s.text(d.country, 848, 809, { size: 10, w: 430 })
   if (d.is_foreign) { s.text(d.passport_no, 848, 835, { size: 10, w: 430 }); s.text(d.passport_valid, 848, 862, { size: 9, w: 430 }) }
   s.text([d.bank_account, d.ifsc].filter(Boolean).join('   IFSC '), 848, 922, { size: 9.5, w: 430 })
@@ -154,22 +174,26 @@ function drawForm11(s: Sheet, d: StatutoryData) {
   s.text(d.date, 280, 1231, { size: 10 })
   s.text(d.place, 280, 1263, { size: 10, w: 400 })
   // Declaration by the present employer — the facts we hold; the PF number stays for the employer.
-  s.text(d.name, 408, 1307, { size: 8, w: 130 })
-  s.text(d.doj, 698, 1307, { size: 7.5, w: 62 })
+  // The printed dot leaders are whited out under each value, so it reads as filled in, not overprinted.
+  s.blank(406, 1291, 132, 15); s.text(d.name, 410, 1304, { size: 8.5, w: 126 })
+  s.blank(652, 1291, 104, 15); s.text(d.doj, 704, 1304, { size: 8.5, w: 100, align: 'center' })
 }
 
 // ── EPF Form 2 revised (595 × 842 A4, measured on 1272 × 1800) ─────────────────────────────
 function drawForm2(p1: Sheet, p2: Sheet, d: StatutoryData) {
   const X = 602, W = 560
-  p1.text(d.name.toUpperCase(), X, 269, { size: 10, bold: true, w: W })
-  p1.text(d.parent.name, X, 320, { size: 10, w: W })
-  p1.text(d.dob, X, 369, { size: 10 })
-  p1.text(d.gender, X, 419, { size: 10 })
-  p1.text(d.marital, X, 469, { size: 10 })
-  p1.text(d.has_uan ? `UAN ${d.uan}` : 'New member — to be allotted', X, 519, { size: 10, w: W })
-  p1.lines(d.perm_address, X, 569, W, { size: 8, lh: 49, max: 2 })
-  p1.lines(d.curr_address, X, 666, W, { size: 8, lh: 47, max: 2 })
-  p1.text(d.doj, X, 758, { size: 10 })
+  // Values sit a few px above the printed dot leaders, which then underline them (on the
+  // baseline they struck through the letters).
+  const UP = (y: number) => y - 6
+  p1.text(d.name.toUpperCase(), X, UP(269), { size: 10, bold: true, w: W })
+  p1.text(d.parent.name, X, UP(320), { size: 10, w: W })
+  p1.text(d.dob, X, UP(369), { size: 10 })
+  p1.text(d.gender, X, UP(419), { size: 10 })
+  p1.text(d.marital, X, UP(469), { size: 10 })
+  p1.text(d.has_uan ? `UAN ${d.uan}` : 'New member — to be allotted', X, UP(519), { size: 10, w: W })
+  p1.lines(d.perm_address, X, 556, W, { size: 8, lh: 48, max: 2 })   // address dot rows: 562 / 610
+  p1.lines(d.curr_address, X, 650, W, { size: 8, lh: 48, max: 2 })   // 656 / 704
+  p1.text(d.doj, X, UP(758), { size: 10 })
   // Part A — nominees, one row of 56px each, four at most
   d.pf_nominees.slice(0, 4).forEach((n, i) => {
     const y = 1120 + i * 62
@@ -192,10 +216,10 @@ function drawForm2(p1: Sheet, p2: Sheet, d: StatutoryData) {
     p2.text(d.eps_fallback.dob, 740, 880, { size: 9, w: 140 })
     p2.text(d.eps_fallback.relation, 895, 880, { size: 9, w: 350 })
   }
-  p2.text(d.date, 165, 1153, { size: 10 })
+  p2.blank(150, 1138, 120, 18); p2.text(d.date, 160, 1150, { size: 10 })
   // Certificate by the employer — the member's name is ours to print; the rest is signed by hand.
-  p2.text(d.name, 100, 1351, { size: 9, w: 440 })
-  p2.text(d.place, 175, 1458, { size: 9, w: 200 })
+  p2.text(d.name, 100, UP(1351), { size: 9, w: 440 })
+  p2.blank(160, 1443, 250, 18); p2.text(d.place, 170, 1455, { size: 9, w: 200 })
 }
 
 // ── ESIC Form 1 (540 × 900, measured on 1080 × 1800) ──────────────────────────────────────
@@ -208,15 +232,17 @@ async function drawEsic1(s: Sheet, d: StatutoryData, photo: { bytes: Uint8Array;
   s.blank(506, 509, 32, 22); s.text(/^f/i.test(d.gender) ? 'F' : d.gender ? 'M' : '', 522, 524, { size: 9, bold: true, align: 'center' })
   s.lines(d.curr_address, 48, 572, 240, { size: 7, lh: 25, max: 3 })
   s.lines(d.perm_address, 302, 572, 236, { size: 7, lh: 25, max: 3 })
-  const pin = (v: string, x0: number) => v.replace(/\D/g, '').slice(0, 6).split('').forEach((ch, i) => s.text(ch, x0 + i * 22.5, 646, { size: 8, align: 'center' }))
-  pin(d.curr_pin, 126); pin(d.perm_pin, 401)
+  // PIN boxes, measured: six cells 26.3px wide starting at x 111 (present) and 370.5 (permanent).
+  const pin = (v: string, x0: number) => v.replace(/\D/g, '').slice(0, 6).split('').forEach((ch, i) => s.text(ch, x0 + i * 26.3, 646, { size: 8, align: 'center' }))
+  pin(d.curr_pin, 124.5); pin(d.perm_pin, 383.5)
   s.text(d.mobile, 222, 681, { size: 7, w: 66 }); s.text(d.mobile, 470, 681, { size: 7, w: 68 })
   s.text(d.dispensary, 405, 723, { size: 6.5, w: 132 })
   // Employer
   s.text(d.esic_code, 775, 277, { size: 8.5, w: 260 })
   const doj = dmy(d.doj)
   if (doj) { s.text(doj.d, 840, 374, { size: 8.5, align: 'center' }); s.text(doj.m, 920, 374, { size: 8.5, align: 'center' }); s.text(doj.y, 1000, 374, { size: 8.5, align: 'center' }) }
-  s.lines([d.company_name, d.company_address].filter(Boolean).join(', '), 592, 411, 440, { size: 7.5, lh: 30, max: 3 })
+  // 11. three ruled lines at y 420 / 443 / 465, under the printed label
+  s.lines([d.company_name, d.company_address].filter(Boolean).join(', '), 592, 417, 440, { size: 7, lh: 23, max: 3 })
   s.text(d.esic_prev_ip, 805, 559, { size: 8.5, w: 230 })
   // (c) nominee for the cash benefit
   if (d.esic_nominee) {
@@ -226,25 +252,26 @@ async function drawEsic1(s: Sheet, d: StatutoryData, photo: { bytes: Uint8Array;
   }
   // (D) family particulars — eight rows
   d.family.slice(0, 8).forEach((m, i) => {
-    const y = 1281 + i * 19.3
+    const y = 1286 + i * 20   // rows ruled every 20px from 1270; baseline 4px above the lower rule
     s.text(String(i + 1), 66, y, { size: 7, align: 'center' })
-    s.text(m.name, 100, y, { size: 7, w: 198 })
-    s.text(m.dob, 306, y, { size: 7, w: 170 })
-    s.text(m.relation, 486, y, { size: 7, w: 180 })
-    s.tick(m.residing ? 715 : 812, y, 8)
-    if (!m.residing) { s.text(m.town, 866, y, { size: 6.5, w: 92 }); s.text(m.state, 966, y, { size: 6.5, w: 72 }) }
+    // columns ruled at x 102 / 300 / 481 / 669 / 761 / 856 / 959; values start 6px inside
+    s.text(m.name, 108, y, { size: 7, w: 186 })
+    s.text(m.dob, 307, y, { size: 7, w: 168 })
+    s.text(m.relation, 488, y, { size: 7, w: 175 })
+    s.tick(m.residing ? 715 : 812, y - 5, 8)
+    if (!m.residing) { s.text(m.town, 862, y, { size: 6.5, w: 92 }); s.text(m.state, 965, y, { size: 6.5, w: 72 }) }
   })
   // Temporary identity card
   s.text(d.name, 190, 1500, { size: 9, bold: true, w: 475 })
-  s.text(d.doj, 664, 1553, { size: 6.5, align: 'right' })
+  s.text(d.doj, 662, 1547, { size: 7.5, align: 'right' })   // cell 1518-1553
   s.text(d.dispensary, 496, 1583, { size: 7, w: 170 })
-  s.lines([d.esic_code, d.company_name, d.company_address].filter(Boolean).join(' · '), 350, 1618, 316, { size: 6.5, lh: 14, max: 2 })
+  s.lines([d.esic_code, d.company_name, d.company_address].filter(Boolean).join(' · '), 350, 1627, 316, { size: 6.5, lh: 15, max: 2 })   // cell 1610-1662
   s.text(d.date, 112, 1723, { size: 8 })
   if (photo) { try { await s.image(photo.bytes, photo.mime, 768, 1492, 258, 185) } catch { /* a photo that is not a PNG/JPG is simply not printed */ } }
 }
 
 // ── Gratuity Form F (A4, drawn in points: imgW = 595 so px = pt) ──────────────────────────
-function drawFormF(sheet: () => Sheet, d: StatutoryData) {
+function drawFormF(sheet: () => Sheet, d: StatutoryData, spots?: SignSpot[]) {
   const W = 595, M = 46, CW = W - 2 * M, BODY = 9.3, LH = 12.6
   let s = sheet(), y = 44
   const text = (t: string, x: number, o: { size?: number; bold?: boolean; w?: number; align?: 'left' | 'center' | 'right'; black?: boolean } = {}) => s.text(t, x, y, { black: true, ...o })
@@ -329,7 +356,10 @@ function drawFormF(sheet: () => Sheet, d: StatutoryData) {
     if (col === 1 || i === parts.length - 1) y += LH
   })
   y += 10
-  s.text(`Place: ${d.place || '____________'}`, M, y, { size: BODY }); s.text('Signature / Thumb-impression of the employee', W - M, y, { size: BODY, align: 'right', black: true }); y += LH
+  s.text(`Place: ${d.place || '____________'}`, M, y, { size: BODY }); s.text('Signature / Thumb-impression of the employee', W - M, y, { size: BODY, align: 'right', black: true })
+  // The e-signature goes right under its label (A4 drawn in points, so px = pt).
+  spots?.push({ page: 1, x: (W - M - 190) / 595, y: (y + 5) / 842, w: 190 / 595, h: 44 / 842 })
+  y += LH
   s.text(`Date: ${d.date}`, M, y, { size: BODY })
 
   // ── Page 2: witnesses, employer, acknowledgement ──
@@ -358,15 +388,20 @@ function drawFormF(sheet: () => Sheet, d: StatutoryData) {
   para('Note: Strike out the words / paragraphs not applicable. Paragraphs are struck through here from the details given on the onboarding form; the employee confirms them while signing.', { size: 8, after: 0 })
 }
 
-export interface RenderOptions { photo?: { bytes: Uint8Array; mime: string } | null }
+export interface RenderOptions {
+  photo?: { bytes: Uint8Array; mime: string } | null
+  /** Filled with where the employee signs on this form (for e-signing). */
+  spots?: SignSpot[]
+}
 
 /** The filled form as PDF bytes. */
 export async function renderStatutoryForm(key: FormKey, d: StatutoryData, o: RenderOptions = {}): Promise<Uint8Array> {
   const { doc, sheets, sheet } = await open(key)
   if (key === 'form11') drawForm11(sheets[0], d)
   else if (key === 'form2') drawForm2(sheets[0], sheets[1], d)
-  else if (key === 'formf') drawFormF(sheet, d)
+  else if (key === 'formf') drawFormF(sheet, d, o.spots)
   else await drawEsic1(sheets[0], d, o.photo || null)
+  if (key !== 'formf') o.spots?.push(...SIGN_SPOTS[key])
   doc.setTitle(`${FORMS[key].label} — ${d.name}`)
   doc.setProducer('EZER HRMS')
   return doc.save()

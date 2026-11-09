@@ -62,6 +62,7 @@ export const TAB_META: Record<string, { icon: IconName; group: RailTab['group'] 
   offers: { icon: 'mail', group: 'Offer' },
   preonboarding: { icon: 'door', group: 'Join' },
   jobstatus: { icon: 'target', group: 'Track' },
+  reports: { icon: 'chart', group: 'Track' },
 };
 
 /**

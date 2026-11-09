@@ -1,5 +1,6 @@
 'use client'
 import { useState, useEffect, useRef } from 'react'
+import { positionGaps } from '@/lib/recruitment/position-required'
 import { createPortal } from 'react-dom'
 import { createClient } from '@/lib/supabase/client'
 // send-offer-email runs on the server with no session of its own, so the browser
@@ -156,6 +157,20 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     authHeaders().then(h => fetch(`/api/recruitment/offer-approval?company_ids=${cid}`, { headers: h })).then(r => r.json()).then(j => setHrHeads(j.heads?.[cid] || [])).catch(() => setHrHeads([]))
   }, [candidate?.company_id, mrf?.company_id])
 
+  // Position facts the offer letter states (lib/recruitment/position-required.ts): the MRF's
+  // department and work location, else what was typed on the candidate. Required to submit.
+  const [pos, setPos] = useState<{ department: string | null; location: string | null } | null>(null)
+  useEffect(() => {
+    const req = candidate?.application_details?.requisition || {}
+    Promise.all([
+      mrf?.department_id ? supabase.from('departments').select('dept_name').eq('id', mrf.department_id).maybeSingle() : Promise.resolve({ data: null } as any),
+      mrf?.location_id ? supabase.from('locations').select('location_name').eq('id', mrf.location_id).maybeSingle() : Promise.resolve({ data: null } as any),
+    ]).then(([d, l]: any[]) => setPos({ department: d.data?.dept_name || req.department || null, location: req.job_location || l.data?.location_name || null }))
+      .catch(() => setPos({ department: req.department || null, location: req.job_location || null }))
+  }, [mrf?.department_id, mrf?.location_id]) // eslint-disable-line react-hooks/exhaustive-deps
+  const designation = candidate?.designation || mrf?.designation || mrf?.position || null
+  const posGaps = pos ? positionGaps({ designation, department: pos.department, location: pos.location }) : []
+
   // Everything the recruiter already captured is prefilled: the negotiation's previous-employer
   // fields when it has them, else the Add Candidate form (compensation block, notice, DOJ).
   const comp = candidate?.application_details?.compensation || {}
@@ -196,7 +211,8 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
 
   // The approval template is built from the prefilled data as soon as the form opens, so
   // the recruiter reviews it rather than typing it; edits regenerate it via the button.
-  useEffect(() => { generateTemplate() }, []) // eslint-disable-line react-hooks/exhaustive-deps
+  // Built as soon as the form opens, and again once the department / location are looked up.
+  useEffect(() => { generateTemplate() }, [pos]) // eslint-disable-line react-hooks/exhaustive-deps
 
   function generateTemplate() {
     // Only lines with a value — the same rule as the HR Head's mail. No "—" or "Nil" filler.
@@ -214,7 +230,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
       `Reference ${ref} · ${new Date().toLocaleDateString('en-IN', { day: '2-digit', month: 'short', year: 'numeric' })}`,
       '',
       block('CANDIDATE', [
-        line('Name', candidate?.full_name), line('Position', mrf?.designation || candidate?.designation), line('MRF', mrf?.mrf_number),
+        line('Name', candidate?.full_name), line('Position', designation), line('Department', pos?.department), line('Work location', pos?.location), line('MRF', mrf?.mrf_number),
         line('Experience', candidate?.experience_years != null ? `${candidate.experience_years} years` : null), line('Current company', candidate?.current_company),
       ]),
       block('PREVIOUS EMPLOYER', [
@@ -251,6 +267,10 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
   }
 
   async function submitForApproval() {
+    if (!pos || posGaps.length) {
+      alert(`${posGaps.join(', ') || 'Designation, department and work location'} ${posGaps.length === 1 ? 'is' : 'are'} required: the offer letter states them. Add them on the MRF (or the candidate) first.`)
+      return
+    }
     if (!prevForm.prev_company_name || !prevForm.prev_total_ctc) {
       alert('Previous company name and CTC are required')
       return
@@ -356,6 +376,7 @@ export function CreateOfferApproval({ candidate, negotiation, mrf, onSubmitted }
     { k: 'Previous CTC', ok: Number(prevForm.prev_total_ctc) > 0 },
     { k: 'Proposed DOJ', ok: !!joining.proposed_doj },
     { k: 'Approval preview generated', ok: !!template },
+    { k: posGaps.length ? `Position: add ${posGaps.join(', ').toLowerCase()} (on the MRF or the candidate)` : 'Designation, department and work location', ok: !!pos && posGaps.length === 0 },
   ]
   const ready = readiness.every(x => x.ok) && !!negotiation
   const initials = (candidate?.full_name || '?').split(' ').filter(Boolean).slice(0, 2).map((w: string) => w[0]).join('').toUpperCase()
@@ -1295,7 +1316,7 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
   req: any; mrfNumber: string | null; headNames: string
   /** an edit changed something the e-mail quotes (address, name, position, joining date) */
   onFactsChanged: (f: { email: string | null; name: string | null; designation: string | null; doj: string | null }) => void
-  mail: { to: string; cc: string; subject: string; body: string; setTo: (v: string) => void; setCc: (v: string) => void; setSubject: (v: string) => void; setBody: (v: string) => void }
+  mail: { to: string; cc: string; subject: string; body: string; setTo: (v: string) => void; setCc: (v: string) => void; setSubject: (v: string) => void; setBody: (v: string) => void; esign: boolean; setEsign: (v: boolean) => void }
   onClose: () => void; onSend: () => void; sending: boolean
 }) {
   const [file, setFile] = useState<OfferFileData | null>(null)
@@ -1568,6 +1589,11 @@ function OfferFileScreen({ req, mrfNumber, headNames, mail, onClose, onSend, sen
                   ))}
                   <label className="rx-label" style={{ display:'block', marginBottom:5 }}>Email body</label>
                   <textarea className="rx-input" value={mail.body} onChange={e => mail.setBody(e.target.value)} style={{ height:'auto', minHeight:200, resize:'vertical', padding:'10px 13px', marginBottom:10 }} />
+                  {/* EZER Sign (lib/recruitment/offer-esign.ts): the mail gets a "Review & sign" link; signing records the acceptance by itself. */}
+                  <label style={{ display:'flex', gap:9, alignItems:'flex-start', fontSize:12.5, color:TK.ink, lineHeight:1.5, marginBottom:10, cursor:'pointer' }}>
+                    <input type="checkbox" checked={mail.esign} onChange={e => mail.setEsign(e.target.checked)} style={{ marginTop:3, flexShrink:0 }} />
+                    <span><b>Ask the candidate to accept by e-signature</b><br /><span style={{ color:TK.muted }}>The mail adds a “Review &amp; sign” link. When they sign, the signed letter is filed and the offer is marked Accepted automatically; you get the signed copy by e-mail.</span></span>
+                  </label>
                   <div style={{ fontSize:11.5, borderRadius:7, padding:'8px 12px', marginBottom:10, background: canSend ? TK.brandTint : TK.warningTint, color: canSend ? TK.brandDeep : TK.warning }}>
                     {!approved ? `Yet to be approved by the HR Head${headNames ? ` (${headNames})` : ''}. You can verify and generate meanwhile.`
                       : !verified ? 'Tick the confirmation above first.'
@@ -1613,6 +1639,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
   const [selected, setSelected] = useState<any>(null)
   const [toEmail, setToEmail] = useState('')
   const [ccEmails, setCcEmails] = useState('')
+  const [offerEsign, setOfferEsign] = useState(true)
   const [subject, setSubject] = useState('')
   const [body, setBody] = useState('')
   const [sending, setSending] = useState(false)
@@ -1709,6 +1736,9 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
   async function sendOffer() {
     if (!selected || !toEmail || !body) { alert('Recipient email and body are required'); return }
+    // A placeholder the template's values did not fill would reach the candidate as "{{…}}".
+    const unfilled = [...new Set([...`${subject}\n${body}`.matchAll(/\{\{\s*([#/]?[\w ]+?)\s*\}\}/g)].map(m => m[1]))]
+    if (unfilled.length) { alert(`The email still has placeholders that have no value:\n• ${unfilled.map(u => `{{${u}}}`).join('\n• ')}\n\nType the real values into the email, or fix the template in Configuration → Offer email.`); return }
     // Never trust the button state alone — re-read the row so an offer the HR Head has not
     // approved (or has rejected since the screen loaded) cannot go out.
     const { data: live } = await supabase.from('offer_approval_requests').select('status').eq('id', selected.id).maybeSingle()
@@ -1725,6 +1755,8 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
     setSending(true)
 
     // 1. Actually email the offer letter to the candidate via Gmail.
+    let sentPosition: { designation?: string | null; department?: string | null; location?: string | null } | null = null
+    let esignNote = ''
     try {
       const offer = {
         candidate_name: selected.candidates?.full_name,
@@ -1745,7 +1777,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         headers: await authHeaders(),
         // request_id: the server attaches the generated letter, and refuses unless the file is
         // fully verified and the letter was generated from it.
-        body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer, request_id: selected.id }),
+        body: JSON.stringify({ to: toEmail, cc: ccEmails, subject, body, offer, request_id: selected.id, esign: offerEsign }),
       })
       const d = await r.json().catch(() => ({}))
       if (!r.ok || !d.ok) {
@@ -1753,6 +1785,8 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         alert('Email NOT sent: ' + (d.error || `HTTP ${r.status}`) + '\nNothing was marked as sent.')
         return
       }
+      sentPosition = d.position || null   // what the letter stated: kept on the offer_letters row
+      esignNote = d.esign ? `\nThe candidate can accept by e-signing it (envelope ${d.esign.envelope_no}).` : d.esign_error ? `\nThe e-signature link could not be added (${d.esign_error}). The candidate will reply by e-mail as before.` : ''
     } catch {
       setSending(false)
       alert('Email NOT sent: network error. Nothing was marked as sent.')
@@ -1763,7 +1797,9 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
     const { error } = await supabase.from('offer_letters').insert({
       candidate_id: selected.candidate_id,
       candidate_name: selected.candidates?.full_name || toEmail,
-      designation: selected.candidates?.designation || selected.manpower_requisitions?.designation || 'Not specified',
+      designation: sentPosition?.designation || selected.candidates?.designation || selected.manpower_requisitions?.designation || 'Not specified',
+      department: sentPosition?.department || null,
+      location: sentPosition?.location || null,
       company_id: selected.company_id || null,
       letter_content: body,
       to_email: toEmail,
@@ -1806,7 +1842,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
 
     setSending(false)
     if (error) { alert('Email sent, but saving the record failed: ' + error.message); return }
-    alert(`Offer letter emailed to ${toEmail} and marked as Sent. Candidate moved to "Offer Sent".`)
+    alert(`Offer letter emailed to ${toEmail} and marked as Sent. Candidate moved to "Offer Sent".${esignNote}`)
     setSelected(null)
     setApproved(a => a.filter(r => r.id !== selected.id))
   }
@@ -1904,7 +1940,7 @@ export function HRManagerSendOffer({ companies, departments, locations, mrfs:mrf
         {selected && (
           <OfferFileScreen req={selected} mrfNumber={mrfNo(selected)}
             headNames={headNames(selected)} sending={sending} onSend={sendOffer} onClose={() => setSelected(null)} onFactsChanged={factsChanged}
-            mail={{ to: toEmail, cc: ccEmails, subject, body, setTo: setToEmail, setCc: setCcEmails, setSubject, setBody }} />
+            mail={{ to: toEmail, cc: ccEmails, subject, body, setTo: setToEmail, setCc: setCcEmails, setSubject, setBody, esign: offerEsign, setEsign: setOfferEsign }} />
         )}
       </div>
     </RxPage>

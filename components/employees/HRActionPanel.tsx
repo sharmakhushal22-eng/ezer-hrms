@@ -1,10 +1,13 @@
 'use client'
 // components/employees/HRActionPanel.tsx — HR Action Panel tabs for the employee drawer.
-// Tabs: Onboarding Info (read-only) · HR Actions (PIP/Sabbatical/Resignation/Abscond +
+// Tabs: Onboarding Info (read-only) · HR Actions (PIP/Sabbatical/Exit/Abscond +
 // approvals) · History. Slate palette to match employees/page.tsx. Sub-components OUTSIDE.
 import { useState, useEffect, useCallback } from 'react'
 import * as HR from '@/lib/employees/hr-actions'
+import HrExitSection from './HrExitSection'
+import ExitLwdPanel from './ExitLwdPanel'
 import { supabase } from '@/lib/supabase'
+import { authHeaders } from '@/lib/auth-headers'
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
 import { C as TK, F, W, S, R, E, Z, tone, numeric, eyebrow, inputStyle, Badge, type Tone } from '@/lib/ui'
@@ -161,28 +164,6 @@ function SabbaticalForm({ onSave }: { onSave: (p: any) => void }) {
       <label style={C.label}>Reason</label>
       <select style={{ ...C.input, marginBottom:S.md }} value={reason} onChange={e => setReason(e.target.value)}>{['Medical','Education','Personal','Maternity'].map(r => <option key={r}>{r}</option>)}</select>
       <button style={C.pri} onClick={() => { if (!from) return; onSave({ from_date: from, to_date: to || undefined, reason }) }}>Mark sabbatical</button>
-    </div>
-  )
-}
-function ResignationForm({ noticeDays, onSave }: { noticeDays: number; onSave: (p: any) => void }) {
-  const [dor, setDor] = useState(todayISO())
-  const [policyLwd, setPolicyLwd] = useState(addDays(todayISO(), noticeDays || 0))
-  const [empLwd, setEmpLwd] = useState('')
-  useEffect(() => { setPolicyLwd(addDays(dor, noticeDays || 0)) }, [dor, noticeDays])
-  const shortfall = (policyLwd && empLwd) ? Math.max(0, Math.round((new Date(policyLwd).getTime() - new Date(empLwd).getTime())/86400000)) : 0
-  return (
-    <div style={C.card}>
-      <div style={C.sec}>Initiate resignation</div>
-      <div style={{ ...C.g2, marginBottom:S.md }}>
-        <div><label style={C.label}>Date of resignation</label><input type="date" style={C.input} value={dor} onChange={e => setDor(e.target.value)} /></div>
-        <div><label style={C.label}>Notice period (policy)</label><input style={{ ...C.input, background:TK.sunken }} value={`${noticeDays || 0} days`} readOnly /></div>
-        <div><label style={C.label}>LWD as per policy</label><input type="date" style={C.input} value={policyLwd} onChange={e => setPolicyLwd(e.target.value)} /></div>
-        <div><label style={C.label}>LWD confirmed by employee</label><input type="date" style={C.input} value={empLwd} onChange={e => setEmpLwd(e.target.value)} /></div>
-      </div>
-      {empLwd && (shortfall > 0
-        ? <Banner t="critical"><b>Notice shortfall = {shortfall} day(s).</b> A recovery mail will be sent to Payroll.</Banner>
-        : <Banner t="positive">Full notice served. No recovery needed.</Banner>)}
-      <button style={C.pri} onClick={() => { if (!dor || !empLwd) return; onSave({ date_of_resignation: dor, notice_period_days: noticeDays || 0, lwd_as_per_policy: policyLwd, lwd_confirmed_by_emp: empLwd }) }}>Initiate resignation</button>
     </div>
   )
 }
@@ -350,15 +331,69 @@ function TransferForm({ employee, companies, branches, managers, shifts, departm
 }
 
 // ── Documents tab (all docs submitted by the employee) ─────────────
-function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
+/** Letters issued to the employee (generated_letters: People → Letters, the Letter of Appointment,
+ *  HR Letters templates), on the Documents tab of the record — People → Employees → employee and
+ *  the employee's own ESS profile. HR sees every letter, the ones kept out of ESS marked; the
+ *  employee only the ones released to ESS (app/api/letters/employee decides). */
+function IssuedLetters({ employeeId }: { employeeId: string }) {
+  const [rows, setRows] = useState<{ id: string; name: string; doc_id: string | null; date: string; in_ess: boolean; sent_to: string | null; by: string | null }[] | null>(null)
+  const [busy, setBusy] = useState('')
+  useEffect(() => {
+    let alive = true
+    ;(async () => {
+      try {
+        const r = await fetch(`/api/letters/employee?employee_id=${encodeURIComponent(employeeId)}`, { headers: await authHeaders(), cache: 'no-store' })
+        const j = await r.json().catch(() => ({}))
+        if (alive) setRows(r.ok ? (j.letters || []) : [])
+      } catch { if (alive) setRows([]) }
+    })()
+    return () => { alive = false }
+  }, [employeeId])
+  async function open(id: string) {
+    setBusy(id)
+    // Opened first, so the browser does not treat it as a popup once the signed link arrives.
+    const w = window.open('', '_blank')
+    try {
+      const r = await fetch(`/api/letters/employee?employee_id=${encodeURIComponent(employeeId)}&file=${encodeURIComponent(id)}`, { headers: await authHeaders(), cache: 'no-store' })
+      const j = await r.json().catch(() => ({}))
+      if (!r.ok || !j.url) throw new Error(j.error || 'Could not open the letter.')
+      if (w) w.location.href = j.url; else window.open(j.url, '_blank')
+    } catch (e: any) { w?.close(); alert(e.message) }
+    setBusy('')
+  }
+  if (!rows || rows.length === 0) return null
+  return (
+    <div style={C.card}>
+      <div style={C.sec}>Letters issued <Badge t="neutral" size="sm">{rows.length}</Badge></div>
+      {rows.map((l, i) => (
+        <div key={l.id} style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:S.md, flexWrap:'wrap', padding:'10px 0', borderTop: i ? `1px solid ${TK.line}` : 'none', fontSize:F.small }}>
+          <div style={{ minWidth:0, flex:'1 1 220px' }}>
+            <div style={{ fontWeight:W.semi, color:TK.ink, display:'flex', alignItems:'center', gap:6, flexWrap:'wrap' }}>{l.name}{!l.in_ess && <Badge t="warning" size="sm">Not in ESS</Badge>}</div>
+            <div style={{ fontSize:F.tiny, color:TK.muted, overflowWrap:'anywhere' }}>{[l.doc_id, `Issued ${fmt(l.date)}`, l.sent_to ? `mailed to ${l.sent_to}` : null, l.by ? `by ${l.by}` : null].filter(Boolean).join(' · ')}</div>
+          </div>
+          <button style={C.out} disabled={busy === l.id} onClick={() => open(l.id)}>{busy === l.id ? 'Opening…' : 'Download'}</button>
+        </div>
+      ))}
+    </div>
+  )
+}
+
+function DocumentsView({ onb, employeeId }: { onb: HR.OnboardingInfo | null; employeeId: string }) {
   async function download(path: string | null) {
     if (!path) return
     const { data } = await supabase.storage.from('onboarding-docs').createSignedUrl(path, 120)
     if (data?.signedUrl) window.open(data.signedUrl, '_blank')
     else alert('Could not open the file.')
   }
-  if (!onb || onb.documents.length === 0) return <EmptyCard title="No documents yet" hint="Nothing has been submitted by this employee." />
+  if (!onb || onb.documents.length === 0) return (
+    <div>
+      <IssuedLetters employeeId={employeeId} />
+      <EmptyCard title="No documents yet" hint="Nothing has been submitted by this employee." />
+    </div>
+  )
   return (
+    <div>
+    <IssuedLetters employeeId={employeeId} />
     <div style={C.card}>
       <div style={C.sec}>Documents submitted <Badge t="neutral" size="sm">{onb.documents.length}</Badge></div>
       {onb.documents.map((d, i) => (
@@ -373,6 +408,7 @@ function DocumentsView({ onb }: { onb: HR.OnboardingInfo | null }) {
           </div>
         </div>
       ))}
+    </div>
     </div>
   )
 }
@@ -550,7 +586,7 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
   }
 
   if (activeTab === 'onboarding') return (<div style={{ position:'relative' }}><OnboardingTab onb={onb} />{toast && <Toast t={toast} />}</div>)
-  if (activeTab === 'documents') return <DocumentsView onb={onb} />
+  if (activeTab === 'documents') return <DocumentsView onb={onb} employeeId={employee.id} />
   if (activeTab === 'salary') return <SalaryView salary={salary} employee={employee} />
 
   if (activeTab === 'history') {
@@ -624,11 +660,10 @@ export default function HRActionPanel({ employee, activeTab, onRefresh }: { empl
       {/* Action forms (hidden if a conflicting active state exists) */}
       {!states.pip && <PIPForm onSave={(p) => run(() => HR.markPIP(employee.id, p, by), 'PIP started')} />}
       {!states.sabbatical && <SabbaticalForm onSave={(p) => run(() => HR.markSabbatical(employee.id, p, by), 'Sabbatical marked')} />}
-      {!states.resignation && <ResignationForm noticeDays={employee?.notice_period_days || 0} onSave={(p) => run(async () => {
-        const res: any = await HR.initiateResignation(employee.id, p, by)
-        if (res?.ok && res.recovery) notify(res.mailed ? `Resignation saved · recovery mail sent to payroll (${res.shortfall}d)` : `Resignation saved · recovery mail NOT sent (${res.mailError || 'check config'})`, res.mailed ? 'success' : 'error')
-        return res
-      }, 'Resignation initiated')} />}
+      {/* Exit (took the place of "Initiate resignation"): reason, approval flow, cancel / reset. */}
+      <HrExitSection employeeId={employee.id} onChanged={() => { reload(); onRefresh?.() }} />
+      {/* An approved exit's last working day and notice: the HR Manager may change / waive them. */}
+      <ExitLwdPanel employeeId={employee.id} onChanged={() => { reload(); onRefresh?.() }} />
       {!states.abscond && <AbscondForm onSave={(d) => run(() => HR.markAbscond(employee.id, d, by), 'Marked abscond')} />}
       {!states.resignation && !states.abscond && <TransferForm employee={employee} companies={companies} branches={branches} managers={managers} shifts={shifts} departments={departments}
         onIntra={(p) => run(() => HR.initiateLocationTransfer({ ...p, employee_ids: [employee.id] }, by), 'Location transfer initiated')}
