@@ -32,6 +32,7 @@ import { canManage } from '@/lib/rms/resolve'
 import { isHrRole, pmsRoleOf } from '@/lib/pms/postFinal'
 import { authorityOf, authorityFromRow } from '@/lib/pms/authority'
 import { chainFault, normaliseRungs, usedBy, RUNG_CHOICES } from '@/lib/pms/chainBuilder'
+import { policyKpiRangeFault } from '@/lib/pms/kpi'
 
 export const dynamic = 'force-dynamic'
 
@@ -560,7 +561,44 @@ export async function POST(req: NextRequest) {
       if (!id) return bad('Which policy?')
       const fields = pick(body, POLICY_COLS)
       if (!Object.keys(fields).length) return bad('Nothing to change.')
+
+      /**
+       * THE KPI RANGE, EXPLAINED BEFORE THE DATABASE REFUSES IT.
+       *
+       * CHECK pms_policies_kpi_range is still what makes this impossible;
+       * this only makes the refusal legible. Without it the admin screen
+       * showed the constraint violation verbatim, which names no field and
+       * no value — and because one constraint covers three different
+       * mistakes, there was no way to tell which had been made.
+       *
+       * THE STORED ROW IS READ because this is a PATCH. A body that sends
+       * only max_kpi_per_kra still has to hold against the minimum already
+       * stored, and judging the pair on the half that was sent would pass
+       * writes the database then rejects — which is the bug, not a fix for
+       * it. Only read when one of the two is actually being changed.
+       */
+      const touchesKpiRange = fields.min_kpi_per_kra !== undefined
+                           || fields.max_kpi_per_kra !== undefined
+      if (touchesKpiRange) {
+        const cur = await sb.from('pms_policies')
+          .select('min_kpi_per_kra, max_kpi_per_kra').eq('id', id).single()
+        if (cur.error) return bad(cur.error.message, cur.error.code === 'PGRST116' ? 404 : 500)
+        const fault = policyKpiRangeFault(
+          (fields.min_kpi_per_kra ?? cur.data.min_kpi_per_kra) as number,
+          (fields.max_kpi_per_kra ?? cur.data.max_kpi_per_kra) as number,
+        )
+        if (fault) return bad(fault)
+      }
+
       const r = await sb.from('pms_policies').update(fields).eq('id', id).select().single()
+      // A constraint can still fire — a concurrent edit, or a rule this
+      // route does not model. Saying so beats the raw violation text.
+      if (r.error?.message.includes('pms_policies_kpi_range')) {
+        return bad('That leaves the KPI range impossible: the minimum has to '
+                 + 'be at least 1, the maximum at least the minimum, and the '
+                 + 'maximum no more than 20. Reload the policy and try again '
+                 + '— somebody may have changed it since this screen loaded.')
+      }
       return r.error ? bad(r.error.message) : okay(r.data)
     }
 

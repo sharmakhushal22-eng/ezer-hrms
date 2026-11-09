@@ -24,6 +24,7 @@ import { IconPolicies, IconTemplates, IconOrgChart, IconSliders, IconLetters,
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL } from '@/lib/pms/hierarchy'
 import { RUNG_CHOICES, chainFault, chainWarnings, chainSummary, usedBy,
          MAX_CHAIN_NAME } from '@/lib/pms/chainBuilder'
+import { policyKpiRangeFault } from '@/lib/pms/kpi'
 
 type Row = Record<string, unknown>
 const s = (v: unknown) => (v === null || v === undefined) ? '' : String(v)
@@ -205,6 +206,22 @@ function PolicyPanel({ policies, companies, people, chains, reload }: {
 
   const set = (k: string, v: unknown) => setDraft(d => ({ ...d, [k]: v }))
 
+  /** THE SAME FUNCTION THE ROUTE REFUSES WITH — see lib/pms/kpi.ts.
+   *
+   *  The two inputs already carry min/max attributes, and those do nothing
+   *  here: on a number input they drive the spinners and :invalid styling,
+   *  and this is not a native form submit, so a typed 6 against a maximum of
+   *  5 went straight to the database and came back as the raw constraint
+   *  violation. Reading the fault here is what makes the pair explainable;
+   *  CHECK pms_policies_kpi_range is still what makes it impossible.
+   *
+   *  The fallbacks mirror the ones the inputs display, so what is judged is
+   *  what is on screen rather than what is in the draft. */
+  const kpiFault = policyKpiRangeFault(
+    n(draft.min_kpi_per_kra) || 1,
+    n(draft.max_kpi_per_kra) || 5,
+  )
+
   return (
     <Card title="Policy rules"
           sub="The frequency here is the real one. Changing it decides how many periods a year has, and what the Cycle tab will generate.">
@@ -256,12 +273,17 @@ function PolicyPanel({ policies, companies, people, chains, reload }: {
             renders as a tall narrow ribbon beside two short inputs, which
             reads as a warning about the field next to it rather than as a
             note about the pair. */}
+        {/* The fault takes the note's slot rather than appearing beneath it:
+            same place, so nothing shifts as it comes and goes, and it is
+            already where the eye is after typing into the pair. */}
         <div style={{ gridColumn: 'span 2' }}>
-          <Note tone="warn">
-            The KPIs under one KRA share that KRA's weightage — three KPIs on a
-            30% KRA might be 15, 10 and 5. Lowering the maximum leaves KRAs that
-            already hold more than that alone; it refuses the next one.
-          </Note>
+          {kpiFault
+            ? <Note tone="bad">{kpiFault}</Note>
+            : <Note tone="warn">
+                The KPIs under one KRA share that KRA's weightage — three KPIs on a
+                30% KRA might be 15, 10 and 5. Lowering the maximum leaves KRAs that
+                already hold more than that alone; it refuses the next one.
+              </Note>}
         </div>
       </div>
 
@@ -415,7 +437,7 @@ function PolicyPanel({ policies, companies, people, chains, reload }: {
         Performance is not linked to pay. That is fixed in the database, not a setting: the column is constrained to stay off.
       </Note>
 
-      <SaveRow busy={busy} error={error} saved={saved}
+      <SaveRow busy={busy} error={error} saved={saved} disabled={!!kpiFault}
                onSave={() => run(() => pmsAdmin('policy_update', { id, ...draft }), 'Policy saved.')} />
     </Card>
   )
