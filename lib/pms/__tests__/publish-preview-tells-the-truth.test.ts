@@ -244,6 +244,44 @@ test('225 is the shape that rule rejects, and 226 is the shape it allows', () =>
     '226 is not identical to any earlier version, so it is not a revert')
 })
 
+test('the verify script never tries to thaw a frozen row', () => {
+  // I WROTE THIS BUG TWICE. is_readonly is not in the allowlist, so freezing
+  // is one-way — and both earlier drafts of the script set is_readonly=false
+  // as SETUP and were refused by the very rule they were testing. The second
+  // time was after check 24 had been added stating the fact in words.
+  //
+  // So the fixture starts unfrozen, freezes once while the guard is still
+  // returning early, and never thaws. The only clearing of is_readonly is
+  // check 24 itself, which expects to be refused.
+  const v = read('supabase/verify/226_pms_readonly_guard_verify.sql')
+  const fn = v.slice(v.indexOf('verify_readonly_guard()'), v.indexOf('$fn$;'))
+
+  // The row is chosen unfrozen, or the one-way freeze cannot be set up.
+  assert.match(fn, /COALESCE\(o\.is_readonly, false\) = false/,
+    'the fixture does not require an unfrozen row, so the setup can be '
+    + 'refused by the rule under test')
+
+  // NOTHING clears it before check 24 — in ANY form.
+  //
+  // My first attempt at this guard matched `SET is_readonly = false` and
+  // `is_readonly = false,`. The bug does not have to look like either: a
+  // mutation writing `SET chain_stage = 'RM_L2', is_readonly = false` sits
+  // mid-clause with no trailing comma and sailed straight through. The guard
+  // had the same hole the bug lives in, so it is matched loosely now.
+  const before24 = fn.slice(0, fn.indexOf('24. and freezing is one-way'))
+  assert.ok(!/is_readonly\s*=\s*false/.test(before24),
+    'the script clears is_readonly before check 24 — that is the setup bug, '
+    + 'for the third time')
+
+  // The setup freezes, and does so exactly once.
+  assert.equal((before24.match(/is_readonly\s*=\s*true/g) ?? []).length, 1,
+    'the fixture should freeze the row once and never again')
+
+  // And it is cleared exactly once overall: in the check that expects to be
+  // refused for doing it.
+  assert.equal((fn.match(/is_readonly\s*=\s*false/g) ?? []).length, 1)
+})
+
 test('the verify script exercises the two things 225 deleted', () => {
   // A script that only re-read prosrc would have passed under 225 as easily
   // as now. These are the behavioural checks: a frozen row with a REAL
@@ -254,8 +292,8 @@ test('the verify script exercises the two things 225 deleted', () => {
   // 195: the fixture must have BOTH scores, or the generated column is null
   // on both sides and the comparison passes vacuously — 195's own header
   // records six consecutive false ALLOWEDs from exactly that mistake.
-  assert.match(v, /o\.self_score IS NOT NULL/)
-  assert.match(v, /o\.final_score IS NOT NULL/)
+  assert.match(v, /o\.self_score\s+IS NOT NULL/)
+  assert.match(v, /o\.final_score\s+IS NOT NULL/)
   assert.match(v, /is_generated = ''ALWAYS''/,
     'nothing checks that generated columns are still excluded')
   // 197: both allowed destinations, and one that is not.

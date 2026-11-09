@@ -1,33 +1,38 @@
 -- 226_pms_readonly_guard_verify.sql — run AFTER 226.
--- Manufactures a read-only row, exercises the real trigger, and ROLLS BACK.
+-- Freezes a row, exercises the real trigger, and ROLLS BACK.
 -- Safe on live data: nothing here survives the transaction.
 --
 -- ── WHAT 226 PUT BACK ──────────────────────────────────────────────────────
 --
--- 225 rebuilt pms_block_readonly from 193, which was three versions stale,
--- and so deleted:
+-- 225 rebuilt pms_block_readonly from 193, three versions stale, deleting:
 --
 --   195  generated columns excluded from the comparison
 --   197  chain_stage allowed onward to HR *or* DONE
 --
--- 226 restores 197's function byte-for-byte. The checks below are the ones
--- that would have caught 225 the moment it was applied.
+-- 226 restores 197 byte-for-byte. These checks are what would have caught
+-- 225 the moment it was applied.
 --
--- ── THE EARLIER VERSION OF THIS SCRIPT HAD A BUG OF ITS OWN ────────────────
+-- ── FREEZING IS ONE-WAY, AND THIS SCRIPT GOT IT WRONG TWICE ────────────────
 --
--- It finished by setting is_readonly = false to prove an unfrozen row is not
--- policed. is_readonly is not in the allowlist, so the guard refuses that —
--- a frozen row cannot be thawed through this table at all. That is correct
--- behaviour and is now check 24 instead of a broken teardown.
+-- is_readonly is NOT in the allowlist, so a frozen row cannot be thawed
+-- through this table. Both earlier drafts of this script set
+-- is_readonly = false as setup and were refused by the rule they were
+-- written to test — the second time even after check 24 had been added
+-- stating the fact. Knowing something and propagating it are different acts.
+--
+-- So the fixture now STARTS unfrozen: the row is selected on
+-- is_readonly = false, moved and frozen in one statement while the guard is
+-- still returning early, and never thawed again. Every check after that is a
+-- frozen-row check, which is the point.
 --
 -- ── HOW IT ISOLATES THE GUARD ──────────────────────────────────────────────
 --
--- Four triggers watch an UPDATE of pms_overall_rating and they fire in NAME
--- order, so trg_pms_publish_needs_hr_final speaks before trg_pms_readonly. A
--- full publish on an unsettled row is refused by the HR Head rule and never
+-- Four triggers watch an UPDATE of pms_overall_rating and fire in NAME order,
+-- so trg_pms_publish_needs_hr_final speaks before trg_pms_readonly. A full
+-- publish on an unsettled row is refused by the HR Head rule and never
 -- reaches the rule under test. Both publish triggers return early unless
--- workflow_status actually TRANSITIONS, so checks 20 to 22 move chain_stage
--- ALONE and nothing else runs.
+-- workflow_status actually TRANSITIONS, so every check below moves
+-- chain_stage alone and nothing else runs.
 --
 -- READ THE RESULT: anything whose `result` is not PASS or INFO is a problem.
 
@@ -38,32 +43,35 @@ RETURNS TABLE (seq int, check_name text, result text, detail text)
 LANGUAGE plpgsql AS $fn$
 DECLARE v_emp uuid; v_per uuid; v_code text; v_msg text; v_gap numeric;
 BEGIN
-  -- BOTH SCORES POPULATED, deliberately. self_vs_final_gap is GENERATED from
-  -- them, and 195's bug only shows when it has a value — a fixture that left
-  -- the scores null had the column null on both sides and reported ALLOWED
-  -- six times in a row. 195's own header records that. This picks a row where
-  -- the generated column is real.
+  -- NOT ALREADY FROZEN, because freezing is one-way and the setup has to be
+  -- allowed. And BOTH SCORES populated, because self_vs_final_gap is
+  -- GENERATED from them and 195's bug only shows when it has a value — a
+  -- fixture that left them null had the column null on both sides and
+  -- reported ALLOWED six times running. 195's own header records that.
   SELECT o.employee_id, o.period_id, e.emp_code, o.self_vs_final_gap
     INTO v_emp, v_per, v_code, v_gap
     FROM pms_overall_rating o
     JOIN employees e ON e.id = o.employee_id
-   WHERE o.final_rating IS NOT NULL
-     AND o.self_score IS NOT NULL
+   WHERE COALESCE(o.is_readonly, false) = false
+     AND o.final_rating IS NOT NULL
+     AND o.self_score  IS NOT NULL
      AND o.final_score IS NOT NULL
-     AND COALESCE(o.workflow_status, '') <> 'ACKNOWLEDGED'
    ORDER BY o.updated_at DESC NULLS LAST
    LIMIT 1;
 
   IF v_emp IS NULL THEN
     RETURN QUERY SELECT 20, 'a frozen record still lets the result out'::text,
-      'SKIP'::text, 'no settled row with both scores — the generated column '
-                 || 'would be null and the check would pass vacuously'::text;
+      'SKIP'::text, 'no unfrozen, settled row with both scores to freeze — '
+                 || 'without both, the generated column is null on each side '
+                 || 'and the check would pass vacuously'::text;
     RETURN;
   END IF;
 
-  UPDATE pms_overall_rating SET is_readonly = false, chain_stage = 'RM_L2'
-   WHERE employee_id = v_emp AND period_id = v_per;
-  UPDATE pms_overall_rating SET is_readonly = true
+  -- Park the stage somewhere publication would have to move it FROM, and
+  -- freeze — one statement, while OLD.is_readonly is still false and the
+  -- guard returns early. Nothing below ever thaws it.
+  UPDATE pms_overall_rating
+     SET chain_stage = 'RM_L2', is_readonly = true
    WHERE employee_id = v_emp AND period_id = v_per;
 
   -- ── 20. the write publishing makes, on a frozen row ─────────────────────
@@ -82,14 +90,9 @@ BEGIN
       'FAIL'::text, left(v_msg, 95);
   END;
 
-  -- ── 21. and onward to HR too, which 225 had narrowed away ───────────────
+  -- ── 21. and onward to HR, which 225 had narrowed away ───────────────────
   -- The chain hands a settled record to HR before publication moves it to
-  -- DONE. 197 allows both; 225 allowed only DONE and would have broken that
-  -- handover for any frozen record.
-  UPDATE pms_overall_rating SET is_readonly = false, chain_stage = 'RM_L2'
-   WHERE employee_id = v_emp AND period_id = v_per;
-  UPDATE pms_overall_rating SET is_readonly = true
-   WHERE employee_id = v_emp AND period_id = v_per;
+  -- DONE. 197 allows both; 225 allowed only DONE.
   BEGIN
     UPDATE pms_overall_rating SET chain_stage = 'HR'
      WHERE employee_id = v_emp AND period_id = v_per;
@@ -109,7 +112,7 @@ BEGIN
     UPDATE pms_overall_rating SET chain_stage = 'RM_L1'
      WHERE employee_id = v_emp AND period_id = v_per;
     RETURN QUERY SELECT 22, 'a frozen record cannot be reopened'::text,
-      'FAIL'::text, 'chain_stage was moved back to RM_L1 on a read-only row'::text;
+      'FAIL'::text, 'chain_stage moved back to RM_L1 on a read-only row'::text;
   EXCEPTION WHEN OTHERS THEN
     GET STACKED DIAGNOSTICS v_msg = MESSAGE_TEXT;
     RETURN QUERY SELECT 22, 'a frozen record cannot be reopened'::text,
@@ -118,6 +121,8 @@ BEGIN
   END;
 
   -- ── 23. the lock still locks everything else ────────────────────────────
+  -- 226 restores an allowlist. If it restored one that is too wide, the
+  -- record is not read-only at all and 193's whole purpose is gone.
   BEGIN
     UPDATE pms_overall_rating SET final_rating = 1
      WHERE employee_id = v_emp AND period_id = v_per;
@@ -129,10 +134,9 @@ BEGIN
       'PASS'::text, left(v_msg, 95);
   END;
 
-  -- ── 24. a frozen record cannot be thawed through this table ─────────────
-  -- is_readonly is not in the allowlist, by design. The earlier version of
-  -- this script tried to clear it as a teardown and was refused — which is
-  -- the behaviour, not a fault, so it is a check now.
+  -- ── 24. and freezing is one-way ─────────────────────────────────────────
+  -- is_readonly is deliberately not in the allowlist. This is the rule both
+  -- earlier drafts of this script tripped over in their own setup.
   BEGIN
     UPDATE pms_overall_rating SET is_readonly = false
      WHERE employee_id = v_emp AND period_id = v_per;
@@ -180,6 +184,12 @@ FROM (
                    LIKE '%PUBLISHED%ACKNOWLEDGED%'
               THEN 'PASS' ELSE 'FAIL' END::text,
          'every restatement has to keep what the last one did'::text
+  UNION ALL
+  SELECT 6, 'is_readonly is NOT in the allowlist'::text,
+         CASE WHEN (SELECT prosrc FROM pg_proc WHERE proname = 'pms_block_readonly' LIMIT 1)
+                   NOT LIKE '%''is_readonly''%'
+              THEN 'PASS' ELSE 'FAIL' END::text,
+         'freezing is one-way by design'::text
 
   UNION ALL
   SELECT * FROM pg_temp.verify_readonly_guard()
