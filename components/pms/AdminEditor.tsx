@@ -1316,6 +1316,24 @@ function CyclePanel({ policies, periods, companies, reload }: {
     const co = companyName.get(s(p.company_id))
     return `${s(p.period_name)}${co ? ' · ' + co : ''} · ${s(p.status).toLowerCase()}`
   }, [companyName])
+  /** THE POLICY DROPDOWN NEEDED IT TOO, and was the last one without it.
+   *
+   *  The three policies here are all called "Standard Quarterly" — one per
+   *  company — so "Generate a year of periods" offered three identical
+   *  options and nothing but an invisible uuid told them apart. Picking the
+   *  wrong one lays a whole financial year of periods against the wrong
+   *  company.
+   *
+   *  This is the third time this bug has been fixed in this file. The note
+   *  above PolicyPanel's copy records what it cost the first time: attempts
+   *  to change one policy's minimum KRA count landed on three different
+   *  companies' policies. The periods dropdowns below were the second. The
+   *  map was already in scope here for them; only this list was missed. */
+  const policyLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    const inactive = p.is_active === false ? ' · inactive' : ''
+    return `${co ? co + ' · ' : ''}${s(p.policy_name)}${inactive}`
+  }, [companyName])
   const gen = useSaver(reload)
   const open = useSaver(reload)
   const win = useSaver(reload)
@@ -1357,7 +1375,7 @@ function CyclePanel({ policies, periods, companies, reload }: {
         <div className="grid g4">
           <Field label="Policy">
             <select value={policyId} onChange={e => setPolicyId(e.target.value)}>
-              {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{s(p.policy_name)}</option>)}
+              {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{policyLabel(p)}</option>)}
             </select>
           </Field>
           <Field label="Financial year" hint="e.g. 2027-28"><input value={fy} onChange={e => setFy(e.target.value)} placeholder="2027-28" /></Field>
@@ -1458,9 +1476,23 @@ function CyclePanel({ policies, periods, companies, reload }: {
 }
 
 // ══ 5. FINALISE ═══════════════════════════════════════════════════════════
-function FinalisePanel({ periods, canAttribute, reload }: {
-  periods: Row[]; canAttribute: boolean; reload: () => Promise<void>
+function FinalisePanel({ periods, companies, canAttribute, reload }: {
+  periods: Row[]; companies: Row[]; canAttribute: boolean
+  reload: () => Promise<void>
 }) {
+  /** THE SAME COMPANY PROBLEM AS CyclePanel, on the screen that decides what
+   *  an employee is told their rating is.
+   *
+   *  Twelve periods, three companies, four quarters — so "Q2 2026-27"
+   *  appeared three times and nothing distinguished them. This panel had no
+   *  `companies` prop at all, which is why it was missed when the period
+   *  dropdowns elsewhere were fixed. */
+  const companyName = useMemo(
+    () => new Map(companies.map(c => [s(c.id), s(c.company_name)])), [companies])
+  const periodLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    return `${s(p.period_name)}${co ? ' · ' + co : ''} · ${s(p.status).toLowerCase()}`
+  }, [companyName])
   const { busy, error, saved, run } = useSaver(reload)
   const [employeeId, setEmployeeId] = useState('')
   const [periodId, setPeriodId] = useState('')
@@ -1483,7 +1515,7 @@ function FinalisePanel({ periods, canAttribute, reload }: {
         <Field label="Period">
           <select value={periodId} onChange={e => setPeriodId(e.target.value)}>
             <option value="">Choose…</option>
-            {periods.map(p => <option key={s(p.id)} value={s(p.id)}>{s(p.period_name)}</option>)}
+            {periods.map(p => <option key={s(p.id)} value={s(p.id)}>{periodLabel(p)}</option>)}
           </select>
         </Field>
         <Field label="Finalising as">
@@ -1605,7 +1637,7 @@ export default function AdminEditor() {
       {section === 'authority' && <AuthorityPanel policies={snap.policies}
                                                   companies={snap.companies} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
-      {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
+      {section === 'finalise' && <FinalisePanel periods={snap.periods} companies={snap.companies} canAttribute={!!snap.actor.employeeId} reload={reload} />}
       </div>
     </div>
   )
