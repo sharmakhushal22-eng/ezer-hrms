@@ -1,4 +1,9 @@
--- 223_pms_chain_stage_probe.sql — READ ONLY. Changes nothing.
+-- pms_chain_stage_probe.sql — READ ONLY. Changes nothing.
+--
+-- DELIBERATELY UNNUMBERED. It verifies no migration; it answers one
+-- question about live data. It was called 223_… before migration 223
+-- existed and was about something else entirely, which read as though the
+-- two belonged together.
 --
 -- WHY THIS EXISTS
 --

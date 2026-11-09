@@ -25,12 +25,14 @@ export type UploadError =
   | 'ERROR_NOT_ELIGIBLE'   // not in this period, or already read-only
   | 'ERROR_REASON_MISSING' // rating differs from computed, no override_reason
   | 'ERROR_INVALID_RATING' // outside the policy's rating scale
+  | 'ERROR_DUPLICATE'      // the same person twice in one file
 
 export const ERROR_TEXT: Record<UploadError, string> = {
   ERROR_NOT_FOUND: 'No employee or period matches this row.',
   ERROR_NOT_ELIGIBLE: 'This person is not eligible in this period, or their record is already locked.',
   ERROR_REASON_MISSING: 'The rating differs from the computed one, so a reason is required.',
   ERROR_INVALID_RATING: 'That rating is not on this policy’s scale.',
+  ERROR_DUPLICATE: 'This person appears more than once in this file. Keep one row for them — which rating is meant cannot be guessed.',
 }
 
 export interface UploadRow {
@@ -78,7 +80,48 @@ function num(v: unknown): number | null {
   return Number.isFinite(n) ? n : null
 }
 
+/**
+ * THE SAME PERSON TWICE IS A QUESTION, NOT A BATCH.
+ *
+ * checkUpload used to judge every row on its own, so a file naming one
+ * employee twice passed: each row was independently valid. The commit then
+ * applied both in file order and the LAST one silently decided the rating.
+ *
+ * FOUND BY UPLOADING ONE. A file whose first row for SRS9088 read "4, no
+ * change" and whose second read "1, panel moderated" previewed the first row
+ * as `No change` — and would have dropped that person two bands. With two
+ * hundred rows and the duplicate at 7 and 180, nothing on the screen said so.
+ *
+ * Refused rather than resolved. "Last row wins" and "first row wins" are both
+ * defensible, which is exactly why the file's author has to say which they
+ * meant; a validator that picks for them is guessing about somebody's
+ * appraisal.
+ *
+ * Keyed on the normalised pair, because the lookup is normalised too —
+ * "srs9088" and " SRS9088 " are the same person and resolve to the same
+ * record, so they are the same duplicate.
+ */
+function duplicateLines(rows: UploadRow[]): Set<number> {
+  const seen = new Map<string, number[]>()
+  rows.forEach((row, i) => {
+    const emp = String(row.employee_code ?? '').trim().toUpperCase()
+    const per = String(row.period_code ?? '').trim().toUpperCase()
+    // A row missing either half is already ERROR_NOT_FOUND. Grouping those
+    // under one "" key would brand every one of them a duplicate of the
+    // others and bury the real complaint.
+    if (!emp || !per) return
+    const k = `${emp}\u0000${per}`
+    seen.set(k, [...(seen.get(k) ?? []), i])
+  })
+  const dup = new Set<number>()
+  for (const idxs of seen.values()) {
+    if (idxs.length > 1) for (const i of idxs) dup.add(i)
+  }
+  return dup
+}
+
 export function checkUpload(rows: UploadRow[], known: Known): Preview {
+  const dups = duplicateLines(rows)
   const checked: Checked[] = rows.map((row, i) => {
     const errors: UploadError[] = []
     const warnings: string[] = []
@@ -105,6 +148,11 @@ export function checkUpload(rows: UploadRow[], known: Known): Preview {
     if (changed && !String(row.override_reason ?? '').trim()) {
       errors.push('ERROR_REASON_MISSING')
     }
+
+    // EVERY row of the duplicate set is flagged, not just the later ones.
+    // Marking only the second teaches the reader that the first is the good
+    // one, which is the assumption this error exists to refuse.
+    if (dups.has(i)) errors.push('ERROR_DUPLICATE')
 
     // Rule 10, as a warning rather than a block: the upload path is for
     // calibration, and stopping a whole file over a missing sentence would
