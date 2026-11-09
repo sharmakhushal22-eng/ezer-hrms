@@ -7,8 +7,11 @@
 // keeps its own router in step with pushState (see the "single page applications" guide).
 import { useCallback, useEffect, useState } from 'react'
 import { viewTransition } from '../motion/transition'
+import { LMS_SITE } from '@/lib/lms/site'
 
-export const BASE = '/learning'
+/** On its own domain Learning is the whole site, so its screens sit at the root (ezerlms.com/catalog);
+ *  inside HRMS they sit under /learning. proxy.ts maps the one onto the same page. */
+export const BASE = LMS_SITE ? '' : '/learning'
 
 export type RouteName = 'home' | 'catalog' | 'course' | 'play' | 'my' | 'live' | 'achievements' | 'team' | 'studio'
 
@@ -26,7 +29,7 @@ export interface LearnRoute {
 const NAMES: RouteName[] = ['home', 'catalog', 'course', 'play', 'my', 'live', 'achievements', 'team', 'studio']
 
 export function parseRoute(pathname: string, search: string): LearnRoute {
-  const parts = pathname.replace(/^\/learning\/?/, '').split('/').filter(Boolean).map(decodeURIComponent)
+  const parts = (BASE ? pathname.replace(/^\/learning\/?/, '') : pathname).split('/').filter(Boolean).map(decodeURIComponent)
   const head = (parts[0] || 'home') as RouteName
   const name: RouteName = NAMES.includes(head) ? head : 'home'
   const query = new URLSearchParams(search)
@@ -36,7 +39,7 @@ export function parseRoute(pathname: string, search: string): LearnRoute {
 
 /** Addresses, so no screen spells one out by hand. */
 export const to = {
-  home: () => BASE,
+  home: () => BASE || '/',
   catalog: (q?: Record<string, string>) => `${BASE}/catalog${q && Object.keys(q).length ? `?${new URLSearchParams(q)}` : ''}`,
   course: (id: string) => `${BASE}/course/${encodeURIComponent(id)}`,
   play: (enrollmentId: string, lessonId?: string) => `${BASE}/play/${encodeURIComponent(enrollmentId)}${lessonId ? `?lesson=${encodeURIComponent(lessonId)}` : ''}`,

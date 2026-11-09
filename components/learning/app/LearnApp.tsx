@@ -32,6 +32,9 @@ import Live from '../Live'
 import Team, { type TeamData } from '../Team'
 import Player from '../Player'
 import Studio, { type StudioBoot } from '../studio/Studio'
+import { LMS_SITE } from '@/lib/lms/site'
+import { adoptHandoff, hrmsBackHref, signOutOfLms } from '@/lib/lms/sso-client'
+import SiteSignIn from './SiteSignIn'
 
 type Who = 'checking' | 'employee' | 'admin' | 'none'
 
@@ -116,7 +119,9 @@ export default function LearnApp() {
   const loadStudio = useCallback(() => lmsApi<StudioBoot>('/api/lms/admin/overview?lite=1')
     .then(setStudio).catch(() => setStudio(null)).finally(() => setStudioChecked(true)), [])
 
-  useEffect(() => { whoIsHere().then(setWho) }, [])
+  // On ezerlms.com someone arriving from HRMS carries a hand-off code; it becomes a session here
+  // before anyone asks who this is (lib/lms/sso-client.ts).
+  useEffect(() => { (LMS_SITE ? adoptHandoff() : Promise.resolve()).then(whoIsHere).then(setWho) }, [])
   useEffect(() => {
     if (who === 'employee') { void loadDash(); void loadCat(); void loadTeam(); void loadStudio() }
     if (who === 'admin') void loadStudio()
@@ -154,10 +159,13 @@ export default function LearnApp() {
   }, [learner, dash, team])
 
   if (who === 'checking') return <Booting />
-  if (who === 'none') return <SignIn />
+  if (who === 'none') return LMS_SITE ? <SiteSignIn onSignedIn={() => { setWho('checking'); void whoIsHere().then(setWho) }} /> : <SignIn />
   if (who === 'admin' && !studioChecked) return <Booting />
 
-  const backHref = who === 'employee' ? '/ess' : '/dashboard'
+  // On its own domain the way back to HRMS is offered only to someone who came from there; a
+  // company with the LMS alone has no HRMS. Sign out is always there, since this domain keeps a
+  // session of its own.
+  const backHref = LMS_SITE ? hrmsBackHref(who === 'employee') : who === 'employee' ? '/ess' : '/dashboard'
   const focus = route.name === 'play'
   // The overview's `me` is an id, not a name, so only the learner record names someone.
   const name = dash?.name || ''
@@ -247,9 +255,17 @@ export default function LearnApp() {
                 </div>
               </div>
             )}
-            <a className="lx-nav-item" href={backHref} title="Back to EZER HRMS">
-              <span className="lx-nav-ic"><GExit size={19} /></span><span>Back to EZER HRMS</span>
-            </a>
+            {backHref && (
+              <a className="lx-nav-item" href={backHref} title="Back to EZER HRMS">
+                <span className="lx-nav-ic"><GArrowLeft size={19} /></span><span>Back to EZER HRMS</span>
+              </a>
+            )}
+            {LMS_SITE && (
+              <button type="button" className="lx-nav-item" onClick={() => void signOutOfLms()} title="Sign out of EZER Learn"
+                style={{ fontFamily: 'inherit' }}>
+                <span className="lx-nav-ic"><GExit size={19} /></span><span>Sign out</span>
+              </button>
+            )}
             <div className="lx-me">
               <div className="lx-me-av" aria-hidden>{initials}</div>
               <div style={{ minWidth: 0 }}>
@@ -280,7 +296,8 @@ export default function LearnApp() {
                 {route.name === 'studio' && learner && <a className="lx-btn lx-btn--sm lx-hide-sm" {...linkProps(to.home())}><GArrowLeft size={15} /> My learning</a>}
                 {route.name !== 'studio' && studioOn && <a className="lx-btn lx-btn--sm lx-hide-sm" {...linkProps(to.studio())}><GStudio size={15} /> Studio</a>}
                 <ThemeButton />
-                <a className="lx-btn lx-btn--sm" href={backHref} title="Back to EZER HRMS"><GExit size={15} /> <span className="lx-hide-sm">EZER HRMS</span></a>
+                {backHref && <a className="lx-btn lx-btn--sm" href={backHref} title="Back to EZER HRMS" aria-label="Back to EZER HRMS"><GArrowLeft size={15} /> <span className="lx-hide-sm">EZER HRMS</span></a>}
+                {LMS_SITE && <button type="button" className="lx-btn lx-btn--sm" onClick={() => void signOutOfLms()} title="Sign out of EZER Learn" aria-label="Sign out of EZER Learn"><GExit size={15} /> <span className="lx-hide-sm">Sign out</span></button>}
               </div>
             </header>
           )}
@@ -295,7 +312,7 @@ export default function LearnApp() {
         {learner && !focus && (
           <nav className="lx-tabbar" aria-label="EZER Learn">
             {[...nav.learn.slice(0, 4), ...(studioOn ? [{ key: 'studio', label: 'Studio', href: to.studio(), icon: <GStudio size={20} />, match: (r: LearnRoute) => r.name === 'studio' }] : [])].map(n => (
-              <a key={n.key} aria-current={n.match(route) ? 'page' : undefined} {...linkProps(n.href)}>{n.icon}<span>{n.label === 'Explore courses' ? 'Explore' : n.label === 'My learning' ? 'Learning' : n.label}</span></a>
+              <a key={n.key} aria-current={n.match(route) ? 'page' : undefined} {...linkProps(n.href)}>{n.icon}<span>{n.label === 'Explore courses' ? 'Explore' : n.label === 'My learning' ? 'Learning' : n.label === 'Achievements' ? 'Awards' : n.label}</span></a>
             ))}
           </nav>
         )}
