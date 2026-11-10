@@ -2,6 +2,9 @@
 // components/learning/showcase/Top10.tsx — "Top 10 in your company": the courses people started
 // most in the last 30 days, each beside its rank in a large outlined numeral, like a streaming
 // service's chart row. Hovering one grows it into the same hover card as any course.
+//
+// The cover keeps its own 16:9 shape (a course cover has its title drawn into it, so cropping it
+// to a poster would cut the words off), and the full title is written underneath.
 import { useEffect, useRef } from 'react'
 import { linkProps, to } from '../app/router'
 import { keys, paths, prefetch } from '../app/cache'
@@ -25,8 +28,9 @@ function Item({ c, n, category }: { c: CatCourse; n: number; category?: string |
       <span className="lx-t10-n lx-num" aria-hidden>{n}</span>
       <div ref={card} className="lx-t10-card">
         <CourseArt src={c.thumbnail} id={c.id} title={c.title} kind={(c.kinds || [])[0]} />
-        {c.thumbnail && <span className="lx-t10-cap lx-clamp2">{c.title}</span>}
       </div>
+      <span className="lx-t10-title lx-clamp2" title={c.title}>{c.title}</span>
+      {category && <span className="lx-t10-kicker">{category}</span>}
     </a>
   )
 }

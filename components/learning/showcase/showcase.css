@@ -88,17 +88,20 @@
 /* ── Top 10 ────────────────────────────────────────────────────────────── */
 /* Sections of a page stack may shrink below their content: a sideways row scrolls instead of widening the page. */
 .ezl .lx-stack>*{min-width:0}
-.ezl .lx-top10{grid-auto-columns:max(230px,calc((100% - 72px) / 5))}
-.ezl .lx-t10{position:relative;display:grid;grid-template-columns:50% 50%;align-items:end;text-decoration:none;color:inherit;min-width:0;border-radius:12px;outline-offset:3px}
-.ezl .lx-t10-n{font-family:var(--lx-f-display);font-weight:800;font-size:clamp(120px,10vw,168px);line-height:.78;letter-spacing:-.08em;text-align:right;margin-right:-22px;
-  color:var(--ez-canvas);-webkit-text-stroke:4px var(--ez-faint);paint-order:stroke;user-select:none;transition:-webkit-text-stroke-color .2s}
+.ezl .lx-top10{grid-auto-columns:max(290px,calc((100% - 54px) / 4))}
+/* The numeral stands beside the cover, the cover keeps its 16:9 shape, and the title sits under it. */
+.ezl .lx-t10{position:relative;display:grid;grid-template-columns:auto minmax(0,1fr);grid-template-rows:auto auto auto;column-gap:0;
+  text-decoration:none;color:inherit;min-width:0;border-radius:12px;outline-offset:3px;padding-top:6px}
+.ezl .lx-t10-n{grid-column:1;grid-row:1;align-self:end;font-family:var(--lx-f-display);font-weight:800;font-size:clamp(96px,7.4vw,132px);line-height:.74;
+  letter-spacing:-.03em;padding:0 10px 0 2px;text-align:right;color:var(--ez-canvas);-webkit-text-stroke:4px var(--ez-faint);paint-order:stroke;user-select:none;transition:-webkit-text-stroke-color .2s}
 .ezl .lx-t10:hover .lx-t10-n,.ezl .lx-t10:focus-visible .lx-t10-n{-webkit-text-stroke-color:var(--ez-brand)}
-.ezl .lx-t10-card{position:relative;z-index:var(--ez-z-raised);aspect-ratio:3/4;border-radius:12px;overflow:hidden;box-shadow:var(--ez-shadow-raised);transition:transform .2s var(--lx-ease),box-shadow .2s}
+.ezl .lx-t10-card{grid-column:2;grid-row:1;position:relative;z-index:var(--ez-z-raised);aspect-ratio:16/9;border-radius:12px;overflow:hidden;box-shadow:var(--ez-shadow-raised);
+  transition:transform .2s var(--lx-ease),box-shadow .2s}
 .ezl .lx-t10:hover .lx-t10-card{transform:translateY(-4px);box-shadow:var(--ez-shadow-floating)}
 .ezl .lx-t10-card>.lx-art{position:absolute;inset:0}
-.ezl .lx-t10-card .lx-art-word{font-size:13px;max-width:120px}
-.ezl .lx-t10-cap{position:absolute;left:0;right:0;bottom:0;padding:26px 10px 9px;z-index:var(--ez-z-local-1);font-size:12px;font-weight:700;line-height:1.25;color:#fff;
-  background:linear-gradient(0deg,rgba(5,7,13,.85),rgba(5,7,13,0))}
+.ezl .lx-t10-card .lx-art-word{font-size:13px;max-width:150px}
+.ezl .lx-t10-title{grid-column:2;grid-row:2;margin-top:10px;font-size:14px;font-weight:700;line-height:1.3;letter-spacing:-.01em;color:var(--ez-ink)}
+.ezl .lx-t10-kicker{grid-column:2;grid-row:3;margin-top:3px;font-size:11.5px;font-weight:700;letter-spacing:.05em;text-transform:uppercase;color:var(--ez-brand)}
 
 /* ── Live tiles ────────────────────────────────────────────────────────── */
 .ezl .lx-tiles{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px}
@@ -137,7 +140,8 @@
 .ezl .lx-cat--live b,.ezl .lx-cat--live span{position:relative;color:#fff}
 
 @media (max-width:760px){
-  .ezl .lx-top10{grid-auto-columns:62%}
+  .ezl .lx-top10{grid-auto-columns:82%}
+  .ezl .lx-t10-n{font-size:88px}
   .ezl .lx-bb{min-height:380px}
   .ezl .lx-bb-shade{background:linear-gradient(0deg,rgba(5,7,13,.92) 0%,rgba(5,7,13,.5) 55%,rgba(5,7,13,.15) 100%)}
 }
