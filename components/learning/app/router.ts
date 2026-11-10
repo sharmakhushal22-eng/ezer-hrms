@@ -13,11 +13,11 @@ import { LMS_SITE } from '@/lib/lms/site'
  *  inside HRMS they sit under /learning. proxy.ts maps the one onto the same page. */
 export const BASE = LMS_SITE ? '' : '/learning'
 
-export type RouteName = 'home' | 'catalog' | 'course' | 'play' | 'my' | 'live' | 'achievements' | 'team' | 'studio'
+export type RouteName = 'home' | 'catalog' | 'course' | 'play' | 'my' | 'live' | 'room' | 'achievements' | 'team' | 'studio'
 
 export interface LearnRoute {
   name: RouteName
-  /** course id for 'course', enrolment id for 'play' */
+  /** course id for 'course', enrolment id for 'play', session id for 'room' */
   id: string | null
   /** studio section: 'courses', 'assignments' … */
   section: string | null
@@ -26,7 +26,7 @@ export interface LearnRoute {
   query: URLSearchParams
 }
 
-const NAMES: RouteName[] = ['home', 'catalog', 'course', 'play', 'my', 'live', 'achievements', 'team', 'studio']
+const NAMES: RouteName[] = ['home', 'catalog', 'course', 'play', 'my', 'live', 'room', 'achievements', 'team', 'studio']
 
 export function parseRoute(pathname: string, search: string): LearnRoute {
   const parts = (BASE ? pathname.replace(/^\/learning\/?/, '') : pathname).split('/').filter(Boolean).map(decodeURIComponent)
@@ -46,6 +46,8 @@ export const to = {
   my: (tab?: string) => `${BASE}/my${tab ? `?tab=${tab}` : ''}`,
   /** Live sessions; with an id, that webinar (its recording, or its details) */
   live: (id?: string) => `${BASE}/live${id ? `/${encodeURIComponent(id)}` : ''}`,
+  /** The webinar room: the stream, chat, questions and polls, full screen */
+  room: (sessionId: string) => `${BASE}/room/${encodeURIComponent(sessionId)}`,
   achievements: () => `${BASE}/achievements`,
   team: () => `${BASE}/team`,
   studio: (section?: string, item?: string) => `${BASE}/studio${section ? `/${section}` : ''}${item ? `/${encodeURIComponent(item)}` : ''}`,

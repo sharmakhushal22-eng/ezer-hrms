@@ -1,0 +1,114 @@
+/* components/learning/game/game.css — points, streaks, badges and the leaderboard.
+   Same rules as ../learn.css: scoped under .ezl, colours only from var(--ez-*) and the --lx-*
+   values learn.css already declares for both themes, stacking only from the --ez-z-* tiers. */
+
+/* ═══ The top-bar chip ═══════════════════════════════════════════════════════════════════ */
+.ezl .lx-gchip{display:inline-flex;align-items:center;gap:10px;height:36px;padding:0 12px 0 8px;border-radius:99px;border:1px solid var(--ez-line);
+  background:var(--ez-surface);color:var(--ez-ink);text-decoration:none;font-size:12.5px;font-weight:700;box-shadow:var(--ez-shadow-flat);
+  transition:border-color .16s,box-shadow .16s,transform .16s}
+.ezl .lx-gchip:hover{border-color:var(--ez-line-strong);box-shadow:var(--ez-shadow-raised)}
+.ezl .lx-gchip:focus-visible{outline:2px solid var(--ez-brand);outline-offset:2px}
+.ezl .lx-gchip-flame{display:inline-flex;align-items:center;gap:4px;height:26px;padding:0 8px 0 6px;border-radius:99px;background:var(--ez-sunken);color:var(--ez-faint)}
+.ezl .lx-gchip[data-hot="1"] .lx-gchip-flame{background:var(--ez-warning-tint);color:var(--ez-warning)}
+.ezl .lx-gchip-flame b{font-size:13px;color:var(--ez-ink)}
+.ezl .lx-gchip-lv{display:grid;gap:3px;color:var(--ez-ink-soft);line-height:1}
+.ezl .lx-gchip-lv>i{display:block;width:44px;height:4px;border-radius:99px;background:var(--ez-sunken);overflow:hidden}
+.ezl .lx-gchip-lv>i>i{display:block;height:100%;border-radius:99px;background:var(--ez-brand)}
+
+/* ═══ The Home tile ══════════════════════════════════════════════════════════════════════ */
+.ezl .lx-gtile{display:grid;gap:14px;padding:18px 18px 14px;border-radius:var(--lx-r);background:var(--ez-surface);border:1px solid var(--ez-line);
+  box-shadow:var(--ez-shadow-flat);min-width:0;position:relative;overflow:hidden}
+.ezl .lx-gtile::before{content:"";position:absolute;inset:0 0 auto;height:3px;background:linear-gradient(90deg,var(--ez-warning),var(--lx-gold),var(--ez-brand));opacity:.85}
+.ezl .lx-gtile-head{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap}
+.ezl .lx-gtile-streak{display:flex;align-items:center;gap:10px;min-width:0}
+.ezl .lx-gtile-flame{width:52px;height:52px;border-radius:16px;display:grid;place-items:center;background:var(--ez-sunken);color:var(--ez-faint)}
+.ezl .lx-gtile-streak[data-hot="1"] .lx-gtile-flame{background:var(--ez-warning-tint);color:var(--ez-warning);box-shadow:inset 0 0 0 1px var(--ez-warning-edge)}
+.ezl .lx-gtile-streak b{display:block;font-size:28px;font-weight:800;letter-spacing:-.03em;line-height:1}
+.ezl .lx-gtile-streak small{display:block;font-size:12px;color:var(--ez-muted);font-weight:600;margin-top:3px}
+.ezl .lx-gtile-level{display:flex;align-items:center;gap:10px;text-decoration:none;color:var(--ez-ink);border-radius:14px;padding:2px 4px}
+.ezl .lx-gtile-level:focus-visible{outline:2px solid var(--ez-brand);outline-offset:2px}
+.ezl .lx-gtile-level b{display:block;font-size:13.5px;font-weight:750}
+.ezl .lx-gtile-level small{display:block;font-size:12px;color:var(--ez-muted);font-weight:600;margin-top:2px}
+.ezl .lx-gtile-status{margin:0;font-size:13px;color:var(--ez-ink-soft);line-height:1.45}
+.ezl .lx-gtile-status[data-ok="1"]{color:var(--ez-positive);font-weight:650}
+.ezl .lx-gtile-week{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));gap:6px}
+.ezl .lx-gtile-week>span{height:30px;border-radius:9px;display:grid;place-items:center;font-size:11.5px;font-weight:700;color:var(--ez-faint);
+  background:var(--ez-sunken);border:1px solid transparent}
+.ezl .lx-gtile-week>span[data-on="1"]{background:var(--ez-warning-tint);color:var(--ez-warning);border-color:var(--ez-warning-edge)}
+.ezl .lx-gtile-week>span[data-today="1"]{border-color:var(--ez-brand-edge);color:var(--ez-ink)}
+.ezl .lx-gtile-week>span[data-today="1"][data-on="1"]{color:var(--ez-warning);border-color:var(--ez-warning)}
+.ezl .lx-gtile-goal{display:grid;gap:6px}
+.ezl .lx-gtile-goal>div{display:flex;justify-content:space-between;gap:8px;font-size:12.5px;color:var(--ez-muted);font-weight:600}
+.ezl .lx-gtile-goal b{color:var(--ez-ink);font-weight:700}
+.ezl .lx-gtile-foot{display:flex;align-items:center;justify-content:space-between;gap:10px;border-top:1px solid var(--ez-line);padding-top:8px;min-height:34px}
+.ezl .lx-gtile-fact{font-size:12.5px;color:var(--ez-ink-soft);font-weight:600;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;animation:lx-gfact .5s var(--lx-ease) both}
+@keyframes lx-gfact{from{opacity:0;transform:translateY(6px)}}
+@media (prefers-reduced-motion: reduce){.ezl .lx-gtile-fact{animation:none}}
+
+/* A streak kept today: the flame breathes once in a while. Never for reduced motion. */
+@media (prefers-reduced-motion: no-preference){
+  .ezl .lx-gtile-streak[data-today="1"] .lx-gtile-flame>svg,.ezl .lx-gchip[data-today="1"] .lx-gchip-flame>svg{animation:lx-gflame 2.8s ease-in-out infinite;transform-origin:50% 90%}
+}
+@keyframes lx-gflame{0%,100%{transform:scale(1)}45%{transform:scale(1.12) rotate(-3deg)}60%{transform:scale(.97) rotate(2deg)}}
+
+/* ═══ Achievements: the summary band ═════════════════════════════════════════════════════ */
+.ezl .lx-gsum{display:grid;grid-template-columns:minmax(0,1.3fr) repeat(3,minmax(0,1fr));gap:14px}
+.ezl .lx-gsum-level{display:flex;align-items:center;gap:16px;padding:18px 20px;border-radius:18px;background:var(--ez-surface);border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-flat);min-width:0}
+.ezl .lx-gsum-level h3{margin:0;font-size:18px;font-weight:800;letter-spacing:-.01em}
+.ezl .lx-gsum-level p{margin:4px 0 8px;font-size:13px;color:var(--ez-muted)}
+.ezl .lx-gsum-level .lx-bar{max-width:280px}
+.ezl .lx-gbreak{display:flex;flex-wrap:wrap;gap:8px}
+.ezl .lx-gbreak>span{display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;border-radius:99px;background:var(--ez-sunken);border:1px solid var(--ez-line);font-size:12.5px;color:var(--ez-ink-soft);font-weight:600}
+.ezl .lx-gbreak b{color:var(--ez-ink)}
+
+/* ═══ Badges ═════════════════════════════════════════════════════════════════════════════ */
+.ezl .lx-gbadges{display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:12px}
+.ezl .lx-gbadge{display:flex;gap:12px;align-items:flex-start;padding:14px;border-radius:14px;background:var(--ez-surface);border:1px solid var(--ez-line);min-width:0}
+.ezl .lx-gbadge[data-on="1"]{border-color:color-mix(in srgb,var(--lx-gold) 40%,var(--ez-line));box-shadow:var(--ez-shadow-flat)}
+.ezl .lx-gbadge-medal{width:48px;height:48px;flex-shrink:0;border-radius:50%;display:grid;place-items:center;background:var(--ez-sunken);color:var(--ez-faint);box-shadow:inset 0 0 0 2px var(--ez-line)}
+.ezl .lx-gbadge[data-on="1"] .lx-gbadge-medal{color:var(--ez-on-accent);background:conic-gradient(from 200deg,var(--lx-gold),var(--lx-glow),var(--lx-gold));box-shadow:inset 0 0 0 3px color-mix(in srgb,var(--ez-surface) 35%,transparent),0 8px 18px -10px var(--lx-gold)}
+.ezl .lx-gbadge-body{display:grid;gap:3px;min-width:0;flex:1}
+.ezl .lx-gbadge-body b{font-size:13.5px;font-weight:750}
+.ezl .lx-gbadge-body small{font-size:12px;color:var(--ez-muted);line-height:1.4}
+.ezl .lx-gbadge-body em{font-style:normal;font-size:11.5px;font-weight:650;color:var(--lx-gold);margin-top:2px}
+.ezl .lx-gbadge-prog{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:8px;align-items:center;margin-top:4px;font-size:11.5px;color:var(--ez-muted);font-weight:650}
+.ezl .lx-gbadge[data-on="0"] .lx-gbadge-body b{color:var(--ez-ink-soft)}
+
+/* ═══ Leaderboard ════════════════════════════════════════════════════════════════════════ */
+.ezl .lx-gboard{display:grid;gap:12px}
+.ezl .lx-gboard-bar{display:flex;gap:10px;flex-wrap:wrap;justify-content:space-between}
+.ezl .lx-gboard .lx-panel{transition:opacity .2s}
+.ezl .lx-gboard .lx-panel[data-stale="1"]{opacity:.55}
+.ezl .lx-gboard-list{list-style:none;margin:0;padding:6px}
+.ezl .lx-gboard-row{display:grid;grid-template-columns:34px 36px minmax(0,1fr) auto;align-items:center;gap:12px;padding:9px 10px;border-radius:12px}
+.ezl .lx-gboard-row+.lx-gboard-row{margin-top:2px}
+.ezl .lx-gboard-row[data-me="1"]{background:var(--ez-brand-tint);box-shadow:inset 0 0 0 1px var(--ez-brand-edge)}
+.ezl .lx-gboard-rank{width:30px;height:30px;border-radius:50%;display:grid;place-items:center;font-weight:800;font-size:13px;color:var(--ez-muted);background:var(--ez-sunken)}
+.ezl .lx-gboard-row[data-top="1"] .lx-gboard-rank{background:conic-gradient(from 200deg,var(--lx-gold),var(--lx-glow),var(--lx-gold));color:var(--ez-on-accent)}
+.ezl .lx-gboard-row[data-top="2"] .lx-gboard-rank{background:var(--ez-line-strong);color:var(--ez-ink)}
+.ezl .lx-gboard-row[data-top="3"] .lx-gboard-rank{background:var(--ez-warning-tint);color:var(--ez-warning);box-shadow:inset 0 0 0 1px var(--ez-warning-edge)}
+.ezl .lx-gboard-av{width:36px;height:36px;border-radius:50%;display:grid;place-items:center;font-size:12px;font-weight:750;background:var(--ez-sunken);color:var(--ez-ink-soft);border:1px solid var(--ez-line)}
+.ezl .lx-gboard-who{min-width:0}
+.ezl .lx-gboard-who b{display:flex;align-items:center;font-size:13.5px;font-weight:700;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ezl .lx-gboard-who small{display:block;font-size:12px;color:var(--ez-muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.ezl .lx-gboard-xp{font-weight:800;font-size:14px;white-space:nowrap}
+.ezl .lx-gboard-xp small{font-size:11px;color:var(--ez-muted);font-weight:650}
+.ezl .lx-gboard-gap{text-align:center;color:var(--ez-faint);letter-spacing:.3em;padding:2px 0}
+.ezl .lx-gboard-note{margin:0;padding:16px 18px;font-size:13px;color:var(--ez-muted)}
+.ezl .lx-gboard-foot{margin:0;padding:10px 18px 12px;border-top:1px solid var(--ez-line);font-size:12px;color:var(--ez-muted)}
+
+/* ═══ Course complete: what this course earned ═══════════════════════════════════════════ */
+.ezl .lx-gearned{display:flex;align-items:center;gap:12px;flex-wrap:wrap;padding:14px 18px;border-radius:var(--lx-r);background:var(--ez-surface);border:1px solid var(--ez-line);box-shadow:var(--ez-shadow-flat)}
+.ezl .lx-gearned>b{font-size:20px;font-weight:800;color:var(--ez-warning);letter-spacing:-.02em}
+.ezl .lx-gearned .lx-tag{gap:6px}
+
+@media (max-width:1100px){
+  .ezl .lx-gsum{grid-template-columns:repeat(2,minmax(0,1fr))}
+  .ezl .lx-gsum-level{grid-column:1 / -1}
+}
+@media (max-width:760px){
+  .ezl .lx-gchip{padding:0 6px;gap:0;box-shadow:none}
+  .ezl .lx-gchip-lv{display:none}
+  .ezl .lx-gboard-row{grid-template-columns:30px 32px minmax(0,1fr) auto;gap:8px;padding:8px}
+  .ezl .lx-gboard-bar .lx-tabs{width:100%}
+}

@@ -5,7 +5,9 @@ import { audit, errorResponse, LmsError, must, sb, settingsFor } from '@/lib/lms
 
 export const runtime = 'nodejs'
 
-const FIELDS = ['enabled', 'default_pass_pct', 'default_media_pct', 'default_max_attempts', 'default_due_days', 'publish_requires_review', 'managers_can_assign', 'managers_see_scores', 'reminder_days_before', 'overdue_every_days', 'escalate_after_days', 'email_enabled', 'certificates_enabled', 'cert_title', 'cert_signatory_name', 'cert_signatory_title', 'preboarding_enabled', 'preboarding_link_days']
+const FIELDS = ['enabled', 'default_pass_pct', 'default_media_pct', 'default_max_attempts', 'default_due_days', 'publish_requires_review', 'managers_can_assign', 'managers_see_scores', 'reminder_days_before', 'overdue_every_days', 'escalate_after_days', 'email_enabled', 'certificates_enabled', 'cert_title', 'cert_signatory_name', 'cert_signatory_title', 'preboarding_enabled', 'preboarding_link_days',
+  // Migration 227. The form sends these only once they exist or someone changes them.
+  'game_enabled', 'leaderboard_enabled', 'leaderboard_names']
 
 export async function GET(req: NextRequest) {
   const { actor, error } = await lmsAdmin(req)

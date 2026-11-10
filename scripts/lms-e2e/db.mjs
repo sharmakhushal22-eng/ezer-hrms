@@ -73,7 +73,7 @@ export async function build(dir) {
     ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT EXECUTE ON FUNCTIONS TO service_role;
   `)
   await seed(db)
-  for (const f of ['206_lms_schema.sql', '207_lms_engine.sql', '208_lms_roles.sql', '211_lms_live_and_scorm.sql']) {
+  for (const f of ['206_lms_schema.sql', '207_lms_engine.sql', '208_lms_roles.sql', '211_lms_live_and_scorm.sql', '227_lms_showcase_game_room.sql']) {
     await db.exec(fs.readFileSync(path.join(REPO, 'supabase/migrations', f), 'utf8'))
   }
   return db

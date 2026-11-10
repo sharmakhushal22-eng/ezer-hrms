@@ -5,12 +5,16 @@
 // Every button is a server call: Join asks for the link (it is handed out only while the room is
 // open), the attendance code is checked there, and the recording's progress is credited there
 // against the server's clock (lib/lms/live.ts). The screen only shows what came back.
+//
+// A session with a room in EZER Learn (migration 227) also offers "Enter the room": the stream
+// or the meeting's companion, with chat, questions and polls (components/learning/room).
 import { useCallback, useEffect, useRef, useState } from 'react'
 import { IconCheck } from '@/lib/ui'
 import { lmsApi, lmsDownload } from '@/lib/lms/client'
 import { errorWords, plural, type LiveSession } from './shared'
 import { GCalendar, GClock, GExit, GLayers, GLive, GPlay, GUsers } from './glyphs'
 import VideoPlayer from './VideoPlayer'
+import { linkProps, to } from './app/router'
 import './live.css'
 
 const IST = 'Asia/Kolkata'
@@ -24,6 +28,12 @@ const dayParts = (iso: string) => {
 }
 export const clockWords = (iso: string) => new Date(iso).toLocaleTimeString('en-IN', { timeZone: IST, hour: 'numeric', minute: '2-digit', hour12: true }).toLowerCase()
 export const sessionApi = (id: string) => `/api/lms/me/sessions/${id}`
+
+/** What 227 adds to a session (lib/lms/live.ts, forLearner): absent on an older database. */
+type WithRoom = LiveSession & { room_enabled?: boolean; stream?: string }
+const roomOf = (s: LiveSession) => s as WithRoom
+/** Streamed inside EZER Learn rather than held in a meeting app. */
+const streamsHere = (s: LiveSession) => !!roomOf(s).room_enabled && !!roomOf(s).stream && roomOf(s).stream !== 'MEETING'
 
 /** Ticks once every `ms`, for anything that counts down. */
 export function useNow(ms = 30_000) {
@@ -73,11 +83,15 @@ export function SessionActions({ s, onChanged, onWatch, big }: { s: LiveSession;
   })
   const sm = big ? '' : ' lx-btn--sm'
   const upcoming = s.phase === 'upcoming' || s.phase === 'joinable'
+  const on = s.phase === 'joinable' || s.phase === 'live'
+  // The room: the main button while the session is on; for a stream, also beforehand (countdown and chat).
+  const room = !!roomOf(s).room_enabled && (on || (streamsHere(s) && s.phase === 'upcoming'))
   return (
     <div className="lx-lv-actions" data-big={big ? '1' : '0'}>
       <div className="lx-lv-acts">
-        {s.can_join && <button className={`lx-btn lx-btn--primary${sm}`} disabled={!!busy} onClick={join}><GExit size={15} /> {busy === 'join' ? 'Opening…' : 'Join now'}</button>}
-        {upcoming && !s.me?.registered && <button className={`lx-btn${s.can_join ? '' : ' lx-btn--primary'}${sm}`} disabled={!!busy || s.seats_left === 0}
+        {room && <a className={`lx-btn${on ? ' lx-btn--primary' : ''}${sm}`} {...linkProps(to.room(s.id))}><GLive size={15} /> {on ? 'Enter the room' : 'Open the room'}</a>}
+        {s.can_join && <button className={`lx-btn${room && on ? '' : ' lx-btn--primary'}${sm}`} disabled={!!busy} onClick={join}><GExit size={15} /> {busy === 'join' ? 'Opening…' : 'Join now'}</button>}
+        {upcoming && !s.me?.registered && <button className={`lx-btn${s.can_join || (room && on) ? '' : ' lx-btn--primary'}${sm}`} disabled={!!busy || s.seats_left === 0}
           onClick={() => act('reg', () => lmsApi(sessionApi(s.id), { event: 'register' }))}>{busy === 'reg' ? 'Saving…' : s.seats_left === 0 ? 'Full' : s.me?.invited ? 'Accept' : 'Register'}</button>}
         {upcoming && s.me && <button className={`lx-btn${sm}`} disabled={!!busy}
           onClick={() => act('ics', () => lmsDownload(`${sessionApi(s.id)}?ics=1`, `${s.title.replace(/[^\w-]+/g, '-').slice(0, 60)}.ics`))}><GCalendar size={15} /> Add to calendar</button>}
@@ -125,7 +139,7 @@ export function SessionCard({ s, onChanged, onWatch, showCourse = true }: { s: L
           {s.phase === 'upcoming' && <span className="lx-lv-count">{untilWords(s.starts_at, now)}</span>}
           {s.host_name && <span><GUsers size={14} /> {s.host_name}</span>}
           {s.location && <span>{s.location}</span>}
-          {!s.has_link && !s.location && <span>Link to follow</span>}
+          {streamsHere(s) ? <span><GLive size={14} /> Streams in EZER Learn</span> : !s.has_link && !s.location && <span>Link to follow</span>}
         </div>
         {showCourse && s.course_title && <CourseLine title={s.course_title} />}
         {s.phase === 'cancelled' && s.cancel_reason && <p className="lx-lv-desc">{s.cancel_reason}</p>}

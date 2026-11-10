@@ -4,6 +4,7 @@ import { courseGate } from './engine'
 import { thumbnails } from './authoring'
 import { LmsError, fileUrl, mediaUrl, must, notFound, sb, settingsFor } from './server'
 import { notifyPerson } from './notify'
+import { pickPreview, topCourses, type PreviewAsset } from './showcase-core'
 import type { Learner } from './learner'
 
 const OPEN = ['NOT_STARTED', 'IN_PROGRESS', 'FAILED']
@@ -71,7 +72,7 @@ export async function catalogue(l: Learner) {
   const pathRows = ((paths as any).data || []) as any[]
   const pathIds = pathRows.map(p => p.id)
   const none = Promise.resolve({ data: [] as any[] })
-  const [{ data: aud }, thumbs, enrols, ratings, peers, { data: lessonRows }, { data: takers }, { data: versionRows }, { data: pathItems }, { data: minePaths }] = await Promise.all([
+  const [{ data: aud }, thumbs, enrols, ratings, peers, { data: lessonRows }, { data: takers }, { data: versionRows }, { data: pathItems }, { data: minePaths }, { data: moduleRows }, trailerRes, savedRes] = await Promise.all([
     restricted.length ? sb.from('lms_course_audience').select('course_id, kind, value').in('course_id', restricted) : none,
     thumbnails(rows.map(r => r.thumbnail_asset_id)),
     all.length ? sb.from('lms_enrollments').select('id, course_id, status, progress_pct, completed_at, expires_at').in('learner_id', l.allIds).in('course_id', all).order('enrolled_at', { ascending: false }) : none,
@@ -79,11 +80,16 @@ export async function catalogue(l: Learner) {
     l.facts.department_id && all.length ? peerCounts(l.companyId, l.facts.department_id, all) : Promise.resolve(new Map<string, number>()),
     // What is inside each course and how many have taken it, for the cards: lesson count, the
     // kinds of content, quizzes, and learners. Counts only, never who.
-    versions.length ? sb.from('lms_lessons').select('version_id, kind, quiz_id').in('version_id', versions).limit(10000) : none,
-    all.length ? sb.from('lms_enrollments').select('course_id').in('course_id', all).not('status', 'in', '(CANCELLED,REJECTED,PENDING_APPROVAL)').limit(20000) : none,
+    versions.length ? sb.from('lms_lessons').select('id, version_id, module_id, kind, quiz_id, position, is_preview, asset_id').in('version_id', versions).limit(10000) : none,
+    all.length ? sb.from('lms_enrollments').select('course_id, enrolled_at').in('course_id', all).not('status', 'in', '(CANCELLED,REJECTED,PENDING_APPROVAL)').limit(20000) : none,
     versions.length ? sb.from('lms_course_versions').select('id, published_at').in('id', versions) : none,
     pathIds.length ? sb.from('lms_path_items').select('path_id, course_id, position, is_required').in('path_id', pathIds).order('position') : none,
     pathIds.length ? sb.from('lms_path_enrollments').select('path_id, status, progress_pct').in('learner_id', l.allIds).in('path_id', pathIds).in('status', ['NOT_STARTED', 'IN_PROGRESS', 'COMPLETED']) : none,
+    versions.length ? sb.from('lms_modules').select('id, position').in('version_id', versions).limit(5000) : none,
+    // Trailers and My list arrived with migration 227. Until it is run these two reads fail on
+    // the missing column or table, and the catalogue simply has no trailers and an empty list.
+    all.length ? sb.from('lms_courses').select('id, trailer_asset_id, trailer_start_s, trailer_len_s').in('id', all) : none,
+    sb.from('lms_saved').select('course_id, created_at').in('learner_id', l.allIds),
   ])
   const visible = rows.filter(r => canSeeCourse(r, (aud || []).filter((x: any) => x.course_id === r.id), l.facts!))
   const inside = new Map<string, { lessons: number; quizzes: number; kinds: Set<string> }>()
@@ -98,9 +104,40 @@ export async function catalogue(l: Learner) {
 
   const titles = new Map(rows.map(r => [r.id, r.title]))
   const outside = [...new Set((pathItems || []).map((i: any) => i.course_id))].filter(id => !titles.has(id as string))
-  if (outside.length) for (const c of ((await sb.from('lms_courses').select('id, title').in('id', outside)).data || []) as any[]) titles.set(c.id, c.title)
   const mine = new Map<string, any>()
   for (const e of ((enrols as any).data || []) as any[]) if (!['CANCELLED', 'REJECTED'].includes(e.status) && !mine.has(e.course_id)) mine.set(e.course_id, e)
+
+  // What each card plays on hover (lib/lms/showcase-core.ts). The files it might use are read in
+  // the same round as the titles a path borrows from outside the catalogue.
+  const trailers = new Map((((trailerRes as any).error ? [] : trailerRes.data) || []).map((t: any) => [t.id, t]))
+  const modulePos = new Map(((moduleRows || []) as any[]).map(m => [m.id, m.position]))
+  const lessonsOf = new Map<string, any[]>()
+  for (const x of (lessonRows || []) as any[]) {
+    if (x.kind !== 'VIDEO' || !x.asset_id) continue
+    const list = lessonsOf.get(x.version_id) || []
+    list.push({ ...x, module_position: modulePos.get(x.module_id) ?? 0 })
+    lessonsOf.set(x.version_id, list)
+  }
+  const candidateAssets = [...new Set([
+    ...visible.map(r => trailers.get(r.id)?.trailer_asset_id).filter(Boolean),
+    ...visible.flatMap(r => (lessonsOf.get(r.published_version_id) || []).map(x => x.asset_id)),
+  ])] as string[]
+  const [assetRes, outsideRes] = await Promise.all([
+    candidateAssets.length ? sb.from('lms_assets').select('id, kind, status, duration_s, storage_path, play_url, play_url_expires_at').in('id', candidateAssets) : none,
+    outside.length ? sb.from('lms_courses').select('id, title').in('id', outside) : none,
+  ])
+  for (const c of (outsideRes.data || []) as any[]) titles.set(c.id, c.title)
+  const assetRows = new Map(((assetRes.data || []) as any[]).map(a => [a.id, a]))
+  const picks = new Map<string, ReturnType<typeof pickPreview>>()
+  for (const r of visible) {
+    const t = trailers.get(r.id)
+    picks.set(r.id, pickPreview({ enrolment_mode: r.enrolment_mode, ...(t || {}) }, lessonsOf.get(r.published_version_id) || [], assetRows as Map<string, PreviewAsset>, { enrolled: mine.has(r.id) }))
+  }
+  // One shared, daily-rotated URL per file (mediaUrl), so every learner's preview is the same
+  // address and the CDN and the browser cache serve the second view.
+  const usedAssets = [...new Set([...picks.values()].filter(Boolean).map(p => p!.asset_id))]
+  const urls = new Map(await Promise.all(usedAssets.map(async id => [id, await mediaUrl(assetRows.get(id)!).catch(() => null)] as const)))
+  const saved = new Map((((savedRes as any).error ? [] : savedRes.data) || []).map((x: any) => [x.course_id, x.created_at]))
   const doneSkills = new Set(rows.filter(r => mine.get(r.id)?.status === 'COMPLETED').flatMap(r => r.skills || []))
   const doneCats = new Set(rows.filter(r => mine.get(r.id)?.status === 'COMPLETED').map(r => r.category_id))
   const courses = visible.map(r => {
@@ -112,13 +149,35 @@ export async function catalogue(l: Learner) {
       ...r, thumbnail: thumbs.get(r.thumbnail_asset_id) || null, rating: rs.length ? Math.round((rs.reduce((a: number, b: number) => a + b, 0) / rs.length) * 10) / 10 : null, ratings: rs.length, mine: mine.get(r.id) || null, recommended_score: mine.has(r.id) ? 0 : score,
       lesson_count: s?.lessons || 0, quiz_count: s?.quizzes || 0, kinds: s ? [...s.kinds] : [], learners: learners.get(r.id) || 0,
       published_at: publishedAt.get(r.published_version_id) || r.updated_at,
+      preview: preview(picks.get(r.id), urls),
+      saved_at: saved.get(r.id) || null,
     }
   })
-  return { courses, categories: cats.data || [], recommended: [...courses].filter(c => c.recommended_score > 0).sort((a, b) => b.recommended_score - a.recommended_score).slice(0, 6), paths: pathRows.map(p => ({
+  const top = topCourses((takers || []) as any[], new Set(visible.map(r => r.id)))
+  return { courses, top, categories: cats.data || [], recommended: [...courses].filter(c => c.recommended_score > 0).sort((a, b) => b.recommended_score - a.recommended_score).slice(0, 6), paths: pathRows.map(p => ({
     ...p,
     mine: (minePaths || []).find((m: any) => m.path_id === p.id) || null,
     courses: (pathItems || []).filter((i: any) => i.path_id === p.id).map((i: any) => ({ id: i.course_id, title: titles.get(i.course_id) || 'Course', is_required: i.is_required })),
   })) }
+}
+
+function preview(p: ReturnType<typeof pickPreview> | undefined, urls: Map<string, string | null>) {
+  const src = p ? urls.get(p.asset_id) : null
+  return p && src ? { src, start: p.start, end: p.end, source: p.source } : null
+}
+
+/** Put a course on My list, or take it off. */
+export async function setSaved(l: Learner, courseId: string, on: boolean) {
+  if (l.kind === 'CANDIDATE') throw new LmsError('My list is for employees.', 403)
+  if (on) {
+    await visibleCourse(l, courseId)
+    const { error } = await sb.from('lms_saved').upsert({ company_id: l.companyId, learner_id: l.id, course_id: courseId }, { onConflict: 'learner_id,course_id', ignoreDuplicates: true })
+    if (error) throw error
+  } else {
+    const { error } = await sb.from('lms_saved').delete().in('learner_id', l.allIds).eq('course_id', courseId)
+    if (error) throw error
+  }
+  return { saved: on }
 }
 
 async function peerCounts(company: string, department: string, courseIds: string[]) {

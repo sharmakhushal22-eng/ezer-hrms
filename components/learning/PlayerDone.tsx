@@ -7,6 +7,7 @@ import { lmsApi, lmsDownload } from '@/lib/lms/client'
 import { CourseArt, DueTag, IconStar, dayWords, errorWords, type Dashboard, type LearnItem, type PlayerView } from './shared'
 import { GArrowRight, GCert, GRedo, GTrophy } from './glyphs'
 import { Aurora } from './motion/Aurora'
+import { Earned } from './game/Earned'
 
 const CONFETTI = Array.from({ length: 28 }, (_, i) => ({
   left: `${(i * 37) % 100}%`, delay: `${(i % 7) * 0.35}s`, dur: `${2.6 + (i % 5) * 0.4}s`,
@@ -125,6 +126,8 @@ export default function CourseDone({ view, path, backLabel, onClose, onOpenCours
         </div>
         {err && <div role="alert" style={{ fontSize: 13.5, color: 'var(--ez-on-dark)' }}>{err}</div>}
       </section>
+
+      {!view.read_only && <Earned />}
 
       {cert && (
         <section className="lx-cert" style={{ display: 'flex', gap: 16, alignItems: 'center', flexWrap: 'wrap' }}>

@@ -4,7 +4,7 @@
 // lands on a draft. Metadata such as the title lives on the course and may change at any
 // time; what a learner studies and is assessed on lives on the version.
 import { publishProblems, questionProblem, type PublishLesson, type PublishQuiz, type QuestionFull, type VersionRules } from './core'
-import { audit, BUCKET, fileUrls, LmsError, must, notFound, sb, settingsFor, tusEndpoint } from './server'
+import { audit, BUCKET, fileUrls, LmsError, mediaUrl, must, notFound, sb, settingsFor, tusEndpoint } from './server'
 import { inScope, type LmsActor } from './access'
 import { notifyPerson } from './notify'
 import { indexPackage } from './scorm'
@@ -135,21 +135,29 @@ export async function courseDetail(a: LmsActor, id: string, versionId?: string |
     quizIds.length ? sb.from('lms_questions').select('*').in('quiz_id', quizIds).order('position') : { data: [] },
     lessonIds.length ? sb.from('lms_lesson_resources').select('*').in('lesson_id', lessonIds).order('position') : { data: [] },
   ])
-  const assetIds = [...new Set([...lessonRows.map(l => l.asset_id), ...((resources as any).data || []).map((r: any) => r.asset_id), course.thumbnail_asset_id].filter(Boolean))]
+  const assetIds = [...new Set([...lessonRows.map(l => l.asset_id), ...((resources as any).data || []).map((r: any) => r.asset_id), course.thumbnail_asset_id, course.trailer_asset_id].filter(Boolean))]
   const [assets, thumbs] = await Promise.all([
     assetIds.length
-      ? sb.from('lms_assets').select('id, kind, original_name, mime_type, size_bytes, duration_s, status, poster_path').in('id', assetIds)
+      ? sb.from('lms_assets').select('id, kind, original_name, mime_type, size_bytes, duration_s, status, poster_path, storage_path, play_url, play_url_expires_at').in('id', assetIds)
       : { data: [] as any[] },
     thumbnails([course.thumbnail_asset_id]),
   ])
-  const assetById = new Map(((assets as any).data || []).map((x: any) => [x.id, x]))
+  // Signing details stay on the server: only the trailer's playable address leaves, for the Studio's preview.
+  const assetRows = ((assets as any).data || []) as any[]
+  const trailerRow = course.trailer_asset_id ? assetRows.find(x => x.id === course.trailer_asset_id) : null
+  const trailerUrl = trailerRow ? await mediaUrl(trailerRow).catch(() => null) : null
+  const SECRET = new Set(['storage_path', 'play_url', 'play_url_expires_at'])
+  const assetById = new Map(assetRows.map(x => [x.id, Object.fromEntries(Object.entries(x).filter(([k]) => !SECRET.has(k)))]))
   const tree = {
     version: working, modules: must(modules) as any[],
     lessons: lessonRows.map(l => ({ ...l, asset: assetById.get(l.asset_id) || null, resources: ((resources as any).data || []).filter((r: any) => r.lesson_id === l.id).map((r: any) => ({ ...r, asset: assetById.get(r.asset_id) || null })) })),
     quizzes: quizRows.map(q => ({ ...q, questions: ((questions as any).data || []).filter((x: any) => x.quiz_id === q.id) })),
   }
   return {
-    course: { ...course, thumbnail: thumbs.get(course.thumbnail_asset_id) || null },
+    course: {
+      ...course, thumbnail: thumbs.get(course.thumbnail_asset_id) || null,
+      trailer: trailerRow ? { ...assetById.get(trailerRow.id), url: trailerUrl } : null,
+    },
     versions: versions.map(v => ({ id: v.id, version_no: v.version_no, status: v.status, published_at: v.published_at, published_by_name: v.published_by_name, change_note: v.change_note, review_note: v.review_note, submitted_by_name: v.submitted_by_name })),
     tree, audience: must(audience), prerequisites: (must(prereqs) as any[]).map(p => p.requires_course_id),
     problems: await problemsFor(tree),
@@ -172,6 +180,7 @@ export async function updateCourse(a: LmsActor, id: string, body: any) {
     if (c.status === 'PUBLISHED' && !a.caps.publish) throw new LmsError('Changing who a published course reaches needs publish rights.', 403)
     Object.assign(patch, governed)
   }
+  Object.assign(patch, await trailerPatch(c, body))
   if (Object.keys(patch).length) must(await sb.from('lms_courses').update(patch).eq('id', id).select('id'))
   if (Array.isArray(body?.audience)) {
     if (c.status === 'PUBLISHED' && !a.caps.publish) throw new LmsError('Changing who a published course reaches needs publish rights.', 403)
@@ -189,6 +198,24 @@ export async function updateCourse(a: LmsActor, id: string, body: any) {
     if (ids.length) must(await sb.from('lms_course_prerequisites').insert(ids.map(r => ({ company_id: c.company_id, course_id: id, requires_course_id: r }))).select('course_id'))
   }
   await audit({ companyId: c.company_id, actorId: a.employeeId, actorLabel: a.label, action: 'COURSE_UPDATED', entity: 'course', entityId: id, detail: { fields: Object.keys(patch) } })
+}
+
+/** The course's trailer (migration 227): a ready video of this company, and a window inside it.
+ *  Only the fields sent are touched, so a company that has not run 227 never writes them. */
+async function trailerPatch(c: { company_id: string }, body: any): Promise<Record<string, unknown>> {
+  const out: Record<string, unknown> = {}
+  if (body && 'trailer_asset_id' in body) {
+    const id = body.trailer_asset_id ? String(body.trailer_asset_id) : null
+    if (id) {
+      const { data: a } = await sb.from('lms_assets').select('id, kind, status, company_id').eq('id', id).maybeSingle()
+      if (!a || a.company_id !== c.company_id) throw new LmsError('That video was not found.', 404)
+      if (a.kind !== 'VIDEO' || a.status !== 'READY') throw new LmsError('A trailer has to be a video that has finished uploading.')
+    }
+    out.trailer_asset_id = id
+  }
+  if (body && 'trailer_start_s' in body) out.trailer_start_s = Math.max(0, Math.round(Number(body.trailer_start_s) || 0))
+  if (body && 'trailer_len_s' in body) out.trailer_len_s = Math.max(5, Math.min(90, Math.round(Number(body.trailer_len_s) || 20)))
+  return out
 }
 
 // ── Lifecycle ───────────────────────────────────────────────────────────────

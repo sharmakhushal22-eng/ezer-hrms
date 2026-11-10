@@ -23,18 +23,49 @@ import { GArrowLeft, GBook, GCompass, GExit, GHome, GLive, GMenu, GMoon, GStudio
 import { linkProps, navigate, to, useLearnRoute, type LearnRoute } from './router'
 import { cached, remember } from './cache'
 import type { Catalog } from '../Catalogue'
+import dynamic from 'next/dynamic'
 import Home from '../Home'
 import Catalogue from '../Catalogue'
-import CoursePage from '../CoursePage'
-import MyLearning from '../MyLearning'
-import Achievements from '../Achievements'
-import Live from '../Live'
-import Team, { type TeamData } from '../Team'
-import Player from '../Player'
-import Studio, { type StudioBoot } from '../studio/Studio'
+import type { TeamData } from '../Team'
+import type { StudioBoot } from '../studio/Studio'
+import { GameChip } from '../game/GameChip'
+import HoverLayer from '../showcase/HoverLayer'
 import { LMS_SITE } from '@/lib/lms/site'
 import { adoptHandoff, hrmsBackHref, signOutOfLms } from '@/lib/lms/sso-client'
 import SiteSignIn from './SiteSignIn'
+
+// Home and Explore are in the first download; every other screen is a chunk of its own, fetched
+// the first time it opens, or earlier, once the browser is idle after start-up (warmScreens).
+// The Studio (with its builder and curriculum board), the player (video, PDF and SCORM) and the
+// webinar room are most of the product's code, and most visits never open them.
+const screens = {
+  course: () => import('../CoursePage'),
+  my: () => import('../MyLearning'),
+  achievements: () => import('../Achievements'),
+  live: () => import('../Live'),
+  team: () => import('../Team'),
+  player: () => import('../Player'),
+  room: () => import('../room/Room'),
+  studio: () => import('../studio/Studio'),
+}
+const Wait = () => <Skel h={300} r={20} />
+const CoursePage = dynamic(screens.course, { ssr: false, loading: Wait })
+const MyLearning = dynamic(screens.my, { ssr: false, loading: Wait })
+const Achievements = dynamic(screens.achievements, { ssr: false, loading: Wait })
+const Live = dynamic(screens.live, { ssr: false, loading: Wait })
+const Team = dynamic(screens.team, { ssr: false, loading: Wait })
+const Player = dynamic(screens.player, { ssr: false, loading: () => <div style={{ minHeight: '100vh', background: 'var(--ez-dark)' }} /> })
+const Room = dynamic(screens.room, { ssr: false, loading: () => <div style={{ minHeight: '100vh', background: 'var(--ez-dark)' }} /> })
+const Studio = dynamic(screens.studio, { ssr: false, loading: Wait })
+
+/** Fetch the other screens' code while nothing else is happening, so the first click on any of
+ *  them does not wait for it. The Studio only for someone who can open it. */
+function warmScreens(studio: boolean) {
+  const idle: (f: () => void) => void = (window as any).requestIdleCallback || ((f: () => void) => setTimeout(f, 1500))
+  const order: (keyof typeof screens)[] = ['course', 'player', 'my', 'live', 'achievements', 'room', 'team', ...(studio ? ['studio' as const] : [])]
+  const next = () => { const k = order.shift(); if (k) void screens[k]().catch(() => {}).finally(() => idle(next)) }
+  idle(next)
+}
 
 type Who = 'checking' | 'employee' | 'admin' | 'none'
 
@@ -127,9 +158,16 @@ export default function LearnApp() {
     if (who === 'admin') void loadStudio()
   }, [who, loadDash, loadCat, loadTeam, loadStudio])
 
+  useEffect(() => {
+    if (who === 'employee' || (who === 'admin' && studioChecked)) warmScreens(who === 'admin' || !!studio?.caps)
+    // Once per sign-in: the screens' code does not change with what they show.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [who, studioChecked])
+
   // An admin without an employee record has nothing to learn here: their home is the Studio.
   useEffect(() => {
-    if (who === 'admin' && route.name !== 'studio') navigate(to.studio(), { replace: true })
+    // The webinar room is the exception: a host may run a session from a dashboard login.
+    if (who === 'admin' && route.name !== 'studio' && route.name !== 'room') navigate(to.studio(), { replace: true })
   }, [who, route.name])
 
   // "/" jumps to search, as on most learning sites.
@@ -166,7 +204,7 @@ export default function LearnApp() {
   // company with the LMS alone has no HRMS. Sign out is always there, since this domain keeps a
   // session of its own.
   const backHref = LMS_SITE ? hrmsBackHref(who === 'employee') : who === 'employee' ? '/ess' : '/dashboard'
-  const focus = route.name === 'play'
+  const focus = route.name === 'play' || route.name === 'room'
   // The overview's `me` is an id, not a name, so only the learner record names someone.
   const name = dash?.name || ''
   const initials = (name || (learner ? 'You' : 'Admin')).split(/\s+/).map(s => s[0]).slice(0, 2).join('').toUpperCase()
@@ -179,6 +217,8 @@ export default function LearnApp() {
       : studioChecked
         ? <div className="lx-empty"><h3>The Studio is for HR and L&amp;D</h3><p>Your access does not include managing courses. Everything you can learn is under Explore courses.</p><a className="lx-btn lx-btn--primary" {...linkProps(to.home())}>Go to Home</a></div>
         : <Skel h={300} r={20} />
+  } else if (route.name === 'room' && route.id) {
+    body = <Room key={route.id} sessionId={route.id} onLeave={() => { if (window.history.length > 1) window.history.back(); else navigate(learner ? to.live() : to.studio('live')) }} />
   } else if (!learner) {
     body = <Skel h={300} r={20} />
   } else if (gate) {
@@ -294,6 +334,7 @@ export default function LearnApp() {
               )}
               <div className="lx-top-actions">
                 {route.name === 'studio' && learner && <a className="lx-btn lx-btn--sm lx-hide-sm" {...linkProps(to.home())}><GArrowLeft size={15} /> My learning</a>}
+                {learner && route.name !== 'studio' && <GameChip />}
                 {route.name !== 'studio' && studioOn && <a className="lx-btn lx-btn--sm lx-hide-sm" {...linkProps(to.studio())}><GStudio size={15} /> Studio</a>}
                 <ThemeButton />
                 {backHref && <a className="lx-btn lx-btn--sm" href={backHref} title="Back to EZER HRMS" aria-label="Back to EZER HRMS"><GArrowLeft size={15} /> <span className="lx-hide-sm">EZER HRMS</span></a>}
@@ -309,6 +350,8 @@ export default function LearnApp() {
           </div>
         </main>
 
+        {/* The card a course grows into on hover, drawn once above everything (showcase/). */}
+        {learner && !focus && <HoverLayer />}
         {learner && !focus && (
           <nav className="lx-tabbar" aria-label="EZER Learn">
             {[...nav.learn.slice(0, 4), ...(studioOn ? [{ key: 'studio', label: 'Studio', href: to.studio(), icon: <GStudio size={20} />, match: (r: LearnRoute) => r.name === 'studio' }] : [])].map(n => (

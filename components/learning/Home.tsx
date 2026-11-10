@@ -11,11 +11,16 @@ import { IconCheck } from '@/lib/ui'
 import { linkProps, navigate, to } from './app/router'
 import type { Catalog } from './Catalogue'
 import { CourseCard, LearnCard, isNew } from './CourseCard'
-import { CourseArt, DueTag, EmptyState, Oops, Ring, Skel, dueWords, durationWords, firstName, hueOf, plural, shortDay, LEVEL, type Dashboard, type LearnItem } from './shared'
+import { CourseArt, DueTag, EmptyState, Oops, Ring, Skel, dueWords, durationWords, firstName, plural, shortDay, LEVEL, type Dashboard, type LearnItem } from './shared'
 import { GArrowRight, GBook, GCheckCircle, GClock, GCompass, GFlame, GLayers, GPlay, GTrophy } from './glyphs'
 import { keys, paths, prefetch } from './app/cache'
 import { CountUp } from './motion/CountUp'
 import { Scroller } from './motion/Scroller'
+import Billboard from './showcase/Billboard'
+import Top10 from './showcase/Top10'
+import { CategoryTiles, FreshTile, NextLiveTile } from './showcase/LiveTiles'
+import { isSaved, usePreviewPrefs } from './showcase/preview'
+import { GameTile } from './game/GameChip'
 
 function greeting() {
   const h = new Date().getHours()
@@ -218,6 +223,8 @@ function Pending({ items }: { items: LearnItem[] }) {
 const PACE = [5200, 6100, 5600, 6600, 5900, 6300, 5400, 6800]
 
 export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard | null; dashErr: string; cat: Catalog | null; onRetry: () => void }) {
+  // My list changes in this tab show at once (showcase/preview.ts).
+  usePreviewPrefs()
   const shelves = useMemo(() => {
     const courses = cat?.courses || []
     const catName = new Map((cat?.categories || []).map(c => [c.id, c.name]))
@@ -230,8 +237,17 @@ export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard 
       popular: [...courses].filter(c => (c.learners || 0) > 0 || c.rating != null).sort((a, b) => (b.learners || 0) - (a.learners || 0) || (b.rating || 0) - (a.rating || 0)).slice(0, 12),
       quick: courses.filter(c => notMine(c) && c.est_minutes != null && c.est_minutes <= 15).slice(0, 12),
       categories: (cat?.categories || []).map(x => ({ ...x, n: courses.filter(c => c.category_id === x.id).length })).filter(x => x.n > 0),
+      top: cat?.top || [],
+      // The spotlight: HR's picks, then what is recommended, then the chart; the ones with a
+      // clip to play first, five at most.
+      billboard: (() => {
+        const pool = [...courses.filter(c => c.is_featured), ...(cat?.recommended || []), ...(cat?.top || []).map(id => courses.find(c => c.id === id)).filter(Boolean) as typeof courses]
+        const uniq = pool.filter((c, i) => pool.findIndex(x => x.id === c.id) === i)
+        return [...uniq.filter(c => c.preview), ...uniq.filter(c => !c.preview)].slice(0, 5)
+      })(),
     }
   }, [cat])
+  const saved = (cat?.courses || []).filter(c => isSaved(c)).sort((a, b) => String(b.saved_at || '').localeCompare(String(a.saved_at || '')))
 
   if (!dash) {
     if (dashErr) return <Oops message={dashErr} onRetry={onRetry} />
@@ -259,6 +275,7 @@ export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard 
   return (
     <div className="lx-stack">
       <Welcome dash={dash} cat={cat} />
+      {!nothingAtAll && shelves.billboard.length > 0 && <Billboard items={shelves.billboard} catName={shelves.catName} top={shelves.top} />}
 
       {nothingAtAll ? (
         <EmptyState title="Your learning will show up here" icon={<GCompass size={34} />}>Anything HR assigns to you appears on this page, and the catalogue fills up as courses are published.</EmptyState>
@@ -268,6 +285,14 @@ export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard 
             {lead ? <Resume lead={lead} /> : <Discover />}
             {deadlines.length > 0 && <Deadlines items={deadlines} />}
           </div>
+
+          <section className="lx-row" aria-label="Right now">
+            <div className="lx-tiles">
+              <GameTile />
+              <NextLiveTile />
+              {shelves.fresh.length > 0 && <FreshTile courses={shelves.fresh.slice(0, 5)} />}
+            </div>
+          </section>
 
           {todo.length > 0 && (
             <Rail title={overdue.length ? 'Needs your attention' : 'Mandatory training'} sub={overdue.length ? 'Overdue and mandatory courses, most urgent first' : 'Required for your role. Finish these before their due dates.'} more={{ label: 'See all', href: to.my('todo') }} n={todo.length} auto={next()}>
@@ -284,11 +309,17 @@ export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard 
               {optional.map(i => <LearnCard key={i.id} item={i} />)}
             </Rail>
           )}
+          {saved.length > 0 && (
+            <Rail title="My list" sub="Courses you saved for later" n={saved.length} auto={next()}>
+              {saved.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
+            </Rail>
+          )}
           {shelves.recommended.length > 0 && (
             <Rail title="Recommended for you" sub="Picked by HR, popular in your department, or close to what you finished" more={{ label: 'Explore', href: to.catalog() }} n={shelves.recommended.length} auto={next()}>
               {shelves.recommended.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
             </Rail>
           )}
+          <Top10 courses={cat?.courses || []} top={shelves.top} catName={shelves.catName} title="Top 10 in your company this month" />
           {shelves.featured.length > 0 && (
             <Rail title="Featured by HR" sub="Courses your company wants everyone to see" n={shelves.featured.length} auto={next()}>
               {shelves.featured.map(c => <CourseCard key={c.id} c={c} category={name(c.category_id)} />)}
@@ -297,13 +328,7 @@ export default function Home({ dash, dashErr, cat, onRetry }: { dash: Dashboard 
           {shelves.categories.length > 0 && (
             <section className="lx-row">
               <div className="lx-sec-head"><div><h2 className="lx-sec-title">Browse by category</h2><div className="lx-sec-sub">Find courses by subject</div></div></div>
-              <div className="lx-cats">
-                {shelves.categories.map(x => (
-                  <a key={x.id} className="lx-cat" data-h={hueOf(x.id)} {...linkProps(to.catalog({ cat: x.id }))}>
-                    <b>{x.name}</b><span className="lx-num">{plural(x.n, 'course')}</span>
-                  </a>
-                ))}
-              </div>
+              <CategoryTiles categories={shelves.categories} courses={cat?.courses || []} />
             </section>
           )}
           {shelves.fresh.length > 0 && (
