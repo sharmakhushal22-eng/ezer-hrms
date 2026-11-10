@@ -79,6 +79,78 @@ export interface KraWithKpis {
 export const DEFAULT_MIN_KPI_PER_KRA = DEFAULT_RULES.minKpi
 export const DEFAULT_MAX_KPI_PER_KRA = DEFAULT_RULES.maxKpi
 
+/** The ceiling in `pms_policies_kpi_range`. A guard against a typo — 50 where
+ *  5 was meant — producing a form nobody can scroll, not an editorial limit. */
+export const KPI_PER_KRA_CEILING = 20
+
+/**
+ * WHY THIS POLICY'S KPI RANGE CANNOT BE SAVED, OR NULL.
+ *
+ * ── THE SAME SHAPE AS chainFault, AND FOR THE SAME REASON ────────────────
+ *
+ * 221 put this rule in the database as CHECK pms_policies_kpi_range:
+ *
+ *     min_kpi_per_kra >= 1
+ *     AND max_kpi_per_kra >= min_kpi_per_kra
+ *     AND max_kpi_per_kra <= 20
+ *
+ * and the database is still what refuses — nothing here weakens that. But a
+ * CHECK can only say no. Saving min 6 against max 5 put this in front of an
+ * administrator, verbatim:
+ *
+ *     new row for relation "pms_policies" violates check constraint
+ *     "pms_policies_kpi_range"
+ *
+ * which names no field, no value, and nothing to do about it. Worse, ONE
+ * constraint covers THREE different mistakes, so any single translation of
+ * its name would have misreported two of them.
+ *
+ * So this returns the fault for the PAIR, and both sides use it: the browser
+ * to explain before the button is pressed, the route to refuse a posted body
+ * that never reached the browser. Exactly the chainFault arrangement.
+ *
+ * ── BOTH NUMBERS, ALWAYS ─────────────────────────────────────────────────
+ *
+ * The caller passes the pair as it WOULD BE after the edit, not the fields
+ * it happens to be changing. A PATCH that sends only max_kpi_per_kra can
+ * still break the rule against a stored minimum it never mentioned, and a
+ * message about "the value you sent" would then be talking about the wrong
+ * number.
+ *
+ * Returns ONE fault, like chainFault: it is shown against a save button, and
+ * the first thing wrong is the thing to fix.
+ */
+export function policyKpiRangeFault(
+  min: number | null | undefined,
+  max: number | null | undefined,
+): string | null {
+  const lo = Number(min), hi = Number(max)
+
+  // A non-number reaches the database as null and trips NOT NULL instead,
+  // which is a different and equally unhelpful message.
+  if (!Number.isFinite(lo) || !Number.isFinite(hi)) {
+    return 'Both the minimum and the maximum KPIs per KRA have to be numbers.'
+  }
+  if (!Number.isInteger(lo) || !Number.isInteger(hi)) {
+    return 'KPIs are counted, so both numbers have to be whole.'
+  }
+  if (lo < 1) {
+    return 'The minimum has to be at least 1 — a KRA with no KPIs has '
+         + 'nothing to rate, and nobody could submit against it.'
+  }
+  if (hi < lo) {
+    return `The maximum cannot be below the minimum. As it stands a KRA `
+         + `would have to hold at least ${lo} KPIs and at most ${hi}, which `
+         + `no number satisfies.`
+  }
+  if (hi > KPI_PER_KRA_CEILING) {
+    return `${hi} is past the ceiling of ${KPI_PER_KRA_CEILING}. Each KPI `
+         + `takes an equal share of its KRA's weightage, so past twenty the `
+         + `shares are too thin to mean anything.`
+  }
+  return null
+}
+
 export interface KpiFault {
   /** The KRA this is about. */
   seq: number

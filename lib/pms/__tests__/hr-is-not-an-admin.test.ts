@@ -64,7 +64,17 @@ test('the gate reads the action, and the body is parsed before it', () => {
   // an empty action, which matches no case and is refused as admin-only.
   // 217 added a third argument: the period, because who may commit an
   // upload is now a policy question and the policy is per company.
-  assert.match(ROUTE, /async function gate\(req: NextRequest, action\?: string, periodId\?: string \| null\)/)
+  //
+  // That argument is now the WHOLE BODY, which makes this test's point
+  // sharper rather than weaker. The gate still needs the period for
+  // uploadAllowed — it reads it out itself — and it also needs whichever id
+  // the action names, so it can refuse a row belonging to another company.
+  // Nothing can be gated until the body has been parsed.
+  assert.match(ROUTE,
+    /async function gate\(req: NextRequest, action\?: string,\s*body\?: Record<string, unknown>\)/)
+  // The period is still what decides the upload, just derived inside.
+  assert.match(ROUTE, /const periodId = typeof body\?\.period_id === 'string'/,
+    'the gate no longer reads the period, so uploadAllowed cannot be per policy')
   const post = ROUTE.slice(ROUTE.indexOf('export async function POST'),
                            ROUTE.indexOf('switch (action)'))
   assert.ok(post.indexOf('await req.json()') < post.indexOf('await gate(req, action'),

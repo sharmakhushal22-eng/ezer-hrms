@@ -24,6 +24,7 @@ import { IconPolicies, IconTemplates, IconOrgChart, IconSliders, IconLetters,
 import { CHAINS, CHAIN_LABEL, FINALISERS, FINALISER_LABEL } from '@/lib/pms/hierarchy'
 import { RUNG_CHOICES, chainFault, chainWarnings, chainSummary, usedBy,
          MAX_CHAIN_NAME } from '@/lib/pms/chainBuilder'
+import { policyKpiRangeFault } from '@/lib/pms/kpi'
 
 type Row = Record<string, unknown>
 const s = (v: unknown) => (v === null || v === undefined) ? '' : String(v)
@@ -205,6 +206,22 @@ function PolicyPanel({ policies, companies, people, chains, reload }: {
 
   const set = (k: string, v: unknown) => setDraft(d => ({ ...d, [k]: v }))
 
+  /** THE SAME FUNCTION THE ROUTE REFUSES WITH — see lib/pms/kpi.ts.
+   *
+   *  The two inputs already carry min/max attributes, and those do nothing
+   *  here: on a number input they drive the spinners and :invalid styling,
+   *  and this is not a native form submit, so a typed 6 against a maximum of
+   *  5 went straight to the database and came back as the raw constraint
+   *  violation. Reading the fault here is what makes the pair explainable;
+   *  CHECK pms_policies_kpi_range is still what makes it impossible.
+   *
+   *  The fallbacks mirror the ones the inputs display, so what is judged is
+   *  what is on screen rather than what is in the draft. */
+  const kpiFault = policyKpiRangeFault(
+    n(draft.min_kpi_per_kra) || 1,
+    n(draft.max_kpi_per_kra) || 5,
+  )
+
   return (
     <Card title="Policy rules"
           sub="The frequency here is the real one. Changing it decides how many periods a year has, and what the Cycle tab will generate.">
@@ -256,12 +273,17 @@ function PolicyPanel({ policies, companies, people, chains, reload }: {
             renders as a tall narrow ribbon beside two short inputs, which
             reads as a warning about the field next to it rather than as a
             note about the pair. */}
+        {/* The fault takes the note's slot rather than appearing beneath it:
+            same place, so nothing shifts as it comes and goes, and it is
+            already where the eye is after typing into the pair. */}
         <div style={{ gridColumn: 'span 2' }}>
-          <Note tone="warn">
-            The KPIs under one KRA share that KRA's weightage — three KPIs on a
-            30% KRA might be 15, 10 and 5. Lowering the maximum leaves KRAs that
-            already hold more than that alone; it refuses the next one.
-          </Note>
+          {kpiFault
+            ? <Note tone="bad">{kpiFault}</Note>
+            : <Note tone="warn">
+                The KPIs under one KRA share that KRA's weightage — three KPIs on a
+                30% KRA might be 15, 10 and 5. Lowering the maximum leaves KRAs that
+                already hold more than that alone; it refuses the next one.
+              </Note>}
         </div>
       </div>
 
@@ -415,7 +437,7 @@ function PolicyPanel({ policies, companies, people, chains, reload }: {
         Performance is not linked to pay. That is fixed in the database, not a setting: the column is constrained to stay off.
       </Note>
 
-      <SaveRow busy={busy} error={error} saved={saved}
+      <SaveRow busy={busy} error={error} saved={saved} disabled={!!kpiFault}
                onSave={() => run(() => pmsAdmin('policy_update', { id, ...draft }), 'Policy saved.')} />
     </Card>
   )
@@ -1316,6 +1338,24 @@ function CyclePanel({ policies, periods, companies, reload }: {
     const co = companyName.get(s(p.company_id))
     return `${s(p.period_name)}${co ? ' · ' + co : ''} · ${s(p.status).toLowerCase()}`
   }, [companyName])
+  /** THE POLICY DROPDOWN NEEDED IT TOO, and was the last one without it.
+   *
+   *  The three policies here are all called "Standard Quarterly" — one per
+   *  company — so "Generate a year of periods" offered three identical
+   *  options and nothing but an invisible uuid told them apart. Picking the
+   *  wrong one lays a whole financial year of periods against the wrong
+   *  company.
+   *
+   *  This is the third time this bug has been fixed in this file. The note
+   *  above PolicyPanel's copy records what it cost the first time: attempts
+   *  to change one policy's minimum KRA count landed on three different
+   *  companies' policies. The periods dropdowns below were the second. The
+   *  map was already in scope here for them; only this list was missed. */
+  const policyLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    const inactive = p.is_active === false ? ' · inactive' : ''
+    return `${co ? co + ' · ' : ''}${s(p.policy_name)}${inactive}`
+  }, [companyName])
   const gen = useSaver(reload)
   const open = useSaver(reload)
   const win = useSaver(reload)
@@ -1357,7 +1397,7 @@ function CyclePanel({ policies, periods, companies, reload }: {
         <div className="grid g4">
           <Field label="Policy">
             <select value={policyId} onChange={e => setPolicyId(e.target.value)}>
-              {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{s(p.policy_name)}</option>)}
+              {policies.map(p => <option key={s(p.id)} value={s(p.id)}>{policyLabel(p)}</option>)}
             </select>
           </Field>
           <Field label="Financial year" hint="e.g. 2027-28"><input value={fy} onChange={e => setFy(e.target.value)} placeholder="2027-28" /></Field>
@@ -1458,9 +1498,23 @@ function CyclePanel({ policies, periods, companies, reload }: {
 }
 
 // ══ 5. FINALISE ═══════════════════════════════════════════════════════════
-function FinalisePanel({ periods, canAttribute, reload }: {
-  periods: Row[]; canAttribute: boolean; reload: () => Promise<void>
+function FinalisePanel({ periods, companies, canAttribute, reload }: {
+  periods: Row[]; companies: Row[]; canAttribute: boolean
+  reload: () => Promise<void>
 }) {
+  /** THE SAME COMPANY PROBLEM AS CyclePanel, on the screen that decides what
+   *  an employee is told their rating is.
+   *
+   *  Twelve periods, three companies, four quarters — so "Q2 2026-27"
+   *  appeared three times and nothing distinguished them. This panel had no
+   *  `companies` prop at all, which is why it was missed when the period
+   *  dropdowns elsewhere were fixed. */
+  const companyName = useMemo(
+    () => new Map(companies.map(c => [s(c.id), s(c.company_name)])), [companies])
+  const periodLabel = useCallback((p: Row) => {
+    const co = companyName.get(s(p.company_id))
+    return `${s(p.period_name)}${co ? ' · ' + co : ''} · ${s(p.status).toLowerCase()}`
+  }, [companyName])
   const { busy, error, saved, run } = useSaver(reload)
   const [employeeId, setEmployeeId] = useState('')
   const [periodId, setPeriodId] = useState('')
@@ -1483,7 +1537,7 @@ function FinalisePanel({ periods, canAttribute, reload }: {
         <Field label="Period">
           <select value={periodId} onChange={e => setPeriodId(e.target.value)}>
             <option value="">Choose…</option>
-            {periods.map(p => <option key={s(p.id)} value={s(p.id)}>{s(p.period_name)}</option>)}
+            {periods.map(p => <option key={s(p.id)} value={s(p.id)}>{periodLabel(p)}</option>)}
           </select>
         </Field>
         <Field label="Finalising as">
@@ -1605,7 +1659,7 @@ export default function AdminEditor() {
       {section === 'authority' && <AuthorityPanel policies={snap.policies}
                                                   companies={snap.companies} reload={reload} />}
       {section === 'cycle'    && <CyclePanel policies={snap.policies} periods={snap.periods} companies={snap.companies} reload={reload} />}
-      {section === 'finalise' && <FinalisePanel periods={snap.periods} canAttribute={!!snap.actor.employeeId} reload={reload} />}
+      {section === 'finalise' && <FinalisePanel periods={snap.periods} companies={snap.companies} canAttribute={!!snap.actor.employeeId} reload={reload} />}
       </div>
     </div>
   )
