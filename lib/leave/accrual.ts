@@ -26,13 +26,19 @@
 // WHY THE ROUNDING HAPPENS ONCE, AT THE END
 //
 // Rounding down per month looks tidier and is wrong. EL is 15/12 = 1.25 a
-// month; floored to one decimal that is 1.2, so a full year would accrue 14.4
-// days instead of 15 — the employee quietly loses half a day a year to
-// arithmetic. The months are summed exactly and floored once, which keeps a
+// month; floored per month to a half day that is 1.0, so a full year would
+// accrue 12 days instead of 15 — the employee quietly loses three days a year
+// to arithmetic. The months are summed exactly and floored once, which keeps a
 // whole year whole and still never credits more than is owed.
 //
-// One decimal because leave_balances is NUMERIC(6,1). Down, not nearest, so the
-// company never over-credits.
+// HALF A DAY IS THE UNIT
+//
+// Leave is taken in whole days or half days, so a balance is only ever shown,
+// stored and compared in steps of 0.5. EL after seven months is 8.75 exactly;
+// it is credited as 8.5, and the missing quarter is not lost — it arrives with
+// the next month (10.0 at the end of November). This used to floor to one
+// decimal, which put figures like 8.7 and 1.7 on screen: numbers nobody can
+// apply for. Down, not nearest, so the company never over-credits.
 
 /** Last calendar day of a 1-indexed month. */
 export function daysInMonth(year: number, month: number): number {
@@ -106,10 +112,14 @@ export function monthlyAccrual(
   return (annualQuota / 12) * (effectiveDays(year, month, doj, lwd) / total);
 }
 
-/** One decimal, rounded DOWN. The column is NUMERIC(6,1). */
-export function floor1(n: number): number {
-  // +1e-9 absorbs binary float error so an exact 15 cannot fall to 14.9.
-  return Math.floor(n * 10 + 1e-9) / 10;
+/**
+ * Down to the nearest half day: 8.75 → 8.5, 1.7 → 1.5, 3.5 → 3.5.
+ * Every balance figure goes through this, so none can be anything but a whole
+ * or half day.
+ */
+export function floorHalf(n: number): number {
+  // +1e-9 absorbs binary float error so an exact 15 cannot fall to 14.5.
+  return Math.floor(n * 2 + 1e-9) / 2;
 }
 
 /** The twelve (year, month) pairs of an Indian FY, April → March. */
@@ -149,7 +159,7 @@ export function accruedAsOf(
     const present = fyMonths(fyStartYear).some(
       ({ year, month }) => effectiveDays(year, month, doj, lwd) > 0,
     );
-    return present ? floor1(annualQuota) : 0;
+    return present ? floorHalf(annualQuota) : 0;
   }
 
   let exact = 0;
@@ -157,7 +167,7 @@ export function accruedAsOf(
     if (!ended(year, month)) continue;
     exact += monthlyAccrual(annualQuota, year, month, doj, lwd);
   }
-  return floor1(exact);
+  return floorHalf(exact);
 }
 
 export interface LeaveApplicationLike {
@@ -187,7 +197,7 @@ export function usedFrom(
     if (a.from_date < start || a.from_date > end) continue;
     total += Number(a.days) || 0;
   }
-  return floor1(total);
+  return floorHalf(total);
 }
 
 export interface BalanceInput {
@@ -223,7 +233,7 @@ export function balanceFor(i: BalanceInput): Balance {
     opening, accrued, used, encashed,
     // Clamped: a negative balance is not a thing an employee can have, and
     // showing one would invite the question of what it means.
-    available: Math.max(0, floor1(opening + accrued - used - encashed)),
+    available: Math.max(0, floorHalf(opening + accrued - used - encashed)),
   };
 }
 
@@ -238,6 +248,6 @@ export function carryForward(
   closing: number, maxCarryForward: number, unlimited = false,
 ): number {
   if (closing <= 0) return 0;
-  if (unlimited) return floor1(closing);
-  return floor1(Math.min(closing, Math.max(0, maxCarryForward)));
+  if (unlimited) return floorHalf(closing);
+  return floorHalf(Math.min(closing, Math.max(0, maxCarryForward)));
 }

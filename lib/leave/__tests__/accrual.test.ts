@@ -7,7 +7,7 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
 import {
-  daysInMonth, effectiveDays, monthlyAccrual, floor1, fyMonths,
+  daysInMonth, effectiveDays, monthlyAccrual, floorHalf, fyMonths,
   accruedAsOf, usedFrom, balanceFor, carryForward, normaliseMode,
 } from '../accrual.ts'
 
@@ -25,30 +25,53 @@ test('the financial year runs April to March, twelve months', () => {
 })
 
 // ── Rounding: the trap that loses half a day a year ────────────────────────
-test('a full year accrues EXACTLY the annual quota, not 14.4', () => {
-  // EL is 15/12 = 1.25 a month. Flooring each month to one decimal gives 1.2,
-  // and twelve of those is 14.4 — the employee silently loses 0.6 days to
+test('a full year accrues EXACTLY the annual quota, not 12', () => {
+  // EL is 15/12 = 1.25 a month. Flooring each month to a half day gives 1.0,
+  // and twelve of those is 12 — the employee silently loses 3 days to
   // arithmetic. The months are summed exactly and floored once.
   assert.equal(accruedAsOf(EL, FY, '2020-06-12', null, endOf(2027, 3)), 15)
   assert.equal(accruedAsOf(7, FY, '2020-06-12', null, endOf(2027, 3)), 7)   // CL
 })
 
-test('rounding is DOWN, never nearest', () => {
-  assert.equal(floor1(0.6666), 0.6)
-  assert.equal(floor1(1.25), 1.2)
-  assert.equal(floor1(0.99), 0.9)
+test('rounding is DOWN to a half day, never nearest', () => {
+  assert.equal(floorHalf(0.6666), 0.5)
+  assert.equal(floorHalf(1.25), 1)
+  assert.equal(floorHalf(0.99), 0.5)
+  assert.equal(floorHalf(8.75), 8.5)   // EL after seven months — was shown as 8.7
+  assert.equal(floorHalf(1.7), 1.5)
   // and exact values survive binary float
-  assert.equal(floor1(15), 15)
-  assert.equal(floor1(0.1 + 0.2), 0.3)
+  assert.equal(floorHalf(15), 15)
+  assert.equal(floorHalf(3.5), 3.5)
+  assert.equal(floorHalf(8.7 - 7), 1.5)  // 1.6999999999999993 in raw JS
+})
+
+test('every month-end balance is a whole or half day', () => {
+  // Leave is taken in whole and half days; a balance of 8.7 or 1.7 is a number
+  // nobody can apply for. Checked for every quota in the live catalogue, for an
+  // old joiner and a mid-month joiner, at every month end of the year.
+  const isHalf = (n: number) => Number.isInteger(n * 2)
+  for (const quota of [7, 15, 180, 12, 21, 10]) {
+    for (const doj of ['2020-06-12', '2026-09-15']) {
+      for (const { year, month } of fyMonths(FY)) {
+        const a = accruedAsOf(quota, FY, doj, null, endOf(year, month))
+        assert.ok(isHalf(a), `quota ${quota}, DOJ ${doj}, ${year}-${month}: ${a}`)
+      }
+    }
+  }
+  // EL month by month: 1, 2.5, 3.5, 5, 6, 7.5, 8.5, 10, 11, 12.5, 13.5, 15
+  assert.deepEqual(
+    fyMonths(FY).map(({ year, month }) => accruedAsOf(EL, FY, '2020-06-12', null, endOf(year, month))),
+    [1, 2.5, 3.5, 5, 6, 7.5, 8.5, 10, 11, 12.5, 13.5, 15],
+  )
 })
 
 // ── Month-end crediting ────────────────────────────────────────────────────
 test('a month is credited only once it has ENDED', () => {
   const doj = '2020-06-12'
   // 21 September: April–August are done, September is not.
-  assert.equal(accruedAsOf(EL, FY, doj, null, new Date(2026, 8, 21)), floor1(5 * 1.25))
+  assert.equal(accruedAsOf(EL, FY, doj, null, new Date(2026, 8, 21)), floorHalf(5 * 1.25))
   // 30 September: September now counts.
-  assert.equal(accruedAsOf(EL, FY, doj, null, new Date(2026, 8, 30)), floor1(6 * 1.25))
+  assert.equal(accruedAsOf(EL, FY, doj, null, new Date(2026, 8, 30)), floorHalf(6 * 1.25))
 })
 
 test('nothing has accrued on the first day of the financial year', () => {
@@ -71,8 +94,8 @@ test('months before joining accrue nothing', () => {
 })
 
 test('a September joiner has only the September fraction by 30 September', () => {
-  // 1.25 × 16/30 = 0.6667 → floored to 0.6
-  assert.equal(accruedAsOf(EL, FY, '2026-09-15', null, endOf(2026, 9)), 0.6)
+  // 1.25 × 16/30 = 0.6667 → floored to a half day, 0.5
+  assert.equal(accruedAsOf(EL, FY, '2026-09-15', null, endOf(2026, 9)), 0.5)
 })
 
 // ── Effective days: leavers ────────────────────────────────────────────────
@@ -148,9 +171,9 @@ test('available = opening + accrued − used − encashed', () => {
     opening: 5, encashed: 1, applications: APPS, leaveTypeId: 'el',
     asOf: endOf(2026, 9),
   })
-  assert.equal(b.accrued, floor1(6 * 1.25))   // Apr–Sep
+  assert.equal(b.accrued, floorHalf(6 * 1.25))   // Apr–Sep
   assert.equal(b.used, 2.5)
-  assert.equal(b.available, floor1(5 + 7.5 - 2.5 - 1))
+  assert.equal(b.available, floorHalf(5 + 7.5 - 2.5 - 1))
 })
 
 test('a balance is never negative', () => {

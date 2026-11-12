@@ -9,7 +9,8 @@
 //                          half_session, reason      ← byte-for-byte identical
 //   * the PATCH body       { id }
 //   * the Payload shape    balances, types, applications, holidays, diagnostics
-//   * the arithmetic       avail() = (opening + accrued) − used − encashed
+//   * the arithmetic       avail() = (opening + accrued) − used − encashed,
+//                          in half days (the server's `available` when sent)
 //                          barColor() = >60 ok, >30 warn, else critical
 //   * the server contract  every eligibility rule still lives in route.ts,
 //                          which re-checks everything this file shows
@@ -27,6 +28,7 @@
 // themes with the product and follows the existing dark block.
 import { useState, useEffect, useMemo, useCallback, useRef } from 'react'
 import { api } from '@/lib/ess/api'
+import { floorHalf } from '@/lib/leave/accrual'
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
 
@@ -66,9 +68,14 @@ interface Payload {
 
 const BLANK = { leave_type_id: '', from_date: '', to_date: '', half_day: false, half_session: '', reason: '' }
 
-// Unchanged from the shipped component.
-const avail = (b: any) =>
-  (Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)
+// The server's own figure when it sends one (lib/leave/policy.ts), so the tile
+// and the apply check can never disagree. Otherwise the same arithmetic,
+// floored to a half day: summing raw floats here is what used to put
+// "1.6999999999999993 / 8.7" on the tile.
+const avail = (b: any) => typeof b.available === 'number'
+  ? b.available
+  : Math.max(0, floorHalf((Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)))
+const entitled = (b: any) => floorHalf(Number(b.opening || 0) + Number(b.accrued || 0))
 const barClass = (pct: number) => pct > 60 ? 'is-ok' : pct > 30 ? 'is-warn' : 'is-bad'
 
 // ── Dates ──────────────────────────────────────────────────────────────────
@@ -289,7 +296,7 @@ export default function LeaveSection({ emp, notify }: {
   const balanceAfter = useMemo(() => {
     const base = sel?.bookable ?? sel?.available
     if (!sel || base == null || !estimate) return null
-    return Math.round((base - estimate.working) * 10) / 10
+    return Math.round((base - estimate.working) * 2) / 2
   }, [sel, estimate])
 
   // ── Calendar grid — rows of weeks, so a week the selection touches can
@@ -539,7 +546,7 @@ export default function LeaveSection({ emp, notify }: {
         ) : (
           <div className="ezlv-tiles">
             {data.balances.map((b: any, i: number) => {
-              const total = Number(b.opening || 0) + Number(b.accrued || 0)
+              const total = entitled(b)
               const av = avail(b)
               const pct = total > 0 ? Math.round(av / total * 100) : 0
               return (
