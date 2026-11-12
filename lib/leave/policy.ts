@@ -27,7 +27,7 @@
 // 4-day balance must not both get through to two different approvers.
 // `available` is what has been earned and not taken; `bookable` subtracts what
 // is already waiting.
-import { balanceFor, floor1, normaliseMode, type LeaveApplicationLike } from './accrual.ts'
+import { balanceFor, floorHalf, normaliseMode, type LeaveApplicationLike } from './accrual.ts'
 
 export type LeavePolicy = 'UNLIMITED' | 'EARNED' | 'PER_OCCURRENCE' | 'ACCRUAL'
 
@@ -103,7 +103,7 @@ export function pendingFrom(apps: LeaveApplicationLike[], leaveTypeId: string, f
     if (a.from_date < start || a.from_date > end) continue
     total += num(a.days)
   }
-  return floor1(total)
+  return floorHalf(total)
 }
 
 export interface ComputeInput {
@@ -158,7 +158,7 @@ export function computeTypeBalance(i: ComputeInput): TypeBalance {
     ...common,
     accrued: base.accrued,
     available: base.available,
-    bookable: Math.max(0, floor1(base.available - pending)),
+    bookable: Math.max(0, floorHalf(base.available - pending)),
   }
 }
 

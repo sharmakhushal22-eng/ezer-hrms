@@ -63,9 +63,13 @@ export const BLANK: LeaveForm = { leave_type_id: '', from_date: '', to_date: '',
 export const PEEK = 3
 
 // ── Arithmetic (unchanged from the website) ──────────────────────────────────
-// Rounded: balances accrue in fractions, and 0.1 + 0.2 arithmetic left 1.6999999999999993.
-export const avail = (b: Balance) =>
-  Math.round(((Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)) * 100) / 100
+// Leave is taken in whole or half days, so a balance is shown in half days,
+// floored like the server's lib/leave/accrual.ts floorHalf: 8.75 → 8.5, never
+// 8.7 or 1.6999999999999993.
+export const floorHalf = (n: number) => Math.floor(n * 2 + 1e-9) / 2
+export const avail = (b: Balance) => typeof b.available === 'number'
+  ? b.available
+  : Math.max(0, floorHalf((Number(b.opening || 0) + Number(b.accrued || 0)) - Number(b.used || 0) - Number(b.encashed || 0)))
 export type Bar = 'ok' | 'warn' | 'bad'
 export const barClass = (pct: number): Bar => pct > 60 ? 'ok' : pct > 30 ? 'warn' : 'bad'
 export const plural = (n: number) => (n === 1 ? '' : 's')

@@ -11,6 +11,7 @@ import { CLEARANCE_FORMS, DEPTS, isCleared, recoveryOf, payableOf, clearanceEsca
 import { gratuityOf, pendingSalaryOf, noticeShortfallOf, fnfTotals, lettersFor, WITHHOLD_GRATUITY, NO_NOTICE_RECOVERY, NO_EL_ENCASHMENT, rupees, type FnfLine } from './fnf'
 import { advance, reasonOf, isSilent, type ChainStep } from './hr-exit'
 import { effectiveNoticeDays } from './notice'
+import { floorHalf } from '@/lib/leave/accrual'
 import { revokeAccess } from '@/lib/offboarding/run'
 
 type Sb = SupabaseClient
@@ -100,7 +101,7 @@ export async function exitFacts(sb: Sb, employeeId: string): Promise<ExitFacts> 
     safe(async () => {
       const { data } = await sb.from('leave_balances').select('year, opening, accrued, used, encashed, leave_types!inner(short_name)').eq('employee_id', employeeId).eq('leave_types.short_name', 'EL').order('year', { ascending: false }).limit(1)
       const b = data?.[0] as any
-      if (b) f.elBalance = Math.max(0, (Number(b.opening) || 0) + (Number(b.accrued) || 0) - (Number(b.used) || 0) - (Number(b.encashed) || 0))
+      if (b) f.elBalance = Math.max(0, floorHalf((Number(b.opening) || 0) + (Number(b.accrued) || 0) - (Number(b.used) || 0) - (Number(b.encashed) || 0)))
     }),
     safe(async () => {
       const { data: e } = await sb.from('employees').select('personal_email, bank_name, bank_account_last4').eq('id', employeeId).maybeSingle()
