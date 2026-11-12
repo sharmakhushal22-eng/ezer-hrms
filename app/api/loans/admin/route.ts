@@ -13,7 +13,7 @@ import { NextRequest, NextResponse } from 'next/server';
 export const runtime = 'nodejs';
 import { generateSchedule } from '@/lib/loans/schedule-generator';
 import { notifyFinance } from '@/lib/loans/notify';
-import { requireAccess, requireCompany, holds, refuse } from '@/lib/rms/authz';
+import { requireAccess, requireGrant, requireCompany, holds, refuse } from '@/lib/rms/authz';
 import type { Grant } from '@/lib/rms/resolve';
 
 const supabase = createClient(
@@ -47,7 +47,13 @@ async function mayApproveLevel(g: Grant, approverRole: string, employeeId: strin
 // Body: { request_id, action: 'APPROVED'|'REJECTED', remarks }
 // ============================================================
 export async function POST(req: NextRequest) {
-  const gate = await requireAccess(req, 'Loans', 'EDIT');
+  // Approving or rejecting a loan is authorised by the APPROVAL CHAIN, not by the generic Loans
+  // module: loan_approval_levels names the role for each level (Payroll Manager → HR Manager /
+  // HR Head), and mayApproveLevel below is what enforces it. Gating on Loans-EDIT as well was a
+  // bug — an HR Head is the designated approver for the HR_HEAD level but the HR roles carry only
+  // Loans VIEW/NONE in RBAC, so the real approver was refused before the chain check ever ran.
+  // Here we only require a signed-in user in the request's company; the level role does the rest.
+  const gate = await requireGrant(req);
   if (gate.error) return gate.error;
   const g = gate.grant;
 
@@ -60,7 +66,7 @@ export async function POST(req: NextRequest) {
   const { data: request } = await supabase
     .from('loan_requests').select('*').eq('id', request_id).single();
   if (!request) return NextResponse.json({ error: 'Request not found' }, { status: 404 });
-  const scope = requireCompany(g, request.company_id, 'Loans');
+  const scope = requireCompany(g, request.company_id);   // general company scope, not module-bound
   if (scope) return scope;
 
   // Current pending level for this request
