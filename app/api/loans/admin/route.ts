@@ -103,7 +103,7 @@ export async function POST(req: NextRequest) {
   if (nextLevel) {
     await supabase.from('loan_requests')
       .update({ current_approval_level: nextLevel.level_order }).eq('id', request_id);
-    return NextResponse.json({ success: true, status: 'IN_APPROVAL', next_level: nextLevel.level_order });
+    return NextResponse.json({ success: true, status: 'IN_APPROVAL', next_level: nextLevel.level_order, next_level_role: nextLevel.approver_role });
   }
 
   // All approved -> notify finance + generate agreement

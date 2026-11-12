@@ -35,6 +35,9 @@ import Appraisal from '@/components/payroll/Appraisal'
 import LockUnlock from '@/components/payroll/LockUnlock'
 import PerquisiteStatutoryPanel from '@/components/statutory/PerquisiteStatutoryPanel'
 import NpsReport from '@/components/payroll/NpsReport'
+import VpfRegister from '@/components/payroll/VpfRegister'
+import StatutoryBulkUpload from '@/components/payroll/StatutoryBulkUpload'
+import StatutoryInputEditor from '@/components/payroll/StatutoryInputEditor'
 import StatutoryComponentReport from '@/components/payroll/StatutoryComponentReport'
 import CompanyStructureView from '@/components/payroll/CompanyStructureView'
 
@@ -319,7 +322,7 @@ function subsForTab(tab: string, ctx: { companyId: string; fy: string; month: nu
     case 'attendance': return attendanceSubs(ctx.companyId, ctx.fy, ctx.month)
     case 'employees': return employeeSubs(ctx.companyId)
     case 'run': return runSubs(ctx.companyId, ctx.fy, ctx.month)
-    case 'statutory': return statutorySubs(ctx.companyId, ctx.fy, ctx.month)
+    case 'statutory': return statutorySubs(ctx.companyId, ctx.fy, ctx.month, ctx.subView)
     case 'benefits': return benefitsSubs()
     case 'offcycle': return offcycleSubs()
     case 'reports': return reportsSubs()
@@ -389,20 +392,29 @@ function runSubs(companyId: string, fy: string, month: number): SubTab[] {
   ]
 }
 
-function statutorySubs(companyId: string, fy: string, month: number): SubTab[] {
-  // Each statutory opens on its employee-wise register (lib/payroll/statutory-report): every
-  // component it is worked from and every figure it produces, from the month Run Payroll froze.
+function statutorySubs(companyId: string, fy: string, month: number, subView: string): SubTab[] {
+  // Each statutory register is the employee-wise view of what Run Payroll froze. EPF/ESIC/PT/LWF
+  // also carry the per-employee master INPUTS behind those figures, offered two ways via a
+  // sub-dropdown: "Bulk Upload" (download → edit a sheet → upload) and "Edit" (inline-edit the
+  // table). Both write the same inputs through /api/payroll/statutory-bulk; the next run reads them.
   const reg = (kind: 'pf' | 'esic' | 'pt' | 'lwf' | 'tds') => <StatutoryComponentReport key={kind} kind={kind} companyId={companyId} fy={fy} month={month} />
+  const bulkEdit = [{ id: 'bulk', label: 'Bulk Upload' }, { id: 'edit', label: 'Edit' }]
+  // "Edit" shows the inline editor; anything else (incl. the default "Bulk Upload") shows the
+  // uploader with the computed register (and slab screen) beneath it, so nothing is lost.
+  const section = (input: 'epf' | 'esic' | 'pt' | 'lwf', regKind: 'pf' | 'esic' | 'pt' | 'lwf', extra?: React.ReactNode) =>
+    subView === 'edit'
+      ? <StatutoryInputEditor key={input} kind={input} companyId={companyId} fy={fy} />
+      : <><StatutoryBulkUpload key={input} kind={input} companyId={companyId} fy={fy} />{reg(regKind)}{extra}</>
   return [
-    { id: 'pf', label: 'PF / EPF + VPF', icon: '', built: true, render: () => reg('pf') },
-    { id: 'esic', label: 'ESIC', icon: '', built: true, render: () => reg('esic') },
-    // LWF and PT keep their slab screens under the register. They are the same components
-    // the Configuration menu shows — one screen each, not copies: two LWF or PT screens would
-    // eventually disagree, and whichever one HR happened to open would decide what they believed.
-    { id: 'lwf', label: 'LWF', icon: '', built: true, render: () => <>{reg('lwf')}<SlabsHead title="LWF rates by state" /><LwfConfig /></> },
-    { id: 'ptlwf', label: 'Professional Tax', icon: '', built: true, render: () => <>{reg('pt')}<SlabsHead title="PT slabs by state" /><PtConfig /></> },
+    { id: 'pf', label: 'EPF', icon: '', built: true, children: bulkEdit, render: () => section('epf', 'pf') },
+    { id: 'vpf', label: 'VPF', icon: '', built: true, render: () => <VpfRegister companyId={companyId} fy={fy} month={month} /> },
+    { id: 'esic', label: 'ESIC', icon: '', built: true, children: bulkEdit, render: () => section('esic', 'esic') },
+    // LWF and PT also show their slab screen (the same component Configuration uses) in the
+    // Bulk Upload / register view — one screen each, not copies.
+    { id: 'lwf', label: 'LWF', icon: '', built: true, children: bulkEdit, render: () => section('lwf', 'lwf', <><SlabsHead title="LWF rates by state" /><LwfConfig /></>) },
+    { id: 'ptlwf', label: 'Professional Tax', icon: '', built: true, children: bulkEdit, render: () => section('pt', 'pt', <><SlabsHead title="PT slabs by state" /><PtConfig /></>) },
     // Enrolment itself happens in ESS; this is the report side — who is in, who is not.
-    { id: 'nps', label: 'NPS', icon: '', built: true, render: () => <NpsReport fy={fy} /> },
+    { id: 'nps', label: 'NPS', icon: '', built: true, render: () => <><StatutoryBulkUpload kind="nps" companyId={companyId} fy={fy} /><NpsReport fy={fy} /></> },
     { id: 'tds', label: 'TDS Calculation', icon: '', built: true, render: () => reg('tds') },
     { id: 'form16', label: 'Form 16 / 24Q', icon: '', desc: 'Quarterly 24Q returns and annual Form 16 generation for employees.' },
     { id: 'perq', label: 'Perquisite Tax', icon: '', built: true, render: () => <PerquisiteStatutoryPanel fy={fy} /> },
@@ -1129,11 +1141,46 @@ export default function PayrollPage() {
   const [companies, setCompanies] = useState<CompanyOpt[]>([])
   const [companyId, setCompanyId] = useState('')   // '' = Group Companies
   const [fy, setFy] = useState(() => FY_OPTIONS.includes(fyOfDate(new Date())) ? fyOfDate(new Date()) : '2026-27')
-  // The month every screen opens on: this month when the financial year is the current
-  // one, else April. Each screen still falls back to a month it has when this one is not
-  // created there yet.
+  // The month every screen opens on is the LAST month whose payroll has actually been run
+  // (calculated or beyond) for the chosen company + FY — not the calendar month. If nothing
+  // has run yet it opens on April (month 1), the first month to process. The initial value is
+  // a placeholder until the runs load and the effect below sets the real default.
   const [month, setMonth] = useState(() => fyMonthOf(new Date()))
-  const pickFy = (v: string) => { setFy(v); setMonth(v === fyOfDate(new Date()) ? fyMonthOf(new Date()) : 1) }
+  const pickFy = (v: string) => setFy(v)   // the month re-defaults from that FY's runs (effect below)
+
+  // Which months have actually been RUN (payroll calculated or beyond) for the current
+  // company + FY. A run month "opens" the next one: the header lets you pick a month only up
+  // to (last run + 1), so you cannot skip ahead before the previous month's payroll is run.
+  const PROCESSED_STATES = ['CALCULATED', 'AI_CHECKED', 'APPROVED', 'DISBURSED', 'LOCKED']
+  const [runMonths, setRunMonths] = useState<Set<number>>(new Set())
+  const defaultedFor = useRef('')
+  useEffect(() => {
+    let live = true
+    loadRuns(companyId, fy).then(runs => {
+      if (!live) return
+      const byMonth: Record<number, Set<string>> = {}
+      runs.forEach(r => { if (PROCESSED_STATES.includes(r.status)) (byMonth[r.month as number] = byMonth[r.month as number] || new Set()).add(r.company_id) })
+      // Single company: a month ran if that company processed it. Group mode: only when EVERY
+      // company has (mirrors how Create Month treats a month as "taken").
+      const total = companyId ? 1 : companies.length
+      const set = new Set<number>()
+      for (let m = 1; m <= 12; m++) {
+        const covered = byMonth[m]?.size || 0
+        if (companyId ? covered > 0 : (companies.length > 0 && covered >= total)) set.add(m)
+      }
+      setRunMonths(set)
+      // Default the header to the last run month — once per company+FY, and (in group mode)
+      // only once the company list is in, so the default isn't computed from an empty list.
+      const ready = !!companyId || companies.length > 0
+      const key = `${companyId}|${fy}`
+      if (ready && defaultedFor.current !== key) {
+        defaultedFor.current = key
+        const lastRun = set.size ? Math.max(...set) : 0
+        setMonth(lastRun || 1)
+      }
+    }).catch(() => { if (live) setRunMonths(new Set()) })
+    return () => { live = false }
+  }, [companyId, fy, companies])   // eslint-disable-line react-hooks/exhaustive-deps
   const [tab, setTab] = useState('dashboard')
   // Configuration is set up from the admin dashboard only: opened from ESS (the same page,
   // hosted by components/ess/AdminModules under /ess/…) Payroll has no Configuration tab.
@@ -1152,6 +1199,9 @@ export default function PayrollPage() {
 
   // companyId '' = Group Companies → the scoped tabs show/act on all companies at once.
   const ctx = { companyId, fy, month, subView }
+  // Last month that has been run, and the furthest month the header may select (one past it).
+  const lastRunMonth = runMonths.size ? Math.max(...runMonths) : 0
+  const maxSelectableMonth = Math.min(12, lastRunMonth + 1)
   const sections = subsForTab(tab, ctx)
   const activeSub = sections.find(s => s.id === sub) || sections[0]
   const tabMeta = TABS.find(t => t.id === tab)!
@@ -1172,8 +1222,13 @@ export default function PayrollPage() {
           </div>
           <div>
             <label style={S.label}>Month</label>
-            <select style={{ ...S.input, minWidth: 130 }} value={month} onChange={e => setMonth(Number(e.target.value))}>
-              {MONTHS.map((m, i) => <option key={m} value={i + 1}>{m} {calYearOf(fy, i + 1)}</option>)}
+            <select style={{ ...S.input, minWidth: 130 }} value={month} onChange={e => setMonth(Number(e.target.value))}
+              title="Opens on the last month whose payroll was run. The next month unlocks only once the previous month's payroll has been run.">
+              {MONTHS.map((m, i) => {
+                const mn = i + 1
+                const locked = mn > maxSelectableMonth
+                return <option key={m} value={mn} disabled={locked}>{m} {calYearOf(fy, mn)}{runMonths.has(mn) ? ' ✓' : locked ? ' · locked' : ''}</option>
+              })}
             </select>
           </div>
           <div>

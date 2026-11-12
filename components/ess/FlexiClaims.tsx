@@ -26,6 +26,14 @@ const uid = () => Math.random().toString(36).slice(2, 9)
 interface Frame { id: string; code: string; amount: string; billNo: string; billDate: string; vendor: string; files: File[] }
 const blankFrame = (code = ''): Frame => ({ id: uid(), code, amount: '', billNo: '', billDate: '', vendor: '', files: [] })
 
+// A reimbursement bill must be dated inside the CURRENT financial year (1 Apr – 31 Mar).
+// Previous- or future-FY bills are not accepted. FY looks like '2026-27'.
+const FY_START = `${FY.slice(0, 4)}-04-01`                       // e.g. 2026-04-01
+const FY_END = `${Number(FY.slice(0, 4)) + 1}-03-31`            // e.g. 2027-03-31
+const todayISO = () => new Date().toISOString().slice(0, 10)
+// No future-dated bills either, so the picker's max is the earlier of today and the FY end.
+const billDateMax = () => { const t = todayISO(); return t < FY_END ? t : FY_END }
+
 // A single submitted claim (for the History drawer).
 interface HistItem { id: string; component_code: string; claim_amount: number; bill_date: string | null; bill_no: string | null; agency_name: string | null; vendor_desc: string | null; remark: string | null; status: string; rejection_reason: string | null; submitted_at: string }
 
@@ -172,7 +180,7 @@ function BillFrame({ frame, index, options, remaining, canRemove, onChange, onFi
       {/* Optional details — kept light so the frame stays about "type + files" */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(140px,1fr))', gap: 10, marginTop: 12 }}>
         <div><label className="ezp-label">Bill no. <span style={{ fontWeight: 400, color: TK.muted }}>(optional)</span></label><input className="ezp-input" type="text" placeholder="INV-2026-001" value={frame.billNo} onChange={e => onChange({ billNo: e.target.value })} /></div>
-        <div><label className="ezp-label">Bill date</label><input className="ezp-input" type="date" max={new Date().toISOString().slice(0, 10)} value={frame.billDate} onChange={e => onChange({ billDate: e.target.value })} /></div>
+        <div><label className="ezp-label">Bill date</label><input className="ezp-input" type="date" min={FY_START} max={billDateMax()} value={frame.billDate} onChange={e => onChange({ billDate: e.target.value })} /></div>
         <div><label className="ezp-label">Vendor</label><input className="ezp-input" type="text" placeholder="HPCL, Airtel…" value={frame.vendor} onChange={e => onChange({ vendor: e.target.value })} /></div>
       </div>
     </div>
@@ -240,6 +248,10 @@ export default function FlexiClaims({ employeeId }: { employeeId: string }) {
       const rem = remainingOf(f.code)
       if (rem >= 0 && Number(f.amount) > rem) return showToast(`Bill ${frames.indexOf(f) + 1}: amount exceeds the remaining limit (${inr(rem)})`)
       if (f.files.length === 0) return showToast(`Bill ${frames.indexOf(f) + 1}: attach at least one file`)
+      if (f.billDate) {
+        if (f.billDate < FY_START || f.billDate > FY_END) return showToast(`Bill ${frames.indexOf(f) + 1}: the bill date must be in the current financial year (FY ${FY})`)
+        if (f.billDate > todayISO()) return showToast(`Bill ${frames.indexOf(f) + 1}: the bill date cannot be in the future`)
+      }
     }
 
     setSubmitting(true)

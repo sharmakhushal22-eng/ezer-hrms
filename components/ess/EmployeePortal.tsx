@@ -29,7 +29,7 @@ import { hasAdminAccess } from '@/lib/rms/resolve'
 import dynamic from 'next/dynamic'
 import { supabase } from '@/lib/supabase'
 import { essAuthHeaders } from '@/lib/ess-session-client'
-import { authHeaders } from '@/lib/auth-headers'
+import { authHeaders, uploadAuthHeaders } from '@/lib/auth-headers'
 import Celebrations from '@/components/ess/Celebrations'
 // Today is the landing tab, so it stays a static import. Splitting it would
 // trade bundle size for a spinner on the one screen everybody sees first.
@@ -2678,6 +2678,96 @@ function LoanStatusBadge({ status }: { status: string }) {
   return <span className={`ezp-chip ${tone}`}>{s.replace(/_/g,' ')}</span>
 }
 
+// ── Loan request documents ──────────────────────────────────────────────────
+// Supporting files behind a loan request (salary slip, quotation, medical bill …), stored in
+// the private `loan-documents` bucket via /api/ess/loans/documents (migration 227). The approver
+// opens them before approving. Defined at module scope so typing elsewhere never remounts it.
+const LOAN_DOC_ACCEPT = 'application/pdf,image/jpeg,image/png,image/webp,.pdf,.jpg,.jpeg,.png,.webp'
+// Preset reasons for a loan request; "Other" reveals a free-text box for anything not listed.
+const LOAN_REASONS = [
+  'Medical emergency',
+  'Home purchase or renovation',
+  'Education or tuition fees',
+  'Wedding or marriage',
+  'Vehicle purchase',
+  'Family or personal emergency',
+  'Repaying an existing loan or debt',
+  'Travel',
+  'Rent or security deposit',
+  'Festival or celebration expenses',
+]
+const fmtLoanFileSize = (b: number | null | undefined) => {
+  const n = Number(b) || 0
+  return n >= 1024 * 1024 ? `${(n / (1024 * 1024)).toFixed(1)} MB` : `${Math.max(1, Math.round(n / 1024))} KB`
+}
+interface LoanDocFile { id: string; file_name: string; mime_type: string | null; size_bytes: number | null; uploaded_at: string; url: string | null }
+
+/** The documents on one loan request: list, and — while the request is still in approval —
+ *  add or remove. Fetches its own list so a pending-request row can simply drop it in. */
+function LoanRequestDocs({ requestId, editable, notify }: {
+  requestId: string; editable: boolean; notify: (m: string, t?: 'success'|'error') => void
+}) {
+  const [files, setFiles] = useState<LoanDocFile[]>([])
+  const [busy, setBusy] = useState(false)
+  const inputRef = useRef<HTMLInputElement>(null)
+  const load = useCallback(() => {
+    fetch(`/api/ess/loans/documents?request_id=${requestId}`, { headers: essAuthHeaders() })
+      .then(r => r.json()).then(d => setFiles(d?.files || [])).catch(() => {})
+  }, [requestId])
+  useEffect(() => { load() }, [load])
+
+  const upload = async (f: File) => {
+    setBusy(true)
+    const fd = new FormData(); fd.append('request_id', requestId); fd.append('file', f)
+    const res = await fetch('/api/ess/loans/documents', { method: 'POST', headers: await uploadAuthHeaders(), body: fd })
+    const d = await res.json().catch(() => ({}))
+    setBusy(false)
+    if (res.ok && d.ok) { notify('Document uploaded ✓'); load() }
+    else notify(d.error || 'Upload failed', 'error')
+  }
+  const remove = async (file: LoanDocFile) => {
+    if (!window.confirm(`Remove ${file.file_name}?`)) return
+    const res = await fetch(`/api/ess/loans/documents?id=${file.id}`, { method: 'DELETE', headers: essAuthHeaders() })
+    const d = await res.json().catch(() => ({}))
+    if (res.ok && d.ok) { notify('Document removed'); load() }
+    else notify(d.error || 'Could not remove', 'error')
+  }
+
+  if (!editable && files.length === 0) return null
+  return (
+    <div style={{ marginTop: 10, width: '100%' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+        <label className="ezp-label" style={{ margin: 0 }}>Documents</label>
+        <span className="ezp-muted" style={{ fontSize: 12 }}>{files.length ? `${files.length} file${files.length === 1 ? '' : 's'}` : 'none yet'}</span>
+        {editable && (
+          <>
+            <input ref={inputRef} type="file" accept={LOAN_DOC_ACCEPT} style={{ display: 'none' }}
+              onChange={e => { const f = e.target.files?.[0]; if (f) upload(f); e.target.value = '' }} />
+            <button type="button" className="ezp-ghost" style={{ marginLeft: 'auto' }} disabled={busy} onClick={() => inputRef.current?.click()}>
+              {busy ? 'Uploading…' : '＋ Upload document'}
+            </button>
+          </>
+        )}
+      </div>
+      {files.length > 0 && (
+        <ul style={{ listStyle: 'none', margin: '8px 0 0', padding: 0, display: 'grid', gap: 6 }}>
+          {files.map(f => (
+            <li key={f.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 10px', borderRadius: 10, background: 'var(--ez-sunken)', border: '1px solid var(--ez-line)' }}>
+              <span aria-hidden style={{ fontSize: 16, lineHeight: 1 }}>{f.mime_type === 'application/pdf' ? '📄' : '🖼️'}</span>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 13, fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{f.file_name}</div>
+                <div className="ezp-muted" style={{ fontSize: 11 }}>{fmtLoanFileSize(f.size_bytes)}</div>
+              </div>
+              {f.url && <a className="ezp-ghost" href={f.url} target="_blank" rel="noreferrer" style={{ textDecoration: 'none' }}>View</a>}
+              {editable && <button type="button" className="ezp-ghost is-danger" onClick={() => remove(f)}>Remove</button>}
+            </li>
+          ))}
+        </ul>
+      )}
+    </div>
+  )
+}
+
 // Inline agreement signing panel
 function LoanAgreementPanel({ requestId, employeeId, notify, onClose, onDone }: { requestId: string; employeeId: string; notify: (m: string, t?: 'success'|'error') => void; onClose: () => void; onDone: () => void }) {
   const V = LOAN_V
@@ -2786,9 +2876,14 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
   const [typeId, setTypeId] = useState('')
   const [amount, setAmount] = useState('')
   const [tenure, setTenure] = useState('')
-  const [reason, setReason] = useState('')
+  const [reasonChoice, setReasonChoice] = useState('')   // dropdown selection
+  const [reason, setReason] = useState('')               // free text, used only when "Other"
   const [saving, setSaving] = useState(false)
   const [signingReq, setSigningReq] = useState<string | null>(null)
+  // Documents staged in the form before the request exists — uploaded once Submit creates it.
+  const [docs, setDocs] = useState<File[]>([])
+  const [uploadingDocs, setUploadingDocs] = useState(false)
+  const docInputRef = useRef<HTMLInputElement>(null)
   const load = useCallback(() => {
     setLoading(true)
     fetch(`/api/ess/loans?employee_id=${emp.id}`, { headers: essAuthHeaders() }).then(r => r.json()).then(d => {
@@ -2817,12 +2912,29 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
     if (!sel) { notify('Select a loan type', 'error'); return }
     if (amtNum <= 0) { notify('Enter an amount', 'error'); return }
     if (tenNum <= 0) { notify('Enter tenure in months', 'error'); return }
+    if (!reasonChoice) { notify('Select a reason for the loan', 'error'); return }
+    if (reasonChoice === 'Other' && !reason.trim()) { notify('Describe the reason for the loan', 'error'); return }
+    const effectiveReason = reasonChoice === 'Other' ? reason.trim() : reasonChoice
     setSaving(true)
-    const res = await fetch('/api/ess/loans', { method:'POST', headers:{ 'Content-Type':'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, loan_type_id: typeId, requested_amount: amtNum, requested_tenure_months: tenNum, reason }) })
+    const res = await fetch('/api/ess/loans', { method:'POST', headers:{ 'Content-Type':'application/json', ...essAuthHeaders() }, body: JSON.stringify({ employee_id: emp.id, loan_type_id: typeId, requested_amount: amtNum, requested_tenure_months: tenNum, reason: effectiveReason }) })
     const d = await res.json().catch(() => ({}))
+    if (!res.ok || !d.success) { setSaving(false); notify(d.error || 'Failed to submit', 'error'); return }
+
+    // Request exists now — attach any documents the employee staged in the form to it.
+    const reqId = d.request?.id
+    if (reqId && docs.length) {
+      setUploadingDocs(true)
+      let failed = 0
+      for (const f of docs) {
+        const fd = new FormData(); fd.append('request_id', reqId); fd.append('file', f)
+        const ur = await fetch('/api/ess/loans/documents', { method:'POST', headers: await uploadAuthHeaders(), body: fd }).catch(() => null)
+        if (!ur || !ur.ok) failed++
+      }
+      setUploadingDocs(false)
+      if (failed) notify(`Request submitted, but ${failed} document${failed === 1 ? '' : 's'} could not be uploaded — add them from Pending requests.`, 'error')
+    }
     setSaving(false)
-    if (res.ok && d.success) { notify('Loan request submitted ✓'); setAmount(''); setTenure(''); setReason(''); load() }
-    else notify(d.error || 'Failed to submit', 'error')
+    notify('Loan request submitted ✓'); setAmount(''); setTenure(''); setReasonChoice(''); setReason(''); setDocs([]); load()
   }
 
   const manage = async (loan: any, request_type: 'CLOSURE'|'PART_PAYMENT') => {
@@ -2881,13 +2993,45 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
             </div>
             <div className="ezp-field">
               <label className="ezp-label">Reason</label>
-              <textarea className="ezp-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Purpose of the loan…" style={{ minHeight:70 }} />
+              <select className="ezp-input" value={reasonChoice} onChange={e => setReasonChoice(e.target.value)}>
+                <option value="" disabled>Select a reason…</option>
+                {LOAN_REASONS.map(r => <option key={r} value={r}>{r}</option>)}
+                <option value="Other">Other (specify below)</option>
+              </select>
+              {reasonChoice === 'Other' && (
+                <textarea className="ezp-input" value={reason} onChange={e => setReason(e.target.value)} placeholder="Describe the reason for the loan…" style={{ minHeight:70, marginTop:10 }} />
+              )}
+            </div>
+
+            {/* Supporting documents — staged here, uploaded to the request once it is created. */}
+            <div className="ezp-field">
+              <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                <label className="ezp-label" style={{ margin:0 }}>Supporting documents <span className="ezp-muted" style={{ fontWeight:500, textTransform:'none', letterSpacing:0 }}>(optional)</span></label>
+                <input ref={docInputRef} type="file" accept={LOAN_DOC_ACCEPT} style={{ display:'none' }}
+                  onChange={e => { const f = e.target.files?.[0]; if (f) setDocs(d => [...d, f]); e.target.value = '' }} />
+                <button type="button" className="ezp-ghost" style={{ marginLeft:'auto' }} onClick={() => docInputRef.current?.click()}>＋ Add document</button>
+              </div>
+              {docs.length > 0 && (
+                <ul style={{ listStyle:'none', margin:'8px 0 0', padding:0, display:'grid', gap:6 }}>
+                  {docs.map((f, i) => (
+                    <li key={i} style={{ display:'flex', alignItems:'center', gap:10, padding:'7px 10px', borderRadius:10, background:'var(--ez-sunken)', border:'1px solid var(--ez-line)' }}>
+                      <span aria-hidden style={{ fontSize:16, lineHeight:1 }}>{f.type === 'application/pdf' ? '📄' : '🖼️'}</span>
+                      <div style={{ flex:1, minWidth:0 }}>
+                        <div style={{ fontSize:13, fontWeight:600, overflow:'hidden', textOverflow:'ellipsis', whiteSpace:'nowrap' }}>{f.name}</div>
+                        <div className="ezp-muted" style={{ fontSize:11 }}>{fmtLoanFileSize(f.size)}</div>
+                      </div>
+                      <button type="button" className="ezp-ghost is-danger" onClick={() => setDocs(d => d.filter((_, ix) => ix !== i))}>Remove</button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+              <div className="ezp-muted" style={{ fontSize:12, marginTop:6 }}>PDF, JPG, PNG or WEBP, up to 10 MB each — e.g. salary slip, quotation, medical bill, admission letter.</div>
             </div>
             <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', gap:12, flexWrap:'wrap', padding:'11px 13px', marginBottom:14, borderRadius:R.md, background:C.brandTint, border:`1px solid ${C.brandEdge}` }}>
               <span style={{ fontSize:12.5, color:C.inkSoft }}>Indicative EMI (reducing balance)</span>
               <span className="ezp-num" style={{ fontSize:18, fontWeight:700, color:C.brandDeep }}>{loanInr(indicativeEmi)}<span className="ezp-muted" style={{ fontSize:11, fontWeight:500 }}>/mo</span></span>
             </div>
-            <button className="ezp-btn is-block" disabled={saving} onClick={submit}>{saving ? 'Submitting…' : 'Submit loan request'}</button>
+            <button className="ezp-btn is-block" disabled={saving} onClick={submit}>{uploadingDocs ? 'Uploading documents…' : saving ? 'Submitting…' : 'Submit loan request'}</button>
           </>
         )}
       </div>
@@ -2910,6 +3054,7 @@ function LoansSection({ emp, notify }: { emp: EmployeeDetail; notify: (m: string
                 <LoanStatusBadge status={p.status} />
                 {(p.status || '').toUpperCase() === 'APPROVED' && <button className="ezp-btn" style={{ height:32, padding:'0 12px', fontSize:12 }} onClick={() => setSigningReq(p.id)}>Sign agreement</button>}
               </div>
+              <LoanRequestDocs requestId={p.id} editable={['SUBMITTED','IN_APPROVAL'].includes((p.status || '').toUpperCase())} notify={notify} />
             </div>
           )
         })}

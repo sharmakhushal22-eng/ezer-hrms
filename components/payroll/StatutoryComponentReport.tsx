@@ -251,7 +251,7 @@ export default function StatutoryComponentReport({ kind, companyId, fy, month }:
           <table style={{ width: '100%', borderCollapse: 'separate', borderSpacing: 0 }}>
             <thead style={{ position: 'sticky', top: 0, zIndex: Z.sticky }}>
               <tr>
-                <th colSpan={identity.length} style={{ ...T.th, ...stickyL(0), zIndex: Z.sticky, background: C.surface, color: C.ink }}>Employee</th>
+                <th colSpan={identity.length} style={{ ...T.th, ...stickyL(0), zIndex: Z.sticky, background: C.surface, color: C.ink }}></th>
                 {groups.map(g => (
                   <th key={g.title} colSpan={g.cols.length} style={{ ...T.th, background: C.brandTint, color: C.brandDeep, borderLeft: `1px solid ${C.brandEdge}` }}>{g.title}</th>
                 ))}

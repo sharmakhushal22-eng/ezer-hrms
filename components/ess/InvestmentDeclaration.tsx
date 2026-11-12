@@ -282,8 +282,8 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
 
   async function save(submit: boolean) {
     setErr(''); setMsg('')
-    if (regimeBlocked) { setErr('Regime ab nahi badal sakta: ek baar badla ja chuka hai ya January nikal gayi.'); return }
-    if (regime === 'OLD' && panMissing) { setErr('Landlord PAN zaroori hai: saal ka rent ₹1,00,000 se zyada hai.'); return }
+    if (regimeBlocked) { setErr('The regime can no longer be changed: it has already been switched once, or January has passed.'); return }
+    if (regime === 'OLD' && panMissing) { setErr('Landlord PAN is required: your annual rent is over ₹1,00,000.'); return }
     setBusy(true)
     const isNew = regime === 'NEW'
     const { error } = await supabase.rpc('save_investment_declaration', {
@@ -325,7 +325,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       }
     } catch { /* lines table optional (needs 066) */ }
     setBusy(false)
-    setMsg(submit ? 'Declaration submit ho gayi. Har month ka TDS ab isi se banega.' : 'Draft save ho gaya.')
+    setMsg(submit ? 'Declaration submitted. Monthly TDS will now be computed from this.' : 'Draft saved.')
     load()
   }
 
@@ -341,7 +341,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
     })
     setHpBusy(false)
     if (error) { setErr(error.message); return }
-    setMsg('Property save ho gayi.')
+    setMsg('Property saved.')
     load()
   }
   async function deleteHouseProperty(id: string) {
@@ -360,7 +360,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
     })
     setBusy(false)
     if (error) { setErr(error.message); return }
-    setMsg('Previous employer details save ho gaye.')
+    setMsg('Previous employer details saved.')
     load()
   }
 
@@ -379,7 +379,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       <div style={{ ...S.card, background: C.purpleBg, border: `1px solid ${TK.brandEdge}` }}>
         <div style={{ fontSize: 13, fontWeight: 700, color: C.purpleD }}>Applies for the whole financial year.</div>
         <div style={{ ...S.sub, color: C.purpleD, marginTop: 3 }}>
-          Ye kisi ek payroll month se juda nahi hai. Har month ka TDS seedha isi se calculate hota hai.
+          This is not tied to any single payroll month. Each month's TDS is calculated directly from it.
         </div>
       </div>
 
@@ -388,18 +388,18 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         <div style={S.h}>Choose your tax regime</div>
         <div style={S.sub}>
           {canSwitch
-            ? <>January se pehle aap <b>ek baar aur</b> regime badal sakte hain. Uske baad poore FY {FY} ke liye yahi regime rahega.</>
-            : <b style={{ color: C.amber }}>Regime ab lock hai: {switches >= 1 ? 'ek baar badla ja chuka hai' : 'January nikal gayi'}. Poore FY {FY} ke liye {savedRegime || regime} hi rahega.</b>}
+            ? <>Before January you can change the regime <b>one more time</b>. After that, this regime applies for all of FY {FY}.</>
+            : <b style={{ color: C.amber }}>The regime is now locked: {switches >= 1 ? 'it has already been changed once' : 'January has passed'}. {savedRegime || regime} applies for all of FY {FY}.</b>}
         </div>
         <div style={{ display: 'flex', gap: 12, flexWrap: 'wrap', marginTop: 12 }}>
           <RegimeCard code="NEW" title="New Regime" active={regime === 'NEW'} disabled={!canSwitch && savedRegime !== null && savedRegime !== 'NEW'} onPick={setRegime}
-            blurb="Kam slab rates. Na HRA exemption, na 80C/80D. Simple: neeche kuch declare nahi karna." />
+            blurb="Lower slab rates. No HRA exemption, no 80C/80D. Nothing to declare below." />
           <RegimeCard code="OLD" title="Old Regime" active={regime === 'OLD'} disabled={!canSwitch && savedRegime !== null && savedRegime !== 'OLD'} onPick={setRegime}
-            blurb="HRA exemption aur Chapter VI-A deductions milti hain. Neeche apna planned investment declare karein." />
+            blurb="HRA exemption and Chapter VI-A deductions apply. Declare your planned investments below." />
         </div>
         {regimeBlocked && (
           <div style={{ fontSize: 12, color: C.red, background: C.redBg, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
-            Ye badlaav save nahi hoga: regime ka ek switch pehle hi use ho chuka hai.
+            This change will not be saved: the one regime switch has already been used.
           </div>
         )}
       </div>
@@ -408,17 +408,17 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       {regime === 'OLD' && (
         <div style={S.card}>
           <div style={S.h}>Declared investments: Old Regime</div>
-          <div style={S.sub}>Saal bhar mein jo invest karne ka plan hai woh likhein. Inke proof saal ke aakhir mein dene honge, ya usse pehle, agar aap resign karte hain.</div>
+          <div style={S.sub}>Enter what you plan to invest over the year. Proof will be due at year-end, or sooner if you resign.</div>
 
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 16, marginBottom: 2 }}>
             Section 80C <span style={{ color: C.muted, fontWeight: 600, textTransform: 'none', letterSpacing: 0 }}>(cap {inr(CAP_80C)})</span>
           </div>
-          <AmountRow label="Provident Fund (auto)" hint="Aapke salary structure se, yahan edit nahi hota" value={pf ? String(pf) : '0'} readOnly />
+          <AmountRow label="Provident Fund (auto)" hint="From your salary structure; not editable here" value={pf ? String(pf) : '0'} readOnly />
           <AmountRow label="LIC / Insurance premium" value={lic} onChange={setLic} />
           <AmountRow label="PPF / ELSS / other 80C" value={ppf} onChange={setPpf} />
           {over80c && (
             <div style={{ fontSize: 12, color: C.amber, background: C.amberBg, border: `1px solid ${C.amberBd}`, borderRadius: 10, padding: '9px 12px', marginTop: 10 }}>
-              80C ki legal limit {inr(CAP_80C)} hai. {inr(pf + typed80c)} likhne se exemption nahi badhegi. {inr(CAP_80C)} hi count hoga.
+              The legal 80C limit is {inr(CAP_80C)}. Entering {inr(pf + typed80c)} will not increase the exemption — only {inr(CAP_80C)} will count.
             </div>
           )}
 
@@ -470,7 +470,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           <AmountRow label="Any other income" value={incOther} onChange={setIncOther} />
 
           <div style={{ fontSize: 11, fontWeight: 700, color: C.purpleD, textTransform: 'uppercase', letterSpacing: '.05em', marginTop: 18, marginBottom: 2 }}>HRA exemption</div>
-          <AmountRow label="Monthly rent paid" hint={annualRent > 0 ? `Saal ka ${inr(annualRent)}` : undefined} value={rent} onChange={setRent} />
+          <AmountRow label="Monthly rent paid" hint={annualRent > 0 ? `${inr(annualRent)} a year` : undefined} value={rent} onChange={setRent} />
           {annualRent > 0 && (
             <div style={{ ...S.row, gridTemplateColumns: '1fr 200px' }}>
               <div>
@@ -487,7 +487,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
               <div>
                 <div style={{ fontSize: 13, color: C.navy }}>Landlord PAN</div>
                 <div style={{ fontSize: 11, color: panMissing ? C.red : C.muted, marginTop: 2 }}>
-                  Zaroori hai: saal ka rent {inr(100000)} se zyada hai
+                  Required: annual rent is over {inr(100000)}
                 </div>
               </div>
               <input style={{ ...S.inp, textTransform: 'uppercase', border: `1px solid ${panMissing ? C.red : TK.brandEdge}` }}
@@ -506,7 +506,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       {regime === 'NEW' && (
         <div style={{ ...S.card, background: C.greenBg, border: `1px solid ${TK.positiveTint}` }}>
           <div style={{ fontSize: 13, color: C.green, lineHeight: 1.6 }}>
-            <b>New regime mein kuch declare nahi karna.</b> Slab rates kam hain, par HRA exemption aur 80C/80D deductions nahi milti. Submit karte hi aapke purane declare kiye hue amounts hata diye jaayenge.
+            <b>Nothing to declare under the new regime.</b> Slab rates are lower, but HRA exemption and 80C/80D deductions do not apply. As soon as you submit, your previously declared amounts will be cleared.
           </div>
         </div>
       )}
@@ -515,7 +515,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
           only the loss side differs (§6.5) ── */}
       <div style={S.card}>
         <div style={S.h}>House property</div>
-        <div style={S.sub}>Ek se zyada property ho sakti hai. Self-occupied ka interest ₹2,00,000 tak, let-out ka poora interest allowed hai.</div>
+        <div style={S.sub}>You can add more than one property. Interest on a self-occupied home is allowed up to ₹2,00,000; on a let-out property, the full interest is allowed.</div>
         {hp.map((row, i) => (
           <HousePropertyRow key={row.id || i} row={row}
             onChange={patch => setHp(list => list.map((x, ix) => ix === i ? { ...x, ...patch } : x))}
@@ -529,7 +529,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
       {/* ── Previous employer — Form 12B, mid-year joiners only ── */}
       <div style={S.card}>
         <div style={S.h}>Previous employer this financial year</div>
-        <div style={S.sub}>Sirf tab bharein agar aap FY {FY} ke beech mein join hue hain aur pehle kahin aur kaam kar rahe the.</div>
+        <div style={S.sub}>Fill this in only if you joined partway through FY {FY} and were employed elsewhere before.</div>
         <AmountRow label="Taxable income there" value={prevIncome} onChange={setPrevIncome} />
         <AmountRow label="TDS already deducted" value={prevTds} onChange={setPrevTds} />
         <AmountRow label="PF deducted" hint="Record only (transfers via your own PF account)" value={prevPf} onChange={setPrevPf} />
@@ -537,7 +537,7 @@ export default function InvestmentDeclaration({ employeeId, empName, empCode }: 
         <button onClick={savePreviousEmployer} disabled={busy} style={{ ...S.btnO, marginTop: 10, opacity: busy ? 0.6 : 1 }}>Save previous employer details</button>
       </div>
 
-      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 10, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission saal ke aakhir mein khulti hai, ya <b>turant, agar aap resign karte hain</b>, taaki aapke last working day se pehle verify ho sake. Jo declare kiya par prove nahi kiya, woh exempt nahi rahega.
+      <div style={{ fontSize: 12, color: C.muted, background: TK.sunken, borderRadius: 10, padding: '11px 13px', marginBottom: 14, lineHeight: 1.6 }}>Proof submission opens at year-end, or <b>immediately if you resign</b>, so it can be verified before your last working day. Anything declared but not proven will not remain exempt.
       </div>
 
       {msg && <div style={{ fontSize: 13, fontWeight: 700, color: C.green, background: C.greenBg, border: `1px solid ${TK.positiveTint}`, borderRadius: 10, padding: '10px 14px', marginBottom: 12 }}>✓ {msg}</div>}

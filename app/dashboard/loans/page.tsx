@@ -45,10 +45,30 @@ function Badge({ status }: { status: string }) {
   return <span style={{ fontSize:10, padding:'2px 9px', borderRadius:99, background:bg, color:c, fontWeight:600, whiteSpace:'nowrap' }}>{s.replace(/_/g, ' ')}</span>
 }
 
+// Mirrors the server's LEVEL_ROLES (app/api/loans/admin/route.ts). Used ONLY to decide whether
+// to show the Approve/Reject buttons to this signed-in user — the server still enforces every
+// action, so this just stops someone being shown a button that would be refused.
+const LEVEL_ROLES: Record<string, string[]> = {
+  PAYROLL_MANAGER: ['PAYROLL', 'PAYROLL_ADMIN'],
+  HR_MANAGER: ['HR_MANAGER', 'HR_HEAD', 'CHRO'],
+  HR_HEAD: ['HR_HEAD', 'CHRO'],
+  FINANCE: ['FINANCE_EXECUTIVE', 'CFO'],
+}
+const roleLabel = (code: string) => String(code || '').replace(/_/g, ' ').toLowerCase()
+function canApproveLevel(grant: any, approverRole: string, employeeL1: string | null): boolean {
+  if (!grant) return false
+  if (grant.isSuperAdmin || grant.legacy) return true
+  if (approverRole === 'REPORTING_MANAGER') return !!grant.employeeId && employeeL1 === grant.employeeId
+  const codes = LEVEL_ROLES[approverRole] || []
+  return (grant.roles || []).some((r: any) => codes.includes(r.role_code))
+}
+
 // ── 1) Pending approvals ─────────────────────────────────────────
 function PendingApprovals({ companyId, companyEmpIds, empMap, typeMap, notify }: { companyId: string; companyEmpIds: Set<string>; empMap: Record<string, string>; typeMap: Record<string, string>; notify: (m: string, t?: 'error') => void }) {
+  const { grant } = useGrant()
   const [rows, setRows] = useState<any[]>([])
   const [levels, setLevels] = useState<Record<string, any>>({}) // request_id -> current pending level row
+  const [mgrs, setMgrs] = useState<Record<string, string | null>>({}) // employee_id -> l1_manager_id (for REPORTING_MANAGER levels)
   const [busy, setBusy] = useState<string | null>(null)
   const load = useCallback(async () => {
     // '' = All companies — the request list simply loses its company clause.
@@ -72,6 +92,12 @@ function PendingApprovals({ companyId, companyEmpIds, empMap, typeMap, notify }:
         const req = reqs.find((r: any) => r.id === lv.request_id)
         if (req && lv.level_order === req.current_approval_level) lvlMap[lv.request_id] = lv
       })
+      // Reporting-manager levels approve by relationship, not role — so we need each
+      // requester's L1 manager to know whether to show the buttons to this user.
+      const { data: emps } = await supabase.from('employees').select('id, l1_manager_id').in('id', reqs.map((r: any) => r.employee_id))
+      const mgrMap: Record<string, string | null> = {}
+      ;(emps || []).forEach((e: any) => { mgrMap[e.id] = e.l1_manager_id ?? null })
+      setMgrs(mgrMap)
     }
     setLevels(lvlMap)
   }, [companyId])
@@ -80,11 +106,21 @@ function PendingApprovals({ companyId, companyEmpIds, empMap, typeMap, notify }:
   const act = async (r: any, action: 'APPROVED' | 'REJECTED') => {
     const lv = levels[r.id]
     if (!lv) { notify('No pending approval level found', 'error'); return }
+    const who = empMap[r.employee_id] || 'this employee'
+    const ask = action === 'APPROVED'
+      ? `Approve this ${typeMap[r.loan_type_id] || 'loan'} request of ${inr(r.requested_amount)} for ${who}?`
+      : `Reject this loan request for ${who}? This cannot be undone.`
+    if (!window.confirm(ask)) return
     setBusy(r.id)
     const res = await fetch('/api/loans/admin', { method:'POST', headers:{ 'Content-Type':'application/json', ...(await authHeaders()) }, body: JSON.stringify({ request_id: r.id, action, remarks: '' }) })
     const d = await res.json().catch(() => ({}))
     setBusy(null)
-    if (res.ok) load(); else notify(d.error || 'Failed', 'error')
+    if (!res.ok) { notify(d.error || 'Failed', 'error'); return }
+    if (action === 'REJECTED') notify(`Rejected ✓ — ${who}'s request is closed.`)
+    else if (d.status === 'APPROVED') notify(`Approved ✓ — fully approved, agreement generated for ${who}.`)
+    else if (d.next_level_role) notify(`Approved ✓ — now with the ${roleLabel(d.next_level_role)} for the next approval.`)
+    else notify('Approved ✓')
+    load()
   }
 
   // Loaded per company, narrowed per filter — filtering at render keeps typing in
@@ -95,15 +131,24 @@ function PendingApprovals({ companyId, companyEmpIds, empMap, typeMap, notify }:
       <div style={S.section}>Pending approvals</div>
       {visible.length === 0 ? <div style={{ fontSize:12, color:C.muted }}>Nothing awaiting approval.</div> : visible.map(r => {
         const lv = levels[r.id]
+        const mine = lv ? canApproveLevel(grant, lv.approver_role, mgrs[r.employee_id]) : false
         return (
           <div key={r.id} style={S.row}>
             <div style={{ minWidth:0 }}>
               <div style={{ fontSize:13, fontWeight:600 }}>{empMap[r.employee_id] || r.employee_id} · {typeMap[r.loan_type_id] || 'Loan'}</div>
-              <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{inr(r.requested_amount)} · {r.requested_tenure_months} mo · EMI {inr(r.indicative_emi)} · level {r.current_approval_level}{lv ? ` (${lv.approver_role})` : ''}</div>
+              <div style={{ fontSize:12, color:C.muted, marginTop:2 }}>{inr(r.requested_amount)} · {r.requested_tenure_months} mo · EMI {inr(r.indicative_emi)} · awaiting {lv ? roleLabel(lv.approver_role) : `level ${r.current_approval_level}`} approval</div>
             </div>
             <div style={{ display:'flex', gap:8, alignItems:'center' }}>
-              <button disabled={busy === r.id} onClick={() => act(r, 'APPROVED')} style={S.btnG}>Approve</button>
-              <button disabled={busy === r.id} onClick={() => act(r, 'REJECTED')} style={S.btnR}>Reject</button>
+              {mine ? (
+                <>
+                  <button disabled={busy === r.id} onClick={() => act(r, 'APPROVED')} style={S.btnG}>{busy === r.id ? 'Working…' : 'Approve'}</button>
+                  <button disabled={busy === r.id} onClick={() => act(r, 'REJECTED')} style={S.btnR}>Reject</button>
+                </>
+              ) : (
+                <span style={{ fontSize:11, fontWeight:600, color:C.amber, background:C.amberBg, borderRadius:99, padding:'4px 11px', whiteSpace:'nowrap' }}>
+                  Waiting for the {lv ? roleLabel(lv.approver_role) : 'next approver'}
+                </span>
+              )}
             </div>
           </div>
         )
