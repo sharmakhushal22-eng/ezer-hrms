@@ -3,6 +3,10 @@
 // a new or edited session, and one session's register. The call itself is the company's Zoom,
 // Meet or Teams; this is the schedule, the invitations, attendance and the recording.
 //
+// With migration 227 a session can also stream inside EZER Learn (YouTube, Vimeo or an HLS
+// address) and has a room beside it: chat, questions, polls, and attendance from time spent there
+// (lib/lms/room.ts). The room's fields appear only on a database that has them.
+//
 // Everything is sent to /api/lms/admin/sessions, which decides (lib/lms/live.ts): inviting the
 // whole company needs organisation-wide rights, branch HR invite their branch only, and every
 // change people would put in a calendar sends them the updated invitation.
@@ -43,10 +47,20 @@ function PhaseTag({ phase }: { phase: Phase }) {
 interface FormValue {
   title: string; description: string; date: string; time: string; duration_min: string; join_url: string; location: string
   host_name: string; capacity: string; open_registration: boolean; course_id: string
+  stream_kind: string; stream_url: string; room_enabled: boolean; room_chat: boolean; room_questions: boolean; room_attend_pct: string
 }
 
-function SessionForm({ ctx, initial, courses, lookups, presetCourse, onSaved, onCancel }: {
+const STREAMS: { value: string; label: string; hint: string; placeholder?: string }[] = [
+  { value: 'MEETING', label: 'Zoom, Google Meet or Teams', hint: 'People join the call in your meeting app. The room in EZER Learn sits beside it for questions, polls and attendance.' },
+  { value: 'YOUTUBE', label: 'YouTube live stream', hint: 'Shown inside EZER Learn. Schedule the stream as Unlisted on YouTube and paste its address. Suits hundreds or thousands of viewers.', placeholder: 'https://www.youtube.com/live/… or https://youtu.be/…' },
+  { value: 'VIMEO', label: 'Vimeo live event', hint: 'Shown inside EZER Learn. Paste the event or video address from Vimeo.', placeholder: 'https://vimeo.com/event/…' },
+  { value: 'HLS', label: 'HLS stream address', hint: 'For a streaming service that gives an .m3u8 address (Mux, Cloudflare Stream, AWS IVS, your own server).', placeholder: 'https://…/index.m3u8' },
+]
+
+function SessionForm({ ctx, initial, courses, lookups, presetCourse, roomReady, onSaved, onCancel }: {
   ctx: Ctx; initial?: any; courses: any[]; lookups: any; presetCourse?: string | null
+  /** The database has the webinar room (migration 227). */
+  roomReady: boolean
   onSaved: (id: string, note: string) => void; onCancel: () => void
 }) {
   const start = istParts(initial?.starts_at)
@@ -55,17 +69,24 @@ function SessionForm({ ctx, initial, courses, lookups, presetCourse, onSaved, on
     duration_min: String(initial?.duration_min || 60), join_url: initial?.join_url || '', location: initial?.location || '',
     host_name: initial?.host_name || '', capacity: initial?.capacity ? String(initial.capacity) : '',
     open_registration: !!initial?.open_registration, course_id: initial?.course_id || presetCourse || '',
+    stream_kind: initial?.stream_kind || 'MEETING', stream_url: initial?.stream_url || '', room_enabled: initial?.room_enabled !== false,
+    room_chat: initial?.room_chat !== false, room_questions: initial?.room_questions !== false, room_attend_pct: String(initial?.room_attend_pct || 50),
   })
   const [targets, setTargets] = useState<Target[]>([])
   const a = useAction()
   const set = (p: Partial<FormValue>) => setV(x => ({ ...x, ...p }))
   const kinds = ctx.branchOnly ? ASSIGN_KINDS.filter(k => k !== 'LOCATION') : ASSIGN_KINDS
-  const missing = !v.title.trim() ? 'Give it a title.' : !v.date || !v.time ? 'Choose the date and time.' : !v.join_url.trim() && !v.location.trim() ? 'Add the meeting link, or a room.' : ''
+  const streams = roomReady && v.stream_kind !== 'MEETING'
+  const stream = STREAMS.find(x => x.value === v.stream_kind) || STREAMS[0]
+  const missing = !v.title.trim() ? 'Give it a title.' : !v.date || !v.time ? 'Choose the date and time.'
+    : streams ? (!v.stream_url.trim() ? 'Add the stream address.' : '')
+    : !v.join_url.trim() && !v.location.trim() ? 'Add the meeting link, or a room.' : ''
 
   const save = async () => {
     const body = {
       company_id: ctx.company, title: v.title, description: v.description, starts_at: fromIst(v.date, v.time), duration_min: Number(v.duration_min) || 60,
       join_url: v.join_url, location: v.location, host_name: v.host_name, capacity: v.capacity, open_registration: v.open_registration, course_id: v.course_id || null,
+      ...(roomReady ? { stream_kind: v.stream_kind, stream_url: streams ? v.stream_url : '', room_enabled: v.room_enabled || streams, room_chat: v.room_chat, room_questions: v.room_questions, room_attend_pct: Number(v.room_attend_pct) || 50 } : {}),
       ...(initial ? {} : { targets: targets.filter(t => t.value || t.kind === 'COMPANY') }),
     }
     const r: any = await a.run(() => initial ? lmsApi(`/api/lms/admin/sessions/${initial.id}`, body, 'PATCH') : lmsApi('/api/lms/admin/sessions', body))
@@ -88,10 +109,22 @@ function SessionForm({ ctx, initial, courses, lookups, presetCourse, onSaved, on
           <label>Start time (IST)<input className="lx-input" type="time" value={v.time} onChange={e => set({ time: e.target.value })} /></label>
           <label>Length (minutes)<input className="lx-input" type="number" min={5} max={600} step={5} value={v.duration_min} onChange={e => set({ duration_min: e.target.value })} /></label>
         </div>
+        {roomReady && (
+          <div style={{ display: 'grid', gap: 8 }}>
+            <label>How people watch
+              <select className="lx-select" style={{ height: 40 }} value={v.stream_kind} onChange={e => set({ stream_kind: e.target.value })}>
+                {STREAMS.map(x => <option key={x.value} value={x.value}>{x.label}</option>)}
+              </select>
+            </label>
+            <div className="lx-st-hint">{stream.hint}</div>
+            {streams && <label>Stream address<input className="lx-input" value={v.stream_url} onChange={e => set({ stream_url: e.target.value })} placeholder={stream.placeholder} /></label>}
+          </div>
+        )}
         <div className="lx-lv-row">
-          <label>Meeting link<input className="lx-input" value={v.join_url} onChange={e => set({ join_url: e.target.value })} placeholder="https://meet.google.com/… or Zoom / Teams" /></label>
+          <label>{streams ? 'Meeting link for speakers (optional)' : 'Meeting link'}<input className="lx-input" value={v.join_url} onChange={e => set({ join_url: e.target.value })} placeholder="https://meet.google.com/… or Zoom / Teams" /></label>
           <label>Or a room, if in person<input className="lx-input" value={v.location} onChange={e => set({ location: e.target.value })} placeholder="Training room, 3rd floor" /></label>
         </div>
+        {streams && <div className="lx-st-hint">Attendees are not given the meeting link of a streamed session in the room; it is for you and your speakers.</div>}
         <div className="lx-lv-row">
           <label>Host<input className="lx-input" value={v.host_name} onChange={e => set({ host_name: e.target.value })} placeholder="Who presents it" /></label>
           <label>Seats<input className="lx-input" type="number" min={1} value={v.capacity} onChange={e => set({ capacity: e.target.value })} placeholder="No limit" /></label>
@@ -105,6 +138,21 @@ function SessionForm({ ctx, initial, courses, lookups, presetCourse, onSaved, on
         {v.course_id && <div className="lx-st-hint">Attending this session, or watching most of its recording, completes the course’s live-session lesson.</div>}
         <Toggle checked={v.open_registration} onChange={x => set({ open_registration: x })} label="Open to everyone in the company"
           hint="Anyone can find it under Live sessions and register. Invited people get an invitation either way." />
+        {roomReady && (
+          <div style={{ display: 'grid', gap: 10 }}>
+            <div className="lx-st-label" style={{ margin: 0 }}>The room in EZER Learn</div>
+            <Toggle checked={v.room_enabled || streams} onChange={x => set({ room_enabled: x })} label="Open a room for this session"
+              hint={streams ? 'A streamed session always has its room: the stream plays there.' : 'Chat, questions with upvotes, polls and reactions beside the meeting, with attendance counted from time in the room.'} />
+            {(v.room_enabled || streams) && <>
+              <Toggle checked={v.room_chat} onChange={x => set({ room_chat: x })} label="Chat" hint="Everyone in the room can write. You can hide any message." />
+              <Toggle checked={v.room_questions} onChange={x => set({ room_questions: x })} label="Questions" hint="People ask, upvote what matters most, and see your answers. They may ask without their name; you still see who asked." />
+              <label style={{ maxWidth: 360 }}>Stay this share of the session to count as attending (%)
+                <input className="lx-input" type="number" min={10} max={100} step={5} value={v.room_attend_pct} onChange={e => set({ room_attend_pct: e.target.value })} />
+              </label>
+              <div className="lx-st-hint">Time in the room is counted by the server from a heartbeat, from 15 minutes before the start to 30 minutes after the end. The attendance code and your ticks still work as before.</div>
+            </>}
+          </div>
+        )}
         {!initial && (
           <div style={{ display: 'grid', gap: 8 }}>
             <div className="lx-st-label" style={{ margin: 0 }}>Invite now (optional)</div>
@@ -190,8 +238,9 @@ function RegisterRow({ r, s, canEdit, onChanged }: { r: any; s: any; canEdit: bo
       <td>
         <label style={{ display: 'inline-flex', gap: 8, alignItems: 'center', cursor: canEdit && started && s.status !== 'CANCELLED' ? 'pointer' : 'default' }}>
           <input type="checkbox" checked={!!r.attended} disabled={!canEdit || busy || !started || s.status === 'CANCELLED'} onChange={e => void attendance(e.target.checked)} style={{ width: 16, height: 16, accentColor: 'var(--ez-positive)' }} />
-          {r.attended ? (r.attendance_by === 'CODE' ? 'Code' : 'Ticked') : ''}
+          {r.attended ? (r.attendance_by === 'CODE' ? 'Code' : r.attendance_by === 'ROOM' ? 'Room' : 'Ticked') : ''}
         </label>
+        {Number(r.room_seconds) > 0 && <div className="lx-st-hint lx-num">{Math.round(Number(r.room_seconds) / 60)} min in the room</div>}
       </td>
       <td className="lx-num">{r.recording_done ? <span className="lx-tag lx-tag--positive"><IconCheck size={11} /> Watched</span> : Number(r.recording_watched_s) > 0 ? `${Math.round(Number(r.recording_watched_s) / 60)} min` : <span className="lx-st-hint">—</span>}</td>
       <td style={{ textAlign: 'right' }}>{canEdit && r.status !== 'REMOVED' && <button className="lx-btn lx-btn--ghost lx-btn--sm" disabled={busy} onClick={remove}>Remove</button>}</td>
@@ -219,7 +268,8 @@ function SessionDetail({ ctx, id, courses, lookups, onBack }: { ctx: Ctx; id: st
     if (r) done(typeof r.mailed === 'number' && body.action === 'cancel' ? `${ok} ${plural(r.mailed, 'cancellation')} sent.` : ok)
   }
 
-  if (mode === 'edit') return <SessionForm ctx={ctx} initial={s} courses={courses} lookups={lookups} onSaved={(_, n) => done(n)} onCancel={() => setMode('view')} />
+  if (mode === 'edit') return <SessionForm ctx={ctx} initial={s} courses={courses} lookups={lookups} roomReady={!!s.room_ready} onSaved={(_, n) => done(n)} onCancel={() => setMode('view')} />
+  const roomOn = !!s.room_ready && s.status !== 'CANCELLED' && (s.room_enabled !== false || (s.stream_kind && s.stream_kind !== 'MEETING'))
   const live = s.phase === 'live' || s.phase === 'joinable'
   return (
     <div style={{ display: 'grid', gap: 16 }}>
@@ -232,6 +282,7 @@ function SessionDetail({ ctx, id, courses, lookups, onBack }: { ctx: Ctx; id: st
             <h2 style={{ margin: 0, fontSize: 22 }}>{s.title}</h2>
             <div className="lx-lv-meta"><span><GCalendar size={14} /> {when(s.starts_at)} IST</span><span><GClock size={14} /> {s.duration_min} min</span>{s.host_name && <span><GUsers size={14} /> {s.host_name}</span>}{s.capacity && <span>{s.capacity} seats</span>}</div>
             {s.join_url && <div style={{ fontSize: 13.5, wordBreak: 'break-all' }}>Link: <a href={s.join_url} target="_blank" rel="noopener noreferrer">{s.join_url}</a></div>}
+            {s.stream_kind && s.stream_kind !== 'MEETING' && <div style={{ fontSize: 13.5, wordBreak: 'break-all' }}>Streams in EZER Learn ({(STREAMS.find(x => x.value === s.stream_kind) || STREAMS[0]).label}){s.stream_url ? <>: <a href={s.stream_url} target="_blank" rel="noopener noreferrer">{s.stream_url}</a></> : ''}</div>}
             {s.location && <div style={{ fontSize: 13.5 }}>Where: {s.location}</div>}
             {s.description && <div className="lx-lv-desc">{s.description}</div>}
             {s.status === 'CANCELLED' && <div className="lx-lv-desc">Cancelled{s.cancel_reason ? `: ${s.cancel_reason}` : '.'}</div>}
@@ -252,6 +303,7 @@ function SessionDetail({ ctx, id, courses, lookups, onBack }: { ctx: Ctx; id: st
         </div>
         {canEdit && (
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+            {roomOn && <a className="lx-btn lx-btn--primary lx-btn--sm" {...linkProps(to.room(s.id))}><GLive size={14} /> {live ? 'Open the room and host' : 'Open the room'}</a>}
             {s.status === 'SCHEDULED' && <button className="lx-btn lx-btn--sm" onClick={() => setMode(mode === 'invite' ? 'view' : 'invite')}><IconPlus size={14} /> Invite people</button>}
             {s.status !== 'CANCELLED' && <button className="lx-btn lx-btn--sm" onClick={() => setMode('edit')}>Edit details</button>}
             {s.status === 'SCHEDULED' && s.phase !== 'upcoming' && <button className="lx-btn lx-btn--sm" disabled={a.busy} onClick={act({ action: 'attendance', all: true }, 'Everyone on the list is marked as attended. Untick anyone who did not come.')}>Mark everyone attended</button>}
@@ -292,7 +344,7 @@ function SessionRow({ s, onOpen }: { s: any; onOpen: () => void }) {
         <i>{new Date(s.starts_at).toLocaleDateString('en-GB', { timeZone: IST, month: 'short' })}</i>
       </div>
       <div className="lx-lv-body">
-        <div className="lx-lv-tags"><PhaseTag phase={s.phase} />{s.recording_asset_id && <span className="lx-tag"><GPlay size={11} /> Recording</span>}</div>
+        <div className="lx-lv-tags"><PhaseTag phase={s.phase} />{s.stream_kind && s.stream_kind !== 'MEETING' && <span className="lx-tag"><GLive size={11} /> Streams in EZER Learn</span>}{s.recording_asset_id && <span className="lx-tag"><GPlay size={11} /> Recording</span>}</div>
         <div className="lx-lv-title">{s.title}</div>
         <div className="lx-lv-meta">
           <span><GClock size={14} /> {when(s.starts_at)} · {s.duration_min} min</span>
@@ -324,7 +376,7 @@ export default function StudioLive({ ctx, item, tick }: { ctx: Ctx; item: string
   if (item) return <SessionDetail key={item} ctx={ctx} id={item} courses={extra.data?.courses || []} lookups={extra.data?.lookups || null} onBack={() => { navigate(to.studio('live')); list.reload() }} />
   if (creating) {
     if (!ctx.company) return <div className="lx-st-host"><NeedCompany doing="schedule a live session" /><button className="lx-btn" onClick={stop}>Back</button></div>
-    return <SessionForm ctx={ctx} courses={extra.data?.courses || []} lookups={extra.data?.lookups || null} presetCourse={presetCourse}
+    return <SessionForm ctx={ctx} courses={extra.data?.courses || []} lookups={extra.data?.lookups || null} presetCourse={presetCourse} roomReady={!!list.data?.room_ready}
       onSaved={(id, n) => { stop(); setNote(n); navigate(to.studio('live', id)) }} onCancel={stop} />
   }
 
@@ -361,7 +413,7 @@ export default function StudioLive({ ctx, item, tick }: { ctx: Ctx; item: string
         <div className="lx-empty">
           <div className="lx-empty-art"><GLive size={34} /></div>
           <h3>{tab === 'upcoming' ? 'No live session scheduled' : tab === 'past' ? 'No session held yet' : 'Nothing cancelled'}</h3>
-          <p>{ctx.caps.assign ? 'Schedule a webinar with your Zoom, Meet or Teams link. People get a calendar invitation, reminders, a Join button, and the recording afterwards.' : 'Sessions appear here once someone schedules one.'}</p>
+          <p>{ctx.caps.assign ? `Schedule a webinar with your Zoom, Meet or Teams link${list.data?.room_ready ? ', or stream it inside EZER Learn from YouTube, Vimeo or an HLS address' : ''}. People get a calendar invitation, reminders, a Join button${list.data?.room_ready ? ', a room with chat, questions and polls' : ''}, and the recording afterwards.` : 'Sessions appear here once someone schedules one.'}</p>
           {ctx.caps.assign && tab === 'upcoming' && <button className="lx-btn lx-btn--primary" onClick={() => setMaking(true)}><IconPlus size={15} /> New live session</button>}
         </div>
       )}

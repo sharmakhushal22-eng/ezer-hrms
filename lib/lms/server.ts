@@ -25,6 +25,10 @@ export const notFound = (what = 'That') => new LmsError(`${what} was not found.`
 /** The friendly form of "the migration has not been run yet". */
 export function setupHint(e: unknown): string | null {
   const m = String((e as any)?.message || e || '')
+  // Trailers, My list, points and the webinar room came with 227. Checked before 211, whose
+  // pattern would also match the new lms_session_* tables.
+  if (/(lms_saved|trailer_|lms_session_(messages|votes|polls|poll_votes)|room_|stream_kind|stream_url|live_started_at|live_ended_at|pinned_message_id|game_enabled|leaderboard_)/i.test(m) && /(does not exist|schema cache|relation|Could not find|violates check)/i.test(m))
+    return 'This needs one more database step: run supabase/migrations/227_lms_showcase_game_room.sql in the Supabase SQL editor.'
   // Webinars and SCORM came later (211): say so rather than send someone back to 206.
   if (/(lms_session|lms_sessions|lms_session_attendees|'scorm'|\.scorm|scorm column|lms_(lessons|assets)_kind_check)/i.test(m) && /(does not exist|schema cache|relation|Could not find|violates check)/i.test(m))
     return 'Webinars and SCORM need one more database step: run supabase/migrations/211_lms_live_and_scorm.sql in the Supabase SQL editor.'
@@ -94,6 +98,10 @@ export interface LmsSettings {
   cert_signatory_title: string | null
   preboarding_enabled: boolean
   preboarding_link_days: number
+  // Migration 227. Undefined until it is run, and read as on.
+  game_enabled?: boolean
+  leaderboard_enabled?: boolean
+  leaderboard_names?: boolean
 }
 
 /** A company's settings, the row being created the first time anyone asks. */

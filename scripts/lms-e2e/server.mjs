@@ -268,6 +268,7 @@ async function storage(req, res, url, role) {
   return send(res, 404, { message: 'unsupported storage call' })
 }
 
+const broadcasts = []
 const server = http.createServer(async (req, res) => {
   const url = new URL(req.url, `http://127.0.0.1:${PORT}`)
   if (req.method === 'OPTIONS') return send(res, 204)
@@ -278,6 +279,15 @@ const server = http.createServer(async (req, res) => {
     const { sql, params } = JSON.parse(await readBody(req))
     try { return send(res, 200, (await db.query(sql, params || [])).rows) } catch (e) { return send(res, 400, { message: e.message }) }
   }
+  // Realtime broadcast, as the webinar room's server sends it: kept, so the suite can read what
+  // went out and on which channel. Only the service key may send, as on the real service.
+  if (url.pathname === '/realtime/v1/api/broadcast' && req.method === 'POST') {
+    if (role !== 'service_role') return send(res, 401, { message: 'service key required' })
+    const b = JSON.parse((await readBody(req)) || '{}')
+    broadcasts.push(...(b.messages || []))
+    return send(res, 202)
+  }
+  if (url.pathname === '/__rig/broadcasts' && role === 'service_role') return send(res, 200, broadcasts)
   if (url.pathname.startsWith('/auth/v1/')) return send(res, 401, { message: 'no session' })
   return send(res, 404, { message: 'nope' })
 })

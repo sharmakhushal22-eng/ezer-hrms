@@ -22,6 +22,7 @@ import { GArrowLeft } from '../glyphs'
 import { GEye, GImage, GRocket } from './icons'
 import CurriculumBoard from './CurriculumBoard'
 import CoursePreview from './CoursePreview'
+import StudioTrailer from './StudioTrailer'
 
 type Step = 'details' | 'content' | 'rules' | 'reach' | 'publish'
 
@@ -160,7 +161,7 @@ export default function StudioBuilder({ ctx, courseId, onBack, onOpen }: { ctx: 
 
       <Steps steps={steps} value={step} onChange={s => { void flush(); setStep(s) }} />
       <div className="lx-st-section lx-in" key={step}>
-        {step === 'details' && <div className="lx-st-host"><BuilderDetails b={api} /></div>}
+        {step === 'details' && <div className="lx-st-host"><StudioTrailer key={`${c.trailer_asset_id}:${c.trailer_start_s}:${c.trailer_len_s}`} b={api} /><BuilderDetails b={api} /></div>}
         {step === 'content' && <CurriculumBoard b={api} selected={lesson} onSelect={setLesson} onPreview={id => setPreview({ start: id })} />}
         {step === 'rules' && <div className="lx-st-host"><BuilderRules b={api} onPublish={() => setStep('publish')} /></div>}
         {step === 'reach' && (
