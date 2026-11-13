@@ -7,6 +7,7 @@ import { createClient } from '@supabase/supabase-js'
 import { companyFilter } from '@/lib/rms/resolve'
 import { requireAccess, requireSelfOrModule, inCompany, refuse } from '@/lib/rms/authz'
 import { resolveFlexi, COMP_NAMES } from '@/lib/flexi/resolve-server'
+import { FY } from '@/lib/flexi/claims'
 
 const supa = createClient(
   process.env.NEXT_PUBLIC_SUPABASE_URL!,
@@ -40,6 +41,14 @@ export async function POST(req: NextRequest) {
       if (who.error) return who.error
       const employee_id = who.subjectId
       if (!(claim_amount > 0)) return NextResponse.json({ error: 'Claim amount must be greater than zero.' }, { status: 400 })
+      // A bill must be dated inside the current financial year (1 Apr – 31 Mar) and never in
+      // the future — the client enforces this too, but the server is the one that must hold.
+      if (bill_date) {
+        const fyStart = `${FY.slice(0, 4)}-04-01`, fyEnd = `${Number(FY.slice(0, 4)) + 1}-03-31`
+        const today = new Date().toISOString().slice(0, 10)
+        if (bill_date < fyStart || bill_date > fyEnd) return NextResponse.json({ error: `The bill date must be in the current financial year (FY ${FY}).` }, { status: 400 })
+        if (bill_date > today) return NextResponse.json({ error: 'The bill date cannot be in the future.' }, { status: 400 })
+      }
       // The window is the 1st–20th of every month, on its own (lib/flexi/window): the claim
       // goes on this month's window for the employee's company, whatever window_id the caller
       // sent. Inside it, what refuses a bill is the balance — the same resolver /api/ess/flexi

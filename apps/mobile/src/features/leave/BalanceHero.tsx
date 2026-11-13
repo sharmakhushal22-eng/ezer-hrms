@@ -7,7 +7,7 @@ import { LinearGradient } from 'expo-linear-gradient'
 import { useTheme } from '@/ui/ThemeProvider'
 import { elevation, F, R, S } from '@/ui/theme'
 import { Txt } from '@/ui/primitives'
-import { avail, barClass, type Balance, type Bar, type Payload } from './logic'
+import { avail, barClass, floorHalf, type Balance, type Bar, type Payload } from './logic'
 
 // The website's dark hero is a fixed navy rather than a theme token, because
 // brand-on-brand inverts in dark (LeaveSection.tsx CSS, --lv-hero dark block).
@@ -53,7 +53,7 @@ function useCountUp(target: number, live: boolean, reduce: boolean) {
 
 function Tile({ b, i, reduce }: { b: Balance; i: number; reduce: boolean }) {
   const { C, isDark } = useTheme()
-  const total = Math.round((Number(b.opening || 0) + Number(b.accrued || 0)) * 100) / 100
+  const total = floorHalf(Number(b.opening || 0) + Number(b.accrued || 0))
   const av = avail(b)
   const pct = total > 0 ? Math.round(av / total * 100) : 0
   const width = Math.min(100, Math.max(0, pct))

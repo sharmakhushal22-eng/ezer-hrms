@@ -4,11 +4,11 @@ Runs the real Next.js app and its real API routes against a throwaway local data
 contacts your Supabase project at run time, and every person in it is invented.
 
 - `db.mjs` builds real Postgres (PGlite) with the live schema's tables, applies migrations
-  206–208 and 211, and seeds two fictional companies.
+  206–208, 211 and 227, and seeds two fictional companies.
 - `server.mjs` is a local stand-in for PostgREST, Supabase Storage and TUS. It keeps PostgREST's
   1,000-row cap and enforces the anon role, so RLS and grant failures are real failures.
 - `e2e.mjs` is the suite: the 17 brief scenarios plus the refusals, SCORM packages and live
-  sessions (92 checks).
+  sessions (92 checks), and the webinar room (chat, questions, polls, attendance from time in the room).
 
 ## Run it
 
@@ -22,10 +22,11 @@ REPO=/path/to/repo node server.mjs                       # local database on :54
 # in the repo, in a second terminal:
 NEXT_PUBLIC_SUPABASE_URL=http://127.0.0.1:54400 NEXT_PUBLIC_SUPABASE_ANON_KEY=rig-anon-key \
 SUPABASE_SERVICE_ROLE_KEY=rig-service-key ESS_SESSION_SECRET=rig-ess-secret \
-NEXT_PUBLIC_APP_URL=http://127.0.0.1:3210 GMAIL_USER= GMAIL_APP_PASSWORD= CRON_SECRET= \
+NEXT_PUBLIC_APP_URL=http://127.0.0.1:3210 GMAIL_USER= GMAIL_APP_PASSWORD= CRON_SECRET=rig-cron-secret \
 NEXT_DIST_DIR=.next-rig npx next dev -p 3210 -H 127.0.0.1
 
 node e2e.mjs                                             # third terminal; needs a fresh server.mjs
+# Other ports: RIG_PORT=54410 for server.mjs, then APP=http://127.0.0.1:3211 RIG=http://127.0.0.1:54410 node e2e.mjs
 ```
 
 `next dev` rewrites `tsconfig.json`; run `git checkout tsconfig.json` afterwards.

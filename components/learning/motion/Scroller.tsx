@@ -12,6 +12,7 @@
 import { useEffect, useRef, useState, type CSSProperties, type FocusEvent, type PointerEvent, type ReactNode } from 'react'
 import { GLeft, GPause, GPlay, GRight } from '../glyphs'
 import { useInView, useReducedMotion } from './useInView'
+import { useHover } from '../showcase/preview'
 
 export function Scroller({ children, className, n, progress, variant, label, role, style, auto }: {
   children: ReactNode
@@ -52,9 +53,14 @@ export function Scroller({ children, className, n, progress, variant, label, rol
   }, [n])
   useEffect(() => () => { if (touch.current) clearTimeout(touch.current) }, [])
 
+  // A card of this row grown into the hover card (showcase/HoverLayer) sits outside the row, so
+  // the pointer has left it; the row still holds still until that card closes.
+  const h = useHover()
+  const [grown, setGrown] = useState(false)
+  useEffect(() => { setGrown(!!h && !!wrap.current?.contains(h.el)) }, [h])
   const over = !(edge.start && edge.end)
   const moving = !!auto && over && !reduce && !stopped
-  const running = moving && seen && !held
+  const running = moving && seen && !held && !grown
   useEffect(() => {
     if (!running) return
     const t = setInterval(() => {

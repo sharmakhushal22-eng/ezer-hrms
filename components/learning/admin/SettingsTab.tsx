@@ -159,6 +159,13 @@ export default function SettingsTab({ ctx }: { ctx: Ctx }) {
           <div style={{ maxWidth: 240 }}><Num f={f} set={set} name="preboarding_link_days" label="An invitation link lasts (days)" /></div>
         </div>
       </Panel>
+      <Panel title="Points and leaderboard" hint="Points, streaks and badges are worked out from what people finish. Nothing is awarded by hand.">
+        <div style={stack(S.sm)}>
+          <Toggle label="Show points, streaks and badges" hint="Off hides them from every learner. Nothing is lost: turning them back on shows the same totals." checked={f.game_enabled !== false} onChange={v => set({ game_enabled: v })} />
+          <Toggle label="Show the leaderboard" hint="The top ten for the week, month and all time, across the company or a department." checked={f.game_enabled !== false && f.leaderboard_enabled !== false} disabled={f.game_enabled === false} onChange={v => set({ leaderboard_enabled: v })} />
+          <Toggle label="Show names on the leaderboard" hint="Off shows everyone else as a colleague in their department. Each person always sees their own name." checked={f.game_enabled !== false && f.leaderboard_enabled !== false && f.leaderboard_names !== false} disabled={f.game_enabled === false || f.leaderboard_enabled === false} onChange={v => set({ leaderboard_names: v })} />
+        </div>
+      </Panel>
       <div style={{ ...row(), marginBottom: S.xl }}>
         <Button variant="primary" disabled={a.busy || !dirty || !!problem} onClick={save}>Save settings</Button>
         {problem && <span style={{ fontSize: F.tiny, color: C.critical, fontWeight: W.medium }}>{problem}</span>}

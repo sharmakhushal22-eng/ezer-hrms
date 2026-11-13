@@ -14,6 +14,7 @@ enforces passing rules, chases deadlines and issues verifiable certificates.
 | [IMPLEMENTATION-REPORT.md](IMPLEMENTATION-REPORT.md) | What was built, test results, and what is outstanding |
 | [research/lms-products.md](research/lms-products.md) | Ten LMS products and four Indian HR suites, with source links |
 | [research/video-delivery.md](research/video-delivery.md) | Video hosting options, a worked cost model, upload and tracking design |
+| [PRODUCT-PLAN.md](PRODUCT-PLAN.md) | EZER Learn as a product of its own (10 Nov 2026): research, repo decision, phases, trailers and hover previews, gamification, the webinar room, and how to test |
 | [REDESIGN.md](REDESIGN.md) | The standalone EZER Learn app (3 Nov 2026): navigation, screens, player, slide viewer, Studio; and (6 Nov) webinars, SCORM, manager mail, motion |
 
 ## Where it lives

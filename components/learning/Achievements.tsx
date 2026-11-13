@@ -1,6 +1,7 @@
 'use client'
 // components/learning/Achievements.tsx — certificates, skills, quiz results and the record of
-// every course finished, all from /api/lms/me/achievements.
+// every course finished, all from /api/lms/me/achievements; and points, badges and the
+// leaderboard from /api/lms/me/game (./game/GamePanel.tsx).
 import { useCallback, useEffect, useState } from 'react'
 import { IconDownload } from '@/lib/ui'
 import { lmsApi, lmsDownload } from '@/lib/lms/client'
@@ -8,6 +9,7 @@ import { EmptyState, IconExternal, Oops, STATUS, Skel, dayWords, errorWords, plu
 import { GCert, GCheckCircle, GTarget, GTrophy } from './glyphs'
 import { cached, remember } from './app/cache'
 import { CountUp } from './motion/CountUp'
+import { GamePanel } from './game/GamePanel'
 
 interface Cert { id: string; cert_no: string; verify_code: string; title: string; score_pct: number | null; issued_at: string; expires_at: string | null; revoked_at: string | null }
 interface Result { id: string; title: string; attempt_no: number; pct: number | null; pass_pct?: number; passed: boolean; submitted_at: string | null }
@@ -74,11 +76,13 @@ export default function Achievements() {
         <div className="lx-ph-row">
           <div>
             <h1>Achievements</h1>
-            <p>Your certificates, the skills you have built and the record of everything you have finished.</p>
+            <p>Your points, badges and certificates, the skills you have built and the record of everything you have finished.</p>
           </div>
           <span className="lx-trophy" style={{ width: 72, height: 72 }}><GTrophy size={34} /></span>
         </div>
       </header>
+
+      <div className="lx-stack" style={{ marginBottom: 32 }}><GamePanel /></div>
 
       {nothing ? (
         <EmptyState title="Your first achievement is one course away" icon={<GTrophy size={34} />}>Finish a course and its certificate, score and skills will be kept here for good.</EmptyState>

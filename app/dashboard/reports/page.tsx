@@ -12,6 +12,7 @@ import { useState, useEffect, useMemo } from 'react';
 import { supabase } from '@/lib/supabase';
 import { useGrant, authToken } from '@/lib/rms/client';
 import { leaveYearOf } from '@/lib/ess/leave-year';
+import { floorHalf } from '@/lib/leave/accrual';
 import { scopedCompanies, defaultCompanyId } from '@/lib/rms/resolve';
 // Design tokens, aliased as TK — many of these files already declare
 // their own C. See lib/ui/tokens.ts.
@@ -928,7 +929,7 @@ async function fetchReportRows(report: ReportConfig, companyId: string): Promise
           leave_type: t.short_name ? `${t.name} (${t.short_name})` : (t.name || '—'),
           opening_balance: opening, accrued, used, encashed,
           // LWP / Sabbatical carry no balance — their row is days taken, not a deficit.
-          closing_balance: t.allow_without_balance ? '—' : Math.round((opening + accrued - used - encashed) * 10) / 10,
+          closing_balance: t.allow_without_balance ? '—' : floorHalf(opening + accrued - used - encashed),
           _sort: t.sort_order ?? 99,
         };
       })

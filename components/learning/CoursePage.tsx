@@ -18,6 +18,8 @@ import {
 } from './shared'
 import { GArrowLeft, GArrowRight, GCert, GClock, GLayers, GPlay, GTarget, GUsers } from './glyphs'
 import { Aurora } from './motion/Aurora'
+import { Clip } from './showcase/Clip'
+import { usePreviewPrefs } from './showcase/preview'
 
 interface Mine { id: string; status: string; progress_pct?: number }
 interface OutlineLesson {
@@ -185,6 +187,7 @@ export default function CoursePage({ id, card, readOnly, onChanged, onBack, onPl
   const [err, setErr] = useState('')
   const [busy, setBusy] = useState(false)
   const [preview, setPreview] = useState<OutlineLesson | null>(null)
+  const previewsOff = !!usePreviewPrefs().blocked
 
   // Through the cache: a hover on the card may already have this in flight.
   const load = useCallback(() => {
@@ -287,6 +290,8 @@ export default function CoursePage({ id, card, readOnly, onChanged, onBack, onPl
           </div>
           <aside className="lx-cp-card" aria-label="Take this course">
             <CourseArt src={c.thumbnail} id={c.id} title={c.title} kind={lessons[0]?.kind}>
+              {/* The course's trailer loops muted behind the artwork until the free preview opens. */}
+              {card?.preview && !previewsOff && !preview && <Clip p={card.preview} play owned />}
               {firstPreview && (
                 <>
                   <button className="lx-cc-play" style={{ opacity: 1, border: 0, cursor: 'pointer' }} onClick={() => setPreview(firstPreview)} aria-label="Watch a free preview">

@@ -13,6 +13,8 @@ import { Carousel } from './motion/Carousel'
 import { CountUp } from './motion/CountUp'
 import { Scroller } from './motion/Scroller'
 import { viewTransition } from './motion/transition'
+import { Clip } from './showcase/Clip'
+import { isSaved, useHover, usePreviewPrefs } from './showcase/preview'
 
 export type { CatCourse }
 export interface CatPath {
@@ -20,7 +22,9 @@ export interface CatPath {
   mine?: { path_id: string; status: string; progress_pct: number } | null
   courses?: { id: string; title: string; is_required: boolean }[]
 }
-export interface Catalog { courses: CatCourse[]; categories: { id: string; name: string }[]; recommended?: CatCourse[]; paths: CatPath[] }
+export interface Catalog { courses: CatCourse[]; categories: { id: string; name: string }[]; recommended?: CatCourse[]; paths: CatPath[]
+  /** Course ids, most started in the last 30 days first (lib/lms/showcase-core.ts). */
+  top?: string[] }
 
 const DURATIONS: Record<string, { label: string; test: (m: number) => boolean }> = {
   short: { label: 'Under 15 min', test: m => m <= 15 },
@@ -83,10 +87,15 @@ function PathCard({ p, mine, readOnly, onEnrolled }: { p: CatPath; mine?: LearnP
   )
 }
 
-function Spotlight({ c, category, onOpen }: { c: CatCourse; category?: string; onOpen: () => void }) {
+function Spotlight({ c, category, onOpen, active = true }: { c: CatCourse; category?: string; onOpen: () => void; active?: boolean }) {
+  // The showing slide plays its clip muted, unless previews are off or a hover card is playing one.
+  const { blocked } = usePreviewPrefs()
+  const hovering = !!useHover()
   return (
     <button className="lx-feature lx-in" onClick={onOpen}>
-      <CourseArt src={c.thumbnail} id={c.id} title={c.title} kind={(c.kinds || [])[0]} />
+      <CourseArt src={c.thumbnail} id={c.id} title={c.title} kind={(c.kinds || [])[0]}>
+        {c.preview && active && !blocked && <Clip p={c.preview} play={!hovering} owned progress={false} />}
+      </CourseArt>
       <div className="lx-feature-body">
         <span style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
           <span className="lx-tag lx-tag--gold"><GSparkle size={12} /> Spotlight</span>
@@ -136,6 +145,8 @@ export default function Catalogue({ cat: given, err: givenErr, myPaths, query, r
   const [kind, setKind] = useState('')
   const [status, setStatus] = useState('')
   const [onlyMust, setOnlyMust] = useState(false)
+  const [onlySaved, setOnlySaved] = useState(false)
+  usePreviewPrefs()   // My list changes show at once
   const [sort, setSort] = useState('best')
   // The search box in the top bar lands here with ?q=.
   const qs = query?.toString() || ''
@@ -150,8 +161,11 @@ export default function Catalogue({ cat: given, err: givenErr, myPaths, query, r
   }, [cat])
   const kinds = useMemo(() => [...new Set((cat?.courses || []).flatMap(c => c.kinds || []))].filter(k => k !== 'ASSESSMENT'), [cat])
   const levels = useMemo(() => Object.keys(LEVEL).filter(l => (cat?.courses || []).some(c => c.difficulty === l)), [cat])
-  const filtering = !!(q.trim() || category || level || length || kind || status || onlyMust)
+  const filtering = !!(q.trim() || category || level || length || kind || status || onlyMust || onlySaved)
 
+  // My list as changed in this tab (usePreviewPrefs above re-renders on a change), so the filter follows it.
+  const savedKey = (cat?.courses || []).filter(c => isSaved(c)).map(c => c.id).join()
+  const savedIds = useMemo(() => new Set(savedKey.split(',')), [savedKey])
   const shown = useMemo(() => {
     const needle = q.trim().toLowerCase()
     return (cat?.courses || []).filter(c => {
@@ -160,11 +174,12 @@ export default function Catalogue({ cat: given, err: givenErr, myPaths, query, r
       if (kind && !(c.kinds || []).includes(kind)) return false
       if (status && !STATUS_FILTER[status].test(c)) return false
       if (onlyMust && !c.is_compliance) return false
+      if (onlySaved && !savedIds.has(c.id)) return false
       if (length && !(c.est_minutes != null && DURATIONS[length].test(c.est_minutes))) return false
       if (!needle) return true
       return [c.title, c.summary, c.code, catName.get(c.category_id || ''), ...(c.tags || []), ...(c.skills || [])].some(s => String(s || '').toLowerCase().includes(needle))
     }).sort(SORTS[sort].fn)
-  }, [cat, q, category, level, length, kind, status, onlyMust, sort, catName])
+  }, [cat, q, category, level, length, kind, status, onlyMust, onlySaved, savedIds, sort, catName])
 
   const setSearch = (v: string) => {
     setQ(v)
@@ -174,7 +189,7 @@ export default function Catalogue({ cat: given, err: givenErr, myPaths, query, r
     setCategory(id)
     if (!onOpenCourse) navigate(to.catalog({ ...(q.trim() ? { q: q.trim() } : {}), ...(id ? { cat: id } : {}) }), { replace: true, keepScroll: true })
   }
-  const clear = () => { setQ(''); setLevel(''); setLength(''); setKind(''); setStatus(''); setOnlyMust(false); pickCat('') }
+  const clear = () => { setQ(''); setLevel(''); setLength(''); setKind(''); setStatus(''); setOnlyMust(false); setOnlySaved(false); pickCat('') }
   // A filter, sort or category change glides: the cards that stay move to their new places, the
   // rest fade (motion/transition.ts; each card in the grid carries its own transition name).
   // Typing in the search box does not, it would restart on every key.
@@ -246,6 +261,7 @@ export default function Catalogue({ cat: given, err: givenErr, myPaths, query, r
             {Object.entries(STATUS_FILTER).map(([k, s]) => <option key={k} value={k}>{s.label}</option>)}
           </select>
           <button className="lx-toggle" aria-pressed={onlyMust} onClick={() => glide(() => setOnlyMust(v => !v))}>Compliance only</button>
+          {!readOnly && <button className="lx-toggle" aria-pressed={onlySaved} onClick={() => glide(() => setOnlySaved(v => !v))}>My list</button>}
         </div>
       </div>
 
@@ -266,7 +282,7 @@ export default function Catalogue({ cat: given, err: givenErr, myPaths, query, r
         {spotlight.length === 1 && <Spotlight c={spotlight[0]} category={catName.get(spotlight[0].category_id || '')} onOpen={() => open(spotlight[0].id)} />}
         {spotlight.length > 1 && (
           <Carousel items={spotlight} label="Featured courses" slideLabel={c => c.title} variant="below" interval={8000}
-            render={c => <Spotlight c={c} category={catName.get(c.category_id || '')} onOpen={() => open(c.id)} />} />
+            render={(c, active) => <Spotlight c={c} active={active} category={catName.get(c.category_id || '')} onOpen={() => open(c.id)} />} />
         )}
 
         <section>

@@ -17,11 +17,30 @@ import { learnUrl, mailLearner, notifyPerson, shell } from './notify'
 import {
   buildIcs, canCheckIn, canJoin, creditRecording, endsAt, newCheckinCode, phaseOf, sameCode, whenWords, RECORDING_DONE_PCT,
 } from './live-core'
+import { STREAM_KINDS, stageFor } from './room-core'
 import type { Learner } from './learner'
 
 const IMMEDIATE_MAIL_LIMIT = 25
 const SESSION_COLS = 'id, company_id, title, description, course_id, host_name, host_employee_id, starts_at, duration_min, join_url, location, capacity, open_registration, status, checkin_code, recording_asset_id, sequence, cancel_reason, created_by_name, created_at, updated_at, completed_at'
 const ACTIVE = ['INVITED', 'REGISTERED']
+// The webinar room's columns came with migration 227. They are read on their own, so every
+// screen here keeps working on a database that does not have them yet (the room is then off).
+const ROOM_COLS = 'id, stream_kind, stream_url, room_enabled, room_chat, room_questions, room_attend_pct, live_started_at, live_ended_at'
+const ROOM_FIELDS = ['stream_kind', 'stream_url', 'room_enabled', 'room_chat', 'room_questions', 'room_attend_pct']
+
+/** Does this database have the webinar room (227)? The Studio form offers its fields only then. */
+export async function roomReady(): Promise<boolean> {
+  const { error } = await sb.from('lms_sessions').select('stream_kind').limit(1)
+  return !error
+}
+
+/** The room settings of these sessions, or null when the database has no room yet. */
+async function roomInfo(ids: string[]): Promise<Map<string, any> | null> {
+  if (!ids.length) return new Map()
+  const { data, error } = await sb.from('lms_sessions').select(ROOM_COLS).in('id', ids)
+  if (error) return null
+  return new Map((data || []).map((r: any) => [r.id, r]))
+}
 
 const esc = (s: unknown) => String(s ?? '').replace(/[&<>"]/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[c]!))
 
@@ -62,7 +81,31 @@ function sessionFields(b: any, partial: boolean) {
   }
   if (has('open_registration')) out.open_registration = !!b.open_registration
   if (has('course_id')) out.course_id = b.course_id || null
+  // The room (227). Only what the form sends is written, so an older database is untouched.
+  if (has('stream_kind')) {
+    const k = String(b.stream_kind || 'MEETING').toUpperCase()
+    if (!STREAM_KINDS.includes(k as any)) throw new LmsError('Choose how the session is streamed.')
+    out.stream_kind = k
+  }
+  if (has('stream_url')) out.stream_url = String(b.stream_url ?? '').trim().slice(0, 1000) || null
+  for (const k of ['room_enabled', 'room_chat', 'room_questions']) if (has(k)) out[k] = !!b[k]
+  if (has('room_attend_pct')) {
+    const n = Math.round(Number(b.room_attend_pct))
+    if (!(n >= 10 && n <= 100)) throw new LmsError('Time in the room to count as attending is between 10% and 100% of the session.')
+    out.room_attend_pct = n
+  }
   return out
+}
+
+/** A stream needs an address the room can show; a meeting needs its link or a room. */
+function checkWhere(f: Record<string, unknown>) {
+  const kind = String(f.stream_kind || 'MEETING')
+  if (kind !== 'MEETING') {
+    const { problem } = stageFor(kind, f.stream_url as string)
+    if (problem) throw new LmsError(problem)
+    return
+  }
+  if (!f.join_url && !String(f.location || '').trim()) throw new LmsError('Add the meeting link, or a room if it is held in person.')
 }
 
 async function sessionRow(id: string) {
@@ -160,12 +203,13 @@ export async function listSessions(a: LmsActor, companies: string[]) {
   const courseIds = [...new Set(rows.map(r => r.course_id).filter(Boolean))]
   const { data: courses } = courseIds.length ? await sb.from('lms_courses').select('id, title').in('id', courseIds) : { data: [] as any[] }
   const C = new Map((courses || []).map((c: any) => [c.id, c.title]))
+  const room = await roomInfo(rows.map(r => r.id))
   const now = Date.now()
   return rows.map(s => {
     const mine = att.filter(x => x.session_id === s.id)
     const active = mine.filter(x => ACTIVE.includes(x.status))
     return {
-      ...s, phase: phaseOf(s, now), course_title: s.course_id ? C.get(s.course_id) || null : null,
+      ...s, ...(room?.get(s.id) || {}), room_ready: !!room, phase: phaseOf(s, now), course_title: s.course_id ? C.get(s.course_id) || null : null,
       counts: { invited: active.length, registered: active.filter(x => x.status === 'REGISTERED').length, attended: mine.filter(x => x.attended).length, watched: mine.filter(x => x.recording_done && !x.attended).length },
     }
   })
@@ -186,16 +230,17 @@ export async function sessionDetail(a: LmsActor, id: string) {
   })
   // A branch HR sees their branch's people only, as everywhere else in Learning.
   if (a.locationId) list = list.filter(x => x.location_id === a.locationId)
-  const [{ data: course }, { data: rec }] = await Promise.all([
+  const [{ data: course }, { data: rec }, room] = await Promise.all([
     s.course_id ? sb.from('lms_courses').select('id, title, code').eq('id', s.course_id).maybeSingle() : Promise.resolve({ data: null as any }),
     s.recording_asset_id ? sb.from('lms_assets').select('id, original_name, duration_s, size_bytes, status').eq('id', s.recording_asset_id).maybeSingle() : Promise.resolve({ data: null as any }),
+    roomInfo([id]),
   ])
-  return { session: { ...s, phase: phaseOf(s) }, course, recording: rec, attendees: list }
+  return { session: { ...s, ...(room?.get(id) || {}), room_ready: !!room, phase: phaseOf(s) }, course, recording: rec, attendees: list }
 }
 
 export async function createSession(a: LmsActor, company: string, b: any) {
   const f = sessionFields(b, false)
-  if (!f.join_url && !String(b?.location || '').trim()) throw new LmsError('Add the meeting link, or a room if it is held in person.')
+  checkWhere(f)
   if (f.course_id) {
     const { data: c } = await sb.from('lms_courses').select('id').eq('id', f.course_id as string).eq('company_id', company).maybeSingle()
     if (!c) throw notFound('That course')
@@ -218,6 +263,11 @@ export async function updateSession(a: LmsActor, id: string, b: any) {
   if (f.course_id) {
     const { data: c } = await sb.from('lms_courses').select('id').eq('id', f.course_id as string).eq('company_id', s.company_id).maybeSingle()
     if (!c) throw notFound('That course')
+  }
+  if (ROOM_FIELDS.some(k => k in f) || 'join_url' in f || 'location' in f) {
+    // Judge the stream as it will be after this change, filling in what the form did not send.
+    const room = (await roomInfo([id]))?.get(id) || {}
+    checkWhere({ stream_kind: room.stream_kind, stream_url: room.stream_url, join_url: s.join_url, location: s.location, ...f })
   }
   const calendar = ['starts_at', 'duration_min', 'join_url', 'location', 'title'].some(k => k in f && String(f[k] ?? '') !== String(s[k] ?? ''))
   const next = must(await sb.from('lms_sessions').update({ ...f, updated_at: new Date().toISOString(), ...(calendar ? { sequence: s.sequence + 1 } : {}) }).eq('id', id).select(SESSION_COLS).single()) as any
@@ -347,21 +397,25 @@ function forLearner(s: any, r: any | null, now: number) {
     can_join: canJoin(s, now) && !!s.join_url && (!r || r.status !== 'REMOVED'),
     can_check_in: canCheckIn(s, now) && !!r && ACTIVE.includes(r.status) && !r.attended,
     open: !!s.open_registration,
+    // The webinar room (227): whether it is on, and whether the session streams inside EZER Learn.
+    room_enabled: !!s._room && s._room.room_enabled !== false && s.status !== 'CANCELLED',
+    stream: s._room?.stream_kind || 'MEETING',
   }
 }
 
 async function decorate(rows: any[]) {
   if (!rows.length) return rows
   const ids = rows.map(r => r.id)
-  const [taken, courses, recs] = await Promise.all([
+  const [taken, courses, recs, room] = await Promise.all([
     allRows<any>((f, t) => sb.from('lms_session_attendees').select('session_id').in('session_id', ids).eq('status', 'REGISTERED').range(f, t) as any),
     (async () => { const c = [...new Set(rows.map(r => r.course_id).filter(Boolean))]; return c.length ? ((await sb.from('lms_courses').select('id, title').in('id', c)).data || []) : [] })(),
     (async () => { const a = rows.map(r => r.recording_asset_id).filter(Boolean); return a.length ? ((await sb.from('lms_assets').select('id, duration_s').in('id', a)).data || []) : [] })(),
+    roomInfo(ids),
   ])
   const T = new Map<string, number>()
   for (const x of taken) T.set(x.session_id, (T.get(x.session_id) || 0) + 1)
   const C = new Map((courses as any[]).map(c => [c.id, c.title])), D = new Map((recs as any[]).map(r => [r.id, Number(r.duration_s || 0)]))
-  return rows.map(r => ({ ...r, _taken: T.get(r.id) || 0, _course: r.course_id ? C.get(r.course_id) : null, _duration: r.recording_asset_id ? D.get(r.recording_asset_id) || 0 : 0 }))
+  return rows.map(r => ({ ...r, _taken: T.get(r.id) || 0, _course: r.course_id ? C.get(r.course_id) : null, _duration: r.recording_asset_id ? D.get(r.recording_asset_id) || 0 : 0, _room: room?.get(r.id) || null }))
 }
 
 /** Sessions this person can see: the ones they are on, and the open ones of their company. */

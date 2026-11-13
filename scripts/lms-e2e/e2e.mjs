@@ -3,7 +3,7 @@ import crypto from 'crypto'
 import zlib from 'node:zlib'
 import assert from 'node:assert/strict'
 
-const APP = 'http://127.0.0.1:3210', RIG = 'http://127.0.0.1:54400', SECRET = 'rig-ess-secret'
+const APP = process.env.APP || 'http://127.0.0.1:3210', RIG = process.env.RIG || 'http://127.0.0.1:54400', SECRET = 'rig-ess-secret'
 const hid = k => { const h = crypto.createHash('md5').update(k).digest('hex'); return `${h.slice(0,8)}-${h.slice(8,12)}-4${h.slice(13,16)}-a${h.slice(17,20)}-${h.slice(20,32)}` }
 const emp = k => hid(`emp:${k}`), co = k => hid(k), dept = (c, d) => hid(`${c}:${d}`), loc = (c, l) => hid(`${c}:${l}`)
 const ess = k => { const body = Buffer.from(JSON.stringify({ sub: emp(k), exp: Date.now() + 3600e3 })).toString('base64url'); return `${body}.${crypto.createHmac('sha256', SECRET).update(body).digest('base64url')}` }
@@ -13,6 +13,8 @@ async function call(who, path, body, method) {
   const headers = { 'Content-Type': 'application/json' }
   const token = who === null ? null : who.startsWith?.('lmsc.') || who.includes?.('.') ? who : ess(who)
   if (token) headers.Authorization = `Bearer ${token}`
+  // The scheduled jobs refuse to run without CRON_SECRET (lib/cron-auth.ts): the app runs with this one.
+  if (path.startsWith('/api/cron/')) headers.Authorization = `Bearer ${process.env.CRON_SECRET || 'rig-cron-secret'}`
   const r = await fetch(APP + path, { method: method || (body ? 'POST' : 'GET'), headers, body: body ? JSON.stringify(body) : undefined })
   const ct = r.headers.get('content-type') || ''
   const data = ct.includes('json') ? await r.json() : Buffer.from(await r.arrayBuffer())
@@ -855,6 +857,180 @@ await t('the daily job runs the live-session mail without error; a cancelled ses
 await t('another company\'s HR cannot open or change this company\'s session', async () => {
   await deny(404, 'bhead', `/api/lms/admin/sessions/${S.lv.s}`)
   await deny(404, 'bhead', `/api/lms/admin/sessions/${S.lv.s}`, { action: 'complete' })
+})
+
+console.log('\nThe webinar room')
+const room = id => `/api/lms/room/${id}`
+const broadcasts = async () => { const r = await fetch(`${RIG}/__rig/broadcasts`, { headers: { apikey: 'rig-service-key' } }); return r.json() }
+const learnerId = async k => (await sql(`SELECT id FROM lms_learners WHERE employee_id=$1 AND company_id=$2`, [emp(k), co(k.startsWith('b') ? 'beta' : 'acme')]))[0]?.id
+const rowOf = async (sid, k) => (await sql(`SELECT a.* FROM lms_session_attendees a JOIN lms_learners l ON l.id=a.learner_id WHERE a.session_id=$1 AND l.employee_id=$2`, [sid, emp(k)]))[0]
+await t('HR streams a session in EZER Learn: the YouTube address is checked, the room is on', async () => {
+  const r = await ok('mgr', '/api/lms/admin/courses', { title: 'Room live' })
+  S.rm = { course: r.course.id }
+  const m = (await op('mgr', 'module.create', { version_id: r.version.id, title: 'Live' })).result.id
+  await op('mgr', 'lesson.create', { module_id: m, kind: 'LIVE', title: 'Town hall' })
+  await ok('head', `/api/lms/admin/courses/${S.rm.course}`, { action: 'publish' })
+  await ok('exec', '/api/lms/admin/assignments', { items: [{ course_id: S.rm.course }], targets: ['dev1', 'dev3'].map(k => ({ kind: 'EMPLOYEE', value: emp(k) })), due_mode: 'NONE' })
+  const bad = await deny(400, 'exec', '/api/lms/admin/sessions', { title: 'Bad stream', starts_at: at(-5), duration_min: 60, stream_kind: 'YOUTUBE', stream_url: 'https://example.com/watch?v=dQw4w9WgXcQ' })
+  assert.match(bad.error, /YouTube/)
+  const s = await ok('exec', '/api/lms/admin/sessions', { title: 'All-hands stream', starts_at: at(-5), duration_min: 60, stream_kind: 'YOUTUBE', stream_url: 'https://youtu.be/dQw4w9WgXcQ', room_attend_pct: 10, course_id: S.rm.course, targets: ['dev1', 'dev3'].map(k => ({ kind: 'EMPLOYEE', value: emp(k) })) })
+  S.rm.s = s.session.id
+  const d = await ok('exec', `/api/lms/admin/sessions/${S.rm.s}`)
+  assert.equal(d.session.stream_kind, 'YOUTUBE'); assert.equal(d.session.room_ready, true); assert.equal(d.session.room_attend_pct, 10)
+  assert.equal((await ok('exec', '/api/lms/admin/sessions')).room_ready, true)
+  const mine = (await ok('dev1', '/api/lms/me/sessions')).upcoming.find(x => x.id === S.rm.s)
+  assert.equal(mine.room_enabled, true); assert.equal(mine.stream, 'YOUTUBE')
+})
+await t('an invitee enters the room and sees the stream; nobody else gets in, nor another company', async () => {
+  const r = await ok('dev1', room(S.rm.s))
+  assert.match(r.stage.src, /^https:\/\/www\.youtube-nocookie\.com\/embed\/dQw4w9WgXcQ/)
+  assert.equal(r.session.phase, 'live'); assert.equal(r.me.host, false); assert.match(r.topic, /^room-[\w-]{32}$/)
+  assert.equal(r.host_join_url, null); assert.equal(r.checkin_code, null)
+  S.rm.topic = r.topic
+  await deny(404, 'sale1', room(S.rm.s))
+  await deny(404, 'bdev', room(S.rm.s))
+  await deny(404, 'bhead', room(S.rm.s))
+  await deny(404, 'bhead', room(S.rm.s), { action: 'go_live' })
+  await deny(401, null, room(S.rm.s))
+  const h = await ok('exec', room(S.rm.s))
+  assert.equal(h.me.host, true); assert.equal(h.topic, S.rm.topic); assert.match(h.checkin_code, /^[A-Z2-9]{6}$/)
+})
+await t('chat: a line goes out on the room\'s channel without who wrote it; too fast, empty or too long is refused', async () => {
+  const before = (await broadcasts()).length
+  const m = await ok('dev1', room(S.rm.s), { action: 'chat', body: '  Hello everyone  ' })
+  assert.equal(m.message.body, 'Hello everyone'); assert.equal(m.message.mine, true)
+  S.rm.chat = m.message.id
+  const sent = (await broadcasts()).slice(before)
+  assert.equal(sent.length, 1); assert.equal(sent[0].topic, S.rm.topic); assert.equal(sent[0].event, 'msg')
+  assert.equal(sent[0].payload.id, S.rm.chat); assert.equal(sent[0].payload.learner_id, undefined); assert.equal(sent[0].payload.mine, false)
+  const fast = await deny(429, 'dev1', room(S.rm.s), { action: 'chat', body: 'again' })
+  assert.match(fast.error, /two seconds/)
+  await new Promise(r => setTimeout(r, 2100))
+  await deny(400, 'dev1', room(S.rm.s), { action: 'chat', body: '   ' })
+  await deny(400, 'dev1', room(S.rm.s), { action: 'chat', body: 'x'.repeat(501) })
+  const seen = await ok('dev3', room(S.rm.s))
+  const line = seen.chat.find(x => x.id === S.rm.chat)
+  assert.equal(line.author, 'Dev One'); assert.equal(line.mine, false)
+  // A host's line on a server that has not seen them yet: the browser says it is hosting.
+  const h = await ok('exec', room(S.rm.s), { action: 'chat', body: 'Welcome, everyone', as_host: true })
+  assert.equal(h.message.is_host, true)
+  await deny(404, 'sale1', room(S.rm.s), { action: 'chat', body: 'let me in', as_host: true })
+})
+await t('questions: an anonymous one hides its asker from everyone but the host; one upvote per person', async () => {
+  const q = await ok('dev3', room(S.rm.s), { action: 'ask', body: 'Will the deck be shared?', anonymous: true })
+  S.rm.q = q.message.id
+  assert.equal((await ok('dev1', room(S.rm.s))).questions.find(x => x.id === S.rm.q).author, 'Anonymous')
+  assert.equal((await ok('exec', room(S.rm.s))).questions.find(x => x.id === S.rm.q).author, 'Dev Three')
+  const sent = (await broadcasts()).filter(b => b.payload?.id === S.rm.q)
+  assert.ok(sent.length && sent.every(b => b.payload.author === 'Anonymous'), 'the broadcast never names an anonymous asker')
+  assert.equal((await ok('dev1', room(S.rm.s), { action: 'vote', message_id: S.rm.q })).upvotes, 1)
+  assert.equal((await ok('dev1', room(S.rm.s), { action: 'vote', message_id: S.rm.q })).upvotes, 1, 'a second press does not add a vote')
+  assert.equal((await ok('dev3', room(S.rm.s), { action: 'vote', message_id: S.rm.q })).upvotes, 2)
+  assert.equal((await ok('dev1', room(S.rm.s), { action: 'vote', message_id: S.rm.q, on: false })).upvotes, 1)
+  assert.deepEqual((await ok('dev3', room(S.rm.s))).my_votes, [S.rm.q])
+  const fast = await deny(429, 'dev3', room(S.rm.s), { action: 'ask', body: 'And the recording?' })
+  assert.match(fast.error, /ten seconds/)
+})
+await t('only the host runs the room: learners are refused every host action', async () => {
+  for (const body of [{ action: 'go_live' }, { action: 'end' }, { action: 'hide', message_id: S.rm.chat }, { action: 'pin', message_id: S.rm.q },
+    { action: 'answer', message_id: S.rm.q }, { action: 'settings', room_chat: false }, { action: 'poll', question: 'Q?', options: ['a', 'b'] }])
+    await deny(403, 'dev1', room(S.rm.s), body)
+})
+await t('the host answers, pins and hides; a hidden line leaves everyone\'s screen but the host\'s', async () => {
+  const a = await ok('exec', room(S.rm.s), { action: 'answer', message_id: S.rm.q, answer: 'Yes, after the session.' })
+  assert.ok(a.message.answered_at); assert.equal(a.message.answer, 'Yes, after the session.')
+  await ok('exec', room(S.rm.s), { action: 'pin', message_id: S.rm.q })
+  assert.equal((await ok('dev1', room(S.rm.s))).pinned.id, S.rm.q)
+  await ok('exec', room(S.rm.s), { action: 'hide', message_id: S.rm.chat })
+  assert.equal((await ok('dev3', room(S.rm.s))).chat.some(x => x.id === S.rm.chat), false)
+  assert.equal((await ok('exec', room(S.rm.s))).chat.find(x => x.id === S.rm.chat).hidden, true)
+  assert.ok((await broadcasts()).some(b => b.event === 'hide' && b.payload.id === S.rm.chat))
+  await ok('exec', room(S.rm.s), { action: 'settings', room_chat: false })
+  await deny(409, 'dev1', room(S.rm.s), { action: 'chat', body: 'chat is off' })
+  await ok('exec', room(S.rm.s), { action: 'settings', room_chat: true })
+})
+await t('polls: each person answers once, results follow; a closed poll takes no answers', async () => {
+  await deny(400, 'exec', room(S.rm.s), { action: 'poll', question: 'One answer?', options: ['Only'] })
+  const p = (await ok('exec', room(S.rm.s), { action: 'poll', question: 'Was this useful?', options: ['Yes', 'No', 'Not sure'] })).poll
+  assert.ok((await broadcasts()).some(b => b.event === 'poll' && b.payload.id === p.id))
+  const before = (await ok('dev1', room(S.rm.s))).polls.find(x => x.id === p.id)
+  assert.equal(before.counts, null, 'no results before answering'); assert.equal(before.my_vote, null)
+  const v = await ok('dev1', room(S.rm.s), { action: 'poll_vote', poll_id: p.id, option: 0 })
+  assert.deepEqual(v.poll.counts, [1, 0, 0]); assert.equal(v.poll.my_vote, 0)
+  await deny(409, 'dev1', room(S.rm.s), { action: 'poll_vote', poll_id: p.id, option: 1 })
+  await deny(400, 'dev3', room(S.rm.s), { action: 'poll_vote', poll_id: p.id, option: 9 })
+  await ok('dev3', room(S.rm.s), { action: 'poll_vote', poll_id: p.id, option: 2 })
+  assert.deepEqual((await ok('exec', room(S.rm.s))).polls.find(x => x.id === p.id).counts, [1, 0, 1])
+  const p2 = (await ok('exec', room(S.rm.s), { action: 'poll', question: 'Closed already?', options: ['A', 'B'] })).poll
+  await ok('exec', room(S.rm.s), { action: 'poll_close', poll_id: p2.id })
+  await deny(409, 'dev1', room(S.rm.s), { action: 'poll_vote', poll_id: p2.id, option: 0 })
+  assert.equal((await sql(`SELECT count(*)::int n FROM lms_session_poll_votes WHERE poll_id=$1`, [p.id]))[0].n, 2)
+})
+await t('time in the room: the server clock counts, a sleeping laptop earns a minute, enough of it is attendance', async () => {
+  const first = await ok('dev3', room(S.rm.s), { action: 'beat' })
+  assert.equal(first.need_s, 360); assert.equal(first.attended, false)
+  const row = await rowOf(S.rm.s, 'dev3')
+  assert.ok(row.room_last_beat_at); assert.equal(row.status, 'REGISTERED', 'entering the room is joining'); assert.ok(row.joined_at)
+  const base = Number(row.room_seconds)
+  await sql(`UPDATE lms_session_attendees SET room_last_beat_at = now() - interval '2 hours' WHERE id=$1`, [row.id])
+  const slept = await ok('dev3', room(S.rm.s), { action: 'beat' })
+  assert.ok(Math.abs(slept.room_seconds - base - 60) < 1.5, `credited ${slept.room_seconds - base}`)
+  assert.equal((await enrolOf('dev3', S.rm.course)).status !== 'COMPLETED', true)
+  let last = slept
+  for (let i = 0; i < 6 && !last.attended; i++) {
+    await sql(`UPDATE lms_session_attendees SET room_last_beat_at = now() - interval '60 seconds' WHERE id=$1`, [row.id])
+    last = await ok('dev3', room(S.rm.s), { action: 'beat' })
+  }
+  assert.equal(last.attended, true)
+  const done = await rowOf(S.rm.s, 'dev3')
+  assert.equal(done.attended, true); assert.equal(done.attendance_by, 'ROOM')
+  assert.equal((await enrolOf('dev3', S.rm.course)).status, 'COMPLETED', 'the course\'s live lesson is done')
+  assert.ok(last.viewers >= 1)
+})
+await t('a host\'s tick is never replaced by time in the room; nothing counts before the room opens', async () => {
+  const dev1 = await learnerId('dev1')
+  await ok('exec', `/api/lms/admin/sessions/${S.rm.s}`, { action: 'attendance', learners: [dev1], attended: true })
+  await ok('dev1', room(S.rm.s), { action: 'beat' })
+  for (let i = 0; i < 7; i++) {
+    await sql(`UPDATE lms_session_attendees SET room_last_beat_at = now() - interval '60 seconds' WHERE session_id=$1 AND learner_id=$2`, [S.rm.s, dev1])
+    await ok('dev1', room(S.rm.s), { action: 'beat' })
+  }
+  assert.equal((await rowOf(S.rm.s, 'dev1')).attendance_by, 'HOST')
+  const later = await ok('exec', '/api/lms/admin/sessions', { title: 'Next week', starts_at: at(7 * 24 * 60), duration_min: 30, stream_kind: 'HLS', stream_url: 'https://cdn.example.com/live/index.m3u8', open_registration: true })
+  S.rm.later = later.session.id
+  const r = await ok('sale2', room(S.rm.later))
+  assert.equal(r.session.phase, 'before'); assert.equal(r.stage.kind, 'HLS')
+  await ok('sale2', room(S.rm.later), { action: 'beat' })
+  const row = await rowOf(S.rm.later, 'sale2')
+  assert.equal(row.status, 'REGISTERED'); assert.equal(row.source, 'SELF'); assert.equal(row.joined_at, null)
+  await sql(`UPDATE lms_session_attendees SET room_last_beat_at = now() - interval '60 seconds' WHERE id=$1`, [row.id])
+  assert.equal((await ok('sale2', room(S.rm.later), { action: 'beat' })).room_seconds, 0)
+  await deny(404, 'bdev', room(S.rm.later))
+})
+await t('Go live opens the room early, End closes it, and time stops counting', async () => {
+  const g = await ok('exec', room(S.rm.later), { action: 'go_live' })
+  assert.equal(g.session.phase, 'live')
+  assert.equal((await ok('sale2', room(S.rm.later))).session.phase, 'live')
+  assert.ok((await broadcasts()).some(b => b.event === 'state' && b.payload.phase === 'live'))
+  await sql(`UPDATE lms_session_attendees SET room_last_beat_at = now() - interval '60 seconds' WHERE session_id=$1`, [S.rm.later])
+  assert.ok((await ok('sale2', room(S.rm.later), { action: 'beat' })).room_seconds >= 59)
+  const e = await ok('exec', room(S.rm.later), { action: 'end' })
+  assert.equal(e.session.phase, 'ended')
+  const before = Number((await rowOf(S.rm.later, 'sale2')).room_seconds)
+  await sql(`UPDATE lms_session_attendees SET room_last_beat_at = now() - interval '60 seconds' WHERE session_id=$1`, [S.rm.later])
+  assert.equal((await ok('sale2', room(S.rm.later), { action: 'beat' })).room_seconds, before)
+})
+await t('a meeting\'s room never hands learners the link; a session without a room keeps learners out', async () => {
+  const s = await ok('exec', '/api/lms/admin/sessions', { title: 'Zoom with a room', starts_at: at(-2), duration_min: 30, join_url: 'https://zoom.us/j/999', stream_kind: 'MEETING', targets: [{ kind: 'EMPLOYEE', value: emp('dev2') }] })
+  const r = await ok('dev2', room(s.session.id))
+  assert.equal(r.stage, null); assert.equal(r.session.has_link, true)
+  assert.equal(JSON.stringify(r).includes('zoom.us'), false, 'the link only comes through Join')
+  assert.equal((await ok('exec', room(s.session.id))).host_join_url, 'https://zoom.us/j/999')
+  await ok('exec', `/api/lms/admin/sessions/${s.session.id}`, { room_enabled: false }, 'PATCH')
+  await deny(409, 'dev2', room(s.session.id))
+  await ok('exec', room(s.session.id))
+  await deny(400, 'exec', `/api/lms/admin/sessions/${s.session.id}`, { stream_kind: 'VIMEO', stream_url: 'https://vimeo.com/channels/x' }, 'PATCH')
+  await ok('exec', `/api/lms/admin/sessions/${s.session.id}`, { stream_kind: 'VIMEO', stream_url: 'https://vimeo.com/76979871' }, 'PATCH')
 })
 
 console.log(`\n${pass} passed, ${fail} failed`)
