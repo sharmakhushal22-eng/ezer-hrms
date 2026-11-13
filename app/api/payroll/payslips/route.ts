@@ -83,7 +83,12 @@ function staleReason(ctx: RunCtx): string | null {
   if (SETTLED.has(String(ctx.run.status))) return null
   if (!ctx.lines.size) return 'Payroll has not been run for this month yet.'
 
-  const lastCalc = ctx.audit.find(a => a.action === 'PAYROLL_CALCULATED')?.created_at
+  // A hand-narrowed recalc logs PAYROLL_CALCULATED_PARTIAL (engine.ts) and does NOT touch the
+  // status, but it IS a calculation: it re-syncs then recomputes. Counting only the full
+  // PAYROLL_CALCULATED made every partial re-run look stale — lastCalc stayed on the original
+  // full calc while each partial run's own syncs landed "after" it. The newest calc of either
+  // kind is the real answer to "did a sync happen after the last calculation?".
+  const lastCalc = ctx.audit.find(a => a.action === 'PAYROLL_CALCULATED' || a.action === 'PAYROLL_CALCULATED_PARTIAL')?.created_at
   const lastSync = ctx.audit.find(a => String(a.action).startsWith('SYNC_'))?.created_at
   if (lastCalc && lastSync && new Date(lastSync) > new Date(lastCalc)) {
     return 'The Month Master was synced after the last payroll calculation. Re-run payroll so the payslips match the engine.'
