@@ -215,9 +215,20 @@ export function assemblePayslip(inp: AssembleInput): PayslipData {
     if (v) earnings.push({ label: o.label, rate: null, monthly: v, arrear: 0, total: v })
   }
   // Manual voucher additions, by their own head name (bulk-uploader payments that are
-  // not one of the four one-offs — e.g. a referral bonus keyed by hand).
+  // not one of the four one-offs — e.g. a referral bonus keyed by hand). A voucher keyed
+  // by a one-off name (Incentive / Variable / Bonus / Buyout) while that one-off is also
+  // present in its pay_* column is the same payment entered twice: it is dropped here so
+  // the payslip shows it once, matching the engine, which drops it from gross too. A
+  // voucher that is the only source (its pay_* column is zero) still shows.
+  const oneOffShown: Record<string, number> = {
+    incentive: num(s.pay_incentive),
+    variable: num(s.pay_variable), 'variable pay': num(s.pay_variable),
+    bonus: num(s.pay_bonus),
+    buyout: num(s.pay_buyout), 'notice buyout': num(s.pay_buyout),
+  }
   for (const v of vouchers) {
     if (String(v.head_type || '').toLowerCase().startsWith('d')) continue
+    if ((oneOffShown[String(v.head_name || '').trim().toLowerCase()] ?? 0) > 0) continue
     const amt = num(v.amount)
     if (amt) earnings.push({ label: v.head_name, rate: null, monthly: amt, arrear: 0, total: amt })
   }

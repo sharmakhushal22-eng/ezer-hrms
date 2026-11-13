@@ -117,7 +117,24 @@ function calcLineFromMonth(
   const oneOff = Math.max(0, num(row.pay_incentive)) + Math.max(0, num(row.pay_variable))
                + Math.max(0, num(row.pay_bonus)) + Math.max(0, num(row.pay_buyout))
 
-  const gross = basic + hra + conveyance + special + statBonus + flexiUnclaimed + v.additions + arrear + oneOff
+  // A one-off entered BOTH ways — in its pay_* column (the Bulk Uploader one-off) and again
+  // as a manual voucher of the same name — would be paid and taxed twice: once in oneOff,
+  // once in v.additions, so gross, taxable and net would all double-count it. The pay_*
+  // column is authoritative, so a colliding voucher is dropped from additions. A voucher
+  // that is the ONLY source (its pay_* column is zero) is kept and paid as before.
+  const oneOffByName: Record<string, number> = {
+    incentive: Math.max(0, num(row.pay_incentive)),
+    variable: Math.max(0, num(row.pay_variable)), 'variable pay': Math.max(0, num(row.pay_variable)),
+    bonus: Math.max(0, num(row.pay_bonus)),
+    buyout: Math.max(0, num(row.pay_buyout)), 'notice buyout': Math.max(0, num(row.pay_buyout)),
+  }
+  let dupVoucher = 0
+  for (const [head, amt] of Object.entries(v.heads)) {
+    if ((oneOffByName[String(head).trim().toLowerCase()] ?? 0) > 0 && num(amt) > 0) dupVoucher += num(amt)
+  }
+  const additions = Math.max(0, v.additions - dupVoucher)
+
+  const gross = basic + hra + conveyance + special + statBonus + flexiUnclaimed + additions + arrear + oneOff
 
   // Statutory flags and limits come from the frozen row, so a flag flipped in HRMS next
   // month cannot change a payslip that was already issued.
@@ -187,7 +204,7 @@ function calcLineFromMonth(
   return {
     run_id: runId, employee_id: row.employee_id,
     basic, hra, conveyance, special_allow: special, statutory_bonus: statBonus,
-    other_earnings: flexiUnclaimed + v.additions + arrear + oneOff,
+    other_earnings: flexiUnclaimed + additions + arrear + oneOff,
     gross_earning: grossWithFlexi, flexi_reimbursement: flexi,
     ded_epf: dedEPF, ded_vpf: dedVPF, ded_esic: dedESIC, ded_pt: dedPT, ded_lwf: dedLWF,
     ded_tds: dedTDS, ded_additional_tax: dedAddlTax, ded_nps: dedNPS, ded_loan_emi: dedLoan,
@@ -204,7 +221,7 @@ function calcLineFromMonth(
       raw_paid_days: num(row.paid_days), arrear_days: num(row.arrear_days), ot_hours: num(row.ot_hours),
       basic, hra, conveyance, special_allowance: special, statutory_bonus: statBonus,
       flexi_unclaimed_taxable: flexiUnclaimed, flexi_reimbursement: flexi,
-      voucher_additions: v.additions, voucher_heads: v.heads,
+      voucher_additions: additions, voucher_heads: v.heads,
       one_off: { incentive: num(row.pay_incentive), variable: num(row.pay_variable), bonus: num(row.pay_bonus), buyout: num(row.pay_buyout) },
       arrear_total: arrear, arrear_months: row.arrear_months || null, arrear_epf: arrearEpf,
     },
