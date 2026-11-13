@@ -322,3 +322,31 @@ export const srOnly: React.CSSProperties = {
   position: 'absolute', width: 1, height: 1, padding: 0, margin: -1,
   overflow: 'hidden', clip: 'rect(0,0,0,0)', whiteSpace: 'nowrap', border: 0,
 };
+
+// ---------------------------------------------------------------------------
+// DATA VISUALISATION — chart colours (theme.css, "DATA VISUALISATION")
+//
+// `series` is categorical: give slot N to the Nth entity and keep it there. A
+// filter that removes a series must not repaint the survivors, so callers key
+// colour by the entity's stable position in its full list, never by rank.
+// Past eight, fold the tail into "Other" (`other`) rather than inventing a hue.
+//
+// `seq` is a one-hue magnitude ramp, 0 = nothing → 5 = most. Heatmaps only.
+// ---------------------------------------------------------------------------
+export const VIZ = {
+  series: [
+    'var(--ez-viz-1)', 'var(--ez-viz-2)', 'var(--ez-viz-3)', 'var(--ez-viz-4)',
+    'var(--ez-viz-5)', 'var(--ez-viz-6)', 'var(--ez-viz-7)', 'var(--ez-viz-8)',
+  ],
+  other: 'var(--ez-viz-other)',
+  grid: 'var(--ez-viz-grid)',
+  /** The ~10% area wash under a single-series line. */
+  wash: 'var(--ez-viz-wash)',
+  seq: [
+    'var(--ez-seq-0)', 'var(--ez-seq-1)', 'var(--ez-seq-2)',
+    'var(--ez-seq-3)', 'var(--ez-seq-4)', 'var(--ez-seq-5)',
+  ],
+} as const;
+
+/** The categorical colour for slot `i` (0-based); anything past eight is "Other". */
+export const seriesColour = (i: number): string => (i >= 0 && i < VIZ.series.length ? VIZ.series[i] : VIZ.other);

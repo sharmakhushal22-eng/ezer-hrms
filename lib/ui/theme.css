@@ -690,3 +690,56 @@ html, body {
 /* CTC calculator panel — slides in from the right while the candidate column narrows. */
 @keyframes ezSlideInRight { from { opacity: 0; transform: translateX(28px) } to { opacity: 1; transform: none } }
 @keyframes ezFadeUp { from { opacity: 0; transform: translateY(8px) } to { opacity: 1; transform: none } }
+
+/* ============================================================================
+   DATA VISUALISATION — the Analytics module's chart colours.
+
+   Kept apart from the brand and the state colours on purpose: a series is an
+   IDENTITY ("Sales", "Male", "EL"), never a verdict, so it must not borrow the
+   green/amber/red that mean done/waiting/wrong elsewhere.
+
+   CATEGORICAL — assigned in this fixed order, never cycled. The order is the
+   colour-blind safety mechanism: every ADJACENT pair was validated (OKLab ΔE)
+   for protan/deutan/tritan separation on the real card surfaces —
+     light, on #FFFFFF:  worst adjacent CVD ΔE 9.1, normal-vision ΔE 19.6
+     dark,  on #171B21:  worst adjacent CVD ΔE 8.4, normal-vision ΔE 19.3
+   Three light slots (3, 4, 5) sit under 3:1 on white, so every chart that uses
+   them also prints its values (legend + labels), never colour alone.
+
+   SEQUENTIAL — one hue, light → dark, for magnitude (heatmaps, density). In
+   dark mode the ramp runs the other way round so "near zero" still recedes
+   toward the surface instead of glowing.
+   ============================================================================ */
+:root {
+  --ez-viz-1: #2A78D6;  --ez-viz-2: #EB6834;  --ez-viz-3: #1BAF7A;
+  --ez-viz-4: #EDA100;  --ez-viz-5: #E87BA4;  --ez-viz-6: #008300;
+  --ez-viz-7: #6250D6;  --ez-viz-8: #E34948;
+  --ez-viz-other: #9AA3AF;
+  --ez-viz-grid: #EDEFF2;
+  --ez-viz-wash: rgba(42,120,214,.10);
+  --ez-seq-0: #F1F4F8;  --ez-seq-1: #CDE2FB;  --ez-seq-2: #9EC5F4;
+  --ez-seq-3: #6DA7EC;  --ez-seq-4: #3987E5;  --ez-seq-5: #1C5CAB;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-ez-theme="light"]):not([data-theme="light"]) {
+    --ez-viz-1: #3987E5;  --ez-viz-2: #D95926;  --ez-viz-3: #199E70;
+    --ez-viz-4: #C98500;  --ez-viz-5: #D55181;  --ez-viz-6: #008300;
+    --ez-viz-7: #9085E9;  --ez-viz-8: #E66767;
+    --ez-viz-other: #6B7480;
+    --ez-viz-grid: #222831;
+    --ez-viz-wash: rgba(57,135,229,.16);
+    --ez-seq-0: #1C222A;  --ez-seq-1: #13345C;  --ez-seq-2: #1C5CAB;
+    --ez-seq-3: #2A78D6;  --ez-seq-4: #5598E7;  --ez-seq-5: #9EC5F4;
+  }
+}
+:root[data-ez-theme="dark"],
+:root[data-theme="dark"] {
+  --ez-viz-1: #3987E5;  --ez-viz-2: #D95926;  --ez-viz-3: #199E70;
+  --ez-viz-4: #C98500;  --ez-viz-5: #D55181;  --ez-viz-6: #008300;
+  --ez-viz-7: #9085E9;  --ez-viz-8: #E66767;
+  --ez-viz-other: #6B7480;
+  --ez-viz-grid: #222831;
+  --ez-viz-wash: rgba(57,135,229,.16);
+  --ez-seq-0: #1C222A;  --ez-seq-1: #13345C;  --ez-seq-2: #1C5CAB;
+  --ez-seq-3: #2A78D6;  --ez-seq-4: #5598E7;  --ez-seq-5: #9EC5F4;
+}

@@ -42,6 +42,13 @@ export const NAV_GROUPS: NavGroupDef[] = [
   { group: '', items: [
     { key: 'home',              label: 'Home',                    href: '/dashboard',                 module: null },
   ]},
+  // People Analytics. Its own group, second only to Home: it reads across every module
+  // below it, so it belongs above them rather than inside any one. Opened by any of the
+  // three reporting permissions — the CFO / MD roles that hold "Only Reports Access" and
+  // the HR heads who hold the ESS Company Dashboard both reach it without a new grant.
+  { group: 'Insights', items: [
+    { key: 'analytics',         label: 'People Analytics',        href: '/dashboard/analytics',       module: 'Reports', anyModule: ['Reports', 'Company Dashboard', 'ESS Reports'] },
+  ]},
   { group: 'People', items: [
     { key: 'recruitment',       label: 'Recruitment',             href: '/dashboard/recruitment',     module: 'Recruitment' },
     { key: 'onboarding',        label: 'Onboarding',              href: '/dashboard/onboarding',      module: 'Onboarding' },

@@ -113,6 +113,9 @@ export const ROUTE_MODULE: Record<string, Module> = {
   '/dashboard/configuration':      'Configuration',
   '/dashboard/company-profile':    'Company Profile',
   '/dashboard/reports':            'Reports',
+  // People Analytics: any reporting permission opens it (ROUTE_ANY_MODULE below); its API
+  // narrows pay figures and named lists further.
+  '/dashboard/analytics':          'Reports',
   '/dashboard/db-export':          'Database Export',
   '/dashboard/ess':                'ESS & Roles',
   '/dashboard/ess-credentials':    'ESS & Roles',
@@ -128,6 +131,7 @@ export const ROUTE_MODULE: Record<string, Module> = {
  *  no business in the course editor, but does need the same screen's Assignments tab. */
 export const ROUTE_ANY_MODULE: Record<string, Module[]> = {
   '/dashboard/learning': ['Learning Content', 'Learning Assignment', 'Learning Reports'],
+  '/dashboard/analytics': ['Reports', 'Company Dashboard', 'ESS Reports'],
 }
 
 /** The module a path belongs to, or null for the dashboard landing page, which anyone

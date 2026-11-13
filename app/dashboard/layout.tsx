@@ -33,7 +33,7 @@ import {
   IconHome, IconRecruitment, IconOnboarding, IconEmployees, IconOrgChart, IconUpload, IconTransfer,
   IconPerformance,
   IconCalendar, IconClock, IconLeave, IconPayroll, IconFinance, IconCard, IconTravel,
-  IconReceipt, IconDot, IconLearning,
+  IconReceipt, IconDot, IconLearning, IconAnalytics,
   IconLoans, IconCompliance, IconLetters, IconMobile, IconAdmin, IconPolicies,
   IconSliders, IconBuilding, IconReports, IconDatabase, IconAi, IconSupport, IconTemplates,
   IconChevron, IconLogout, type IconProps,
@@ -86,6 +86,7 @@ const ICON: Record<string, (p: IconProps) => React.ReactElement> = {
   compliance: IconCompliance, letters: IconLetters, policies: IconPolicies, reports: IconReports,
   ess: IconMobile, admin: IconAdmin, configuration: IconTemplates, 'flexi-policy': IconSliders, 'company-profile': IconBuilding, 'db-export': IconDatabase,
   ai: IconAi, support: IconSupport, 'tds-calculator': IconPayroll, learning: IconLearning,
+  analytics: IconAnalytics,
 }
 
 // Every href here is identical to the previous flat list. Nothing moved except
