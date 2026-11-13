@@ -140,6 +140,10 @@ export const IconPerformance = (p: IconProps) => (
 export const IconReports = (p: IconProps) => (
   <Svg {...p}><path d="M3 3v14h14" /><path d="M6.5 13.5V10M10 13.5V6.5M13.5 13.5v-5" /></Svg>
 );
+/** People Analytics — a pie with one slice pulled out: the part being looked at. */
+export const IconAnalytics = (p: IconProps) => (
+  <Svg {...p}><path d="M9 3.6A6.6 6.6 0 1 0 16.4 11H9Z" /><path d="M11.4 1.9a6.6 6.6 0 0 1 6.7 6.7h-6.7Z" /></Svg>
+);
 export const IconDatabase = (p: IconProps) => (
   <Svg {...p}><ellipse cx="10" cy="5" rx="6.5" ry="2.5" /><path d="M3.5 5v10c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5V5" /><path d="M3.5 10c0 1.4 2.9 2.5 6.5 2.5s6.5-1.1 6.5-2.5" /></Svg>
 );

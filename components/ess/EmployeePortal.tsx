@@ -54,7 +54,7 @@ import {
   IconHome, IconEmployees, IconPayroll, IconCalendar, IconLeave,
   IconLetters, IconReports, IconAi, IconBell, IconMail, IconSearch, IconReceipt,
   IconOrgChart, IconBuilding, IconPerformance, IconLogout, IconChevron, IconChevronDown,
-  IconUser, IconHeart, IconAward, IconGame, IconLearning, IconMore, IconCheck, IconAlert,
+  IconUser, IconHeart, IconAward, IconGame, IconLearning, IconMore, IconCheck, IconAlert, IconAnalytics,
 } from '@/lib/ui'
 import { useDismiss } from '@/lib/ui/useDismiss'
 // The shell's sidebar, top bar, headings and sub-tabs (hover states and the like).
@@ -97,6 +97,8 @@ const TravelClaims         = dynamic(() => import('@/components/ess/TravelClaims
 // bundle for the employees who never open it. It still sits beside the old
 // Travel Claims screen in the Payroll tabs until that one is retired.
 const Performance          = dynamic(() => import('@/components/ess/Performance'), { ssr: false, loading: SectionLoading })
+// Insights — the employee's own analytics, plus a manager's team view.
+const EssInsights          = dynamic(() => import('@/components/analytics/EssInsights'), { ssr: false, loading: SectionLoading })
 const Profile360           = dynamic(() => import('@/components/profile/Profile360'), { ssr: false, loading: SectionLoading })
 const MyTeam               = dynamic(() => import('@/components/ess/team/MyTeam'), { ssr: false, loading: SectionLoading })
 // Social (118) — birthdays, work anniversaries, new joiners, and the Wall of
@@ -3177,6 +3179,7 @@ const ESS_ICON: Record<string, (p: { size?: number; strokeWidth?: number }) => R
   // sat out of line in the rail, and Social / RNR / Fun Zone shared two between them.
   orgchart: IconOrgChart, company: IconBuilding, reports: IconReports,
   social: IconHeart, rnr: IconAward, funzone: IconGame, learning: IconLearning,
+  insights: IconAnalytics,
   // The same glyph the dashboard rail gives this module, so the employee side
   // and the back office are recognisably the same thing.
   expenses: IconReceipt,
@@ -3290,6 +3293,11 @@ const SECTIONS: NavSection[] = [
   // Which tabs a person sees inside this is decided by the component from org
   // data — everyone gets My KRAs, managers additionally get My Team, HODs get
   // Department. One section, three audiences.
+  // Insights: everyone's own analytics; managers and HODs also get "My team" inside it.
+  { k:'insights', label:'Insights', short:'Insights', icon:'', status:'ready',
+    desc:'Your attendance, leave, pay and growth in charts — and your team, if you lead one',
+    items:[{ k:'insights', label:'Insights' }] },
+
   { k:'performance', label:'Performance', short:'PMS', icon:'', status:'ready',
     desc:'Your goals (KRAs) and the reviews you owe',
     items:[{ k:'performance', label:'Performance' }] },
@@ -3353,7 +3361,7 @@ const MOBILE_PRIMARY = ['home','payroll','attendance','leave']
 const NAV_GROUPS: { label: string | null; keys: string[] }[] = [
   { label: null,              keys: ['home', 'inbox'] },
   { label: 'Time & pay',      keys: ['attendance', 'leave', 'payroll', 'expenses'] },
-  { label: 'You & your team', keys: ['profile', 'team', 'orgchart', 'performance', 'learning'] },
+  { label: 'You & your team', keys: ['profile', 'insights', 'team', 'orgchart', 'performance', 'learning'] },
   { label: 'Workplace',       keys: ['hris', 'company', 'reports'] },
   { label: 'Community',       keys: ['social', 'rnr', 'funzone'] },
 ]
@@ -3601,7 +3609,7 @@ type SearchEntry = { id: string; label: string; crumb: string; icon: string; key
 const ESS_KEYWORDS: Record<string, string> = {
   home: 'dashboard today landing', profile: 'my details personal info bank address',
   documents: 'letter request certificate', letters: 'my letters offer letter appointment', 'to-sign': 'esign e-sign sign signature documents pending',
-  team: 'reportees manager my team', orgchart: 'org chart hierarchy reporting tree',
+  team: 'reportees manager my team', insights: 'analytics insights charts dashboard my attendance trend punctuality leave balance team health', orgchart: 'org chart hierarchy reporting tree',
   flexi: 'flexi benefits tax', declaration: 'investment declaration 80c tax', proofs: 'investment proofs tax',
   flexiclaims: 'flexi claims bills reimbursement', vpf: 'voluntary pf provident fund', nps: 'corporate nps pension',
   loans: 'loan advance', claims: 'travel claims expense reimbursement',
@@ -4186,6 +4194,7 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
                                               notify={notify} />
       case 'company':       return <CompanySection employeeId={emp.id} />
       case 'reports':       return <ReportsSection employeeId={emp.id} />
+      case 'insights':      return <EssInsights employeeId={emp.id} isManager={essMenu.is_rm || essMenu.is_hod} />
           case 'performance':   return <Performance employeeId={emp.id} />
       // Social owns the Wall now and renders <WallOfFame/> itself for its first
       // sub-tab, so there is no 'wall' case any more: 'wall' is not a view key

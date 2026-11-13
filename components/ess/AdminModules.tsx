@@ -29,6 +29,8 @@ const lazy = (load: () => Promise<{ default: ComponentType<Record<string, never>
 
 /** ESS nav key (lib/rms/nav.ts) → the dashboard page that key opens. */
 export const ADMIN_MODULE_COMPONENTS: Record<string, ComponentType<Record<string, never>>> = {
+  // Insights
+  analytics:            lazy(() => import('@/app/dashboard/analytics/page')),
   // People
   // NOT the raw page, unlike every other entry here: the recruitment redesign
   // lives in a stylesheet that app/dashboard/recruitment/layout.tsx loads, and
