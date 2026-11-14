@@ -1,9 +1,9 @@
-// lib/analytics/__tests__/ai.test.ts — the AI read: what goes out, what is allowed back.
+// lib/analytics/__tests__/ai.test.ts — the fact sheets and the number check. The written
+// pieces built on them are tested in briefs.test.ts.
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { numbersIn, allowedNumbers, grounded, clean, parseJsonLoose, toBrief, restore } from '../ai/validate.ts'
+import { numbersIn, allowedNumbers, grounded, clean, parseJsonLoose } from '../ai/validate.ts'
 import { orgFacts, teamFacts, myFacts } from '../ai/facts.ts'
-import { systemPrompt, userPrompt } from '../ai/prompt.ts'
 import type { FactPack } from '../ai/types.ts'
 import type { OrgAnalytics, TeamAnalytics, MyAnalytics } from '../types.ts'
 
@@ -49,11 +49,11 @@ test('clean strips markdown and fact ids and caps the length', () => {
 })
 
 test('a small number is checked like any other — "0 goals" for someone with 4 is refused', () => {
-  const p = pack({ facts: [{ id: 'me.cycle', area: 'performance', text: 'Current review cycle Q2 2026-27: stage Self review, 4 goals set' }], signals: [], areas: ['performance'], noteAreas: [] })
-  const raw = (detail: string) => JSON.stringify({ findings: [{ severity: 'info', area: 'performance', title: 'Your goals', detail, action: 'Agree goals within two weeks.', facts: ['me.cycle'] }] })
-  assert.equal(toBrief(raw('The Q2 cycle shows 0 goals set.'), p, 'm'), null)
-  assert.equal(toBrief(raw('The Q2 cycle shows four goals set.'), p, 'm')?.findings.length, 1, 'the true count passes, as a word too')
-  assert.equal(toBrief(raw('The Q2 cycle shows five goals set.'), p, 'm'), null, 'a wrong count in words is refused')
+  const ok = allowedNumbers({ context: '', facts: [{ id: 'me.cycle', area: 'performance', text: 'Current review cycle Q2 2026-27: stage Self review, 4 goals set' }], signals: [] })
+  assert.equal(grounded('The Q2 cycle shows 0 goals set.', ok), false)
+  assert.equal(grounded('The Q2 cycle shows four goals set.', ok), true, 'the true count passes, as a word too')
+  assert.equal(grounded('The Q2 cycle shows five goals set.', ok), false, 'a wrong count in words is refused')
+  assert.equal(grounded('Agree them within two weeks.', ok, false), true, 'advice may use number words')
 })
 
 test('JSON is found inside a code fence or a sentence', () => {
@@ -61,62 +61,6 @@ test('JSON is found inside a code fence or a sentence', () => {
   assert.deepEqual(parseJsonLoose('Here you go: {"a":2} hope that helps'), { a: 2 })
   assert.equal(parseJsonLoose('no json'), null)
   assert.equal(parseJsonLoose('[1,2]'), null)
-})
-
-test('toBrief keeps grounded findings, drops invented ones, and sorts by severity', () => {
-  const raw = JSON.stringify({
-    headline: 'Sales is losing people at 2.3 times the organisation rate',
-    summary: 'Attrition is 9.1% a year, down from 12.4%. Sales stands out at 15%.',
-    findings: [
-      { severity: 'info', area: 'attendance', title: 'On-time is 85%', detail: 'Mondays run at 18%.', action: 'Look at Monday starts.', facts: ['att.summary', 'sig.late'] },
-      { severity: 'critical', area: 'attrition', title: 'Sales attrition is 2.3 times the average', detail: '6 exits on 40 people.', action: 'Hold stay interviews in Sales.', facts: ['at.dept.sales'] },
-      { severity: 'warning', area: 'attrition', title: 'Attrition will reach 20% next year', detail: 'Projected.', action: '', facts: ['kpi.attrition'] },
-      { severity: 'warning', area: 'cost', title: 'No evidence cited', detail: '', action: '', facts: ['nope'] },
-      { severity: 'bogus', area: 'nowhere', title: 'Payroll is ₹1.24 Cr', detail: '', action: '', facts: ['cs.latest'] },
-    ],
-    notes: [
-      { area: 'attrition', text: 'Down to 9.1% from 12.4%.', facts: ['kpi.attrition'] },
-      { area: 'attrition', text: 'Duplicate area is ignored.', facts: ['kpi.attrition'] },
-      { area: 'attendance', text: 'On time 99%.', facts: ['att.summary'] },
-      { area: 'hiring', text: 'Not a note area.', facts: ['kpi.attrition'] },
-    ],
-  })
-  const b = toBrief(raw, pack(), 'test-model')
-  assert.ok(b)
-  assert.equal(b.headline, 'Sales is losing people at 2.3 times the organisation rate')
-  assert.deepEqual(b.findings.map(f => f.title), ['Sales attrition is 2.3 times the average', 'On-time is 85%', 'Payroll is ₹1.24 Cr'])
-  assert.equal(b.findings[2].severity, 'info', 'an unknown severity becomes info')
-  assert.equal(b.findings[2].area, 'cost', 'an unknown area falls back to the cited fact\'s area')
-  assert.equal(b.findings[0].action, 'Hold stay interviews in Sales.')
-  assert.equal(b.findings[1].action, 'Look at Monday starts.')
-  assert.deepEqual(b.findings[1].evidence, ['On-time punch-ins 85.3%; typical first punch 9:47 AM', 'Mondays are late. 18% against 9%.'], 'evidence is the fact text, severity tag removed')
-  assert.deepEqual(b.notes.map(n => n.area), ['attrition'], 'the note with an invented 99% is dropped')
-  assert.equal(b.dropped, 3, 'invented projection, missing evidence, invented note')
-  assert.equal(b.model, 'test-model')
-})
-
-test('toBrief returns null when nothing survives', () => {
-  assert.equal(toBrief('not json', pack(), 'm'), null)
-  assert.equal(toBrief(JSON.stringify({ headline: 'Attrition is 77%', findings: [] }), pack(), 'm'), null)
-})
-
-test('a finding may only use numbers from the facts it cites', () => {
-  const raw = (facts: string[]) => JSON.stringify({ findings: [{ severity: 'warning', area: 'attrition', title: 'Attrition is 40%', detail: '', action: '', facts }] })
-  assert.equal(toBrief(raw(['kpi.attrition']), pack(), 'm'), null, '40 is on the sheet, but not in the fact this finding cites')
-  assert.equal(toBrief(raw(['at.dept.sales']), pack(), 'm')?.findings.length, 1, 'cited from the fact that holds it, it passes')
-})
-
-test('tokens become names only after the check', () => {
-  const p = pack({
-    audience: 'team', facts: [{ id: 'p.P1', area: 'attendance', text: 'P1: late 5 of 18 days' }], signals: [],
-    areas: ['attendance'], noteAreas: [], aliases: { P1: 'Asha Verma' },
-  })
-  const b = toBrief(JSON.stringify({ headline: null, summary: 'P1 was late 5 times.', findings: [{ severity: 'info', area: 'attendance', title: 'Check in with P1', detail: 'P1 was late 5 of 18 days.', action: 'Ask P1 how the commute is.', facts: ['p.P1'] }] }), p, 'm')
-  assert.ok(b)
-  assert.equal(b.summary, 'Asha Verma was late 5 times.')
-  assert.equal(b.findings[0].title, 'Check in with Asha Verma')
-  assert.deepEqual(b.findings[0].evidence, ['Asha Verma: late 5 of 18 days'])
-  assert.equal(restore('P2 stays P2', { P1: 'x' }), 'P2 stays P2')
 })
 
 // ── Fixtures: just enough of each payload ────────────────────────────────────
@@ -211,12 +155,3 @@ test('an employee sheet has no name, code, department or birthday', () => {
   assert.ok(text.includes('5 above the carry-forward limit'))
 })
 
-test('the prompt states the rules and lists every fact with its id', () => {
-  const p = pack()
-  const sys = systemPrompt(p), user = userPrompt(p)
-  assert.match(sys, /must appear in the facts that finding cites/)
-  assert.match(sys, /Answer with JSON only/)
-  assert.ok(!/\d{4}-\d{2}-\d{2}/.test(sys), 'no date in the fixed instructions, so they cache')
-  for (const f of p.facts) assert.ok(user.includes(`[${f.id}]`))
-  assert.match(user, /NOTE AREAS: attrition, attendance/)
-})

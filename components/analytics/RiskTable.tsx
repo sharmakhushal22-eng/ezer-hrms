@@ -7,14 +7,28 @@
 import * as React from 'react'
 import { C, F, W, R, numeric } from '@/lib/ui'
 import type { RiskRow } from '@/lib/analytics/types'
-import { Pill } from './charts'
+import { Pill, MoreToggle, ListSearch } from './charts'
+import { usePrinting } from './printing'
 
-export function RiskTable({ rows, empty = 'Nobody shows two or more warning signs right now.' }: { rows: RiskRow[]; empty?: string }) {
+/** Opens on the first six; "Show all" lists the rest inside the card, with a search
+ *  past fifteen, so a long watchlist never pushes the next card off the page. */
+export function RiskTable({ rows, empty = 'Nobody shows two or more warning signs right now.', limit = 6 }: { rows: RiskRow[]; empty?: string; limit?: number }) {
+  const printing = usePrinting()
   const [open, setOpen] = React.useState<string | null>(null)
+  const [all, setAll] = React.useState(false)
+  const [q, setQ] = React.useState('')
   if (!rows.length) return <div style={{ fontSize: F.small, color: C.muted, padding: '8px 0' }}>{empty}</div>
+  const cap = printing ? 10 : limit
+  const big = all && !printing && rows.length > 15
+  const needle = q.trim().toLowerCase()
+  const shown = all && !printing
+    ? (needle ? rows.filter(r => [r.name, r.code, r.designation, r.department, ...r.signals.map(s => s.label)].join(' ').toLowerCase().includes(needle)) : rows)
+    : rows.slice(0, cap)
   return (
-    <div style={{ display: 'grid', gap: 6 }}>
-      {rows.map(r => (
+    <div>
+    {big && <ListSearch value={q} onChange={setQ} found={shown.length} of={rows.length} />}
+    <div style={{ display: 'grid', gap: 6, ...(big ? { maxHeight: 560, overflowY: 'auto', paddingRight: 4 } : {}) }}>
+      {shown.map(r => (
         <div key={r.id} style={{ border: `1px solid ${C.line}`, borderRadius: R.md, overflow: 'hidden' }}>
           <button onClick={() => setOpen(o => (o === r.id ? null : r.id))} aria-expanded={open === r.id} style={{
             width: '100%', display: 'grid', gridTemplateColumns: 'minmax(140px,1.2fr) minmax(100px,1fr) auto auto', gap: 10, alignItems: 'center',
@@ -43,6 +57,9 @@ export function RiskTable({ rows, empty = 'Nobody shows two or more warning sign
           )}
         </div>
       ))}
+      {all && needle && !shown.length && <div style={{ fontSize: F.small, color: C.muted, padding: '8px 0' }}>No match for “{q}”.</div>}
+    </div>
+    <MoreToggle total={rows.length} limit={cap} open={all} setOpen={v => { setAll(v); if (!v) setQ('') }} />
     </div>
   )
 }

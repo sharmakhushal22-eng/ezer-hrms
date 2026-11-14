@@ -1,4 +1,4 @@
-// lib/analytics/server/ai.ts — asking a model for the AI read, once, and remembering it.
+// lib/analytics/server/ai.ts — asking a model to write a piece, once, and remembering it.
 //
 // ── WHICH MODEL, WHICH KEY ────────────────────────────────────────────────────
 //
@@ -6,8 +6,8 @@
 // screening reads it); the PMS and onboarding routes read GOOGLE_GENERATIVE_AI_API_KEY.
 // Either works here. Gemini models are tried in order — the list app/api/pms/
 // training-ai measured: one name retires, another is busy — and Claude answers if
-// ANTHROPIC_API_KEY is set and every Gemini model failed. No key: the page says so and
-// shows the rule checks, which never needed a model.
+// ANTHROPIC_API_KEY is set and every Gemini model failed. No key: the reader gets the
+// template version of the same piece (lib/analytics/briefs.ts), which never needed one.
 //
 // ── WHAT IT COSTS, AND WHY IT IS NOT PAID FOR TWICE ───────────────────────────
 //
@@ -22,9 +22,8 @@
 
 import crypto from 'node:crypto'
 import { sb } from './db.ts'
-import type { AiBrief, AiBriefResponse, FactPack } from '../ai/types.ts'
-import { PROMPT_VERSION, systemPrompt, userPrompt } from '../ai/prompt.ts'
-import { toBrief } from '../ai/validate.ts'
+import type { AiResponse, AiAudience } from '../ai/types.ts'
+import { TASK_VERSION, type Task, type TaskKind } from '../ai/tasks.ts'
 
 const GEMINI_MODELS = [process.env.ANALYTICS_AI_MODEL, 'gemini-3.5-flash', 'gemini-flash-latest', 'gemini-3.1-flash-lite']
   .filter((m, i, a): m is string => !!m && a.indexOf(m) === i)
@@ -35,7 +34,8 @@ const ATTEMPT_MS = 25_000
 /** Stop trying further models once this much time has gone. */
 const TOTAL_MS = 40_000
 
-const TTL_MS: Record<FactPack['audience'], number> = { org: 6 * 3600_000, team: 4 * 3600_000, me: 12 * 3600_000 }
+/** How long a written piece is reused when the figures have moved a little. */
+const TTL_MS: Record<TaskKind, number> = { briefing: 6 * 3600_000, explain: 6 * 3600_000, monday: 4 * 3600_000, summary: 12 * 3600_000 }
 const REFRESH_PER_HOUR = 6
 const GEN_PER_HOUR = 30
 
@@ -55,6 +55,9 @@ type Asked = { text: string; model: string; tokens: { in: number; out: number } 
 /** Where Gemini is called. Overridable so the call can go through a gateway or a
  *  proxy (or, on a laptop, a local stand-in); unset in production. */
 const GEMINI_BASE = (process.env.ANALYTICS_AI_BASE_URL || 'https://generativelanguage.googleapis.com').replace(/\/+$/, '')
+/** A local stand-in model (testing on a laptop) answers into memory only — never into
+ *  the shared table, where a real deployment would read it back as the model's words. */
+const STAND_IN = !/googleapis\.com/.test(GEMINI_BASE)
 
 async function gemini(model: string, key: string, system: string, user: string, thinking: boolean, ms: number) {
   return timed(`${GEMINI_BASE}/v1beta/models/${model}:generateContent`, {
@@ -119,36 +122,36 @@ export async function askModel(system: string, user: string): Promise<Asked> {
 
 // ── Remembering answers ───────────────────────────────────────────────────────
 
-interface Stored { fingerprint: string; brief: AiBrief; at: number }
+interface Stored { fingerprint: string; result: unknown; at: number }
 const memory = new Map<string, Stored>()
-const inflight = new Map<string, Promise<AiBriefResponse>>()
+const inflight = new Map<string, Promise<AiResponse<unknown>>>()
 const usage = new Map<string, { gen: number[]; refresh: number[] }>()
 
-/** True when the analytics_ai_brief table is missing — then we stop asking for it. */
+/** True when the analytics_ai_brief table (migration 231) is missing — then we stop asking. */
 let noTable = false
 
 async function readStored(scope: string): Promise<Stored | null> {
   const m = memory.get(scope)
-  if (m || noTable) return m ?? null
+  if (m || noTable || STAND_IN) return m ?? null
   const { data, error } = await sb.from('analytics_ai_brief').select('fingerprint, brief, created_at').eq('scope_hash', scope).order('created_at', { ascending: false }).limit(1)
   if (error) { if (/does not exist|schema cache|relation/i.test(error.message)) noTable = true; return null }
-  const row = (data || [])[0] as { fingerprint: string; brief: AiBrief; created_at: string } | undefined
+  const row = (data || [])[0] as { fingerprint: string; brief: unknown; created_at: string } | undefined
   if (!row) return null
-  const s = { fingerprint: row.fingerprint, brief: row.brief, at: Date.parse(row.created_at) }
+  const s = { fingerprint: row.fingerprint, result: row.brief, at: Date.parse(row.created_at) }
   memory.set(scope, s)
   return s
 }
 
-async function store(scope: string, audience: string, s: Stored, actor: string | null, tokens: { in: number; out: number }) {
+async function store(scope: string, audience: AiAudience, s: Stored, model: string, actor: string | null, tokens: { in: number; out: number }) {
   memory.set(scope, s)
-  if (memory.size > 500) memory.delete(memory.keys().next().value as string)
-  if (noTable) return
+  if (memory.size > 800) memory.delete(memory.keys().next().value as string)
+  if (noTable || STAND_IN) return
   const { error } = await sb.from('analytics_ai_brief').insert({
-    scope_hash: scope, audience, fingerprint: s.fingerprint, brief: s.brief, model: s.brief.model,
+    scope_hash: scope, audience, fingerprint: s.fingerprint, brief: s.result, model,
     input_tokens: tokens.in, output_tokens: tokens.out, created_by: actor,
   })
   if (error && /does not exist|schema cache|relation/i.test(error.message)) noTable = true
-  else if (error) console.error('[analytics-ai] brief not stored:', error.message)
+  else if (error) console.error('[analytics-ai] answer not stored:', error.message)
 }
 
 function allow(actor: string, refresh: boolean): boolean {
@@ -163,49 +166,50 @@ function allow(actor: string, refresh: boolean): boolean {
 }
 
 const MESSAGES = {
-  off: 'AI is not switched on for this installation. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) to the server environment. The checks below are rule-based and always available.',
-  busy: 'The AI service did not answer in time. The rule-based checks are shown instead — try Refresh in a minute.',
-  empty: 'The AI answer did not pass the number check, so it is not shown. The rule-based checks are below.',
-  limited: 'You have refreshed the AI read several times this hour. The latest one is shown; try again later.',
+  off: 'AI is not switched on for this installation, so this was written from the figures by fixed rules. Add GEMINI_API_KEY (or ANTHROPIC_API_KEY) for the AI version.',
+  busy: 'The AI service did not answer in time, so this was written from the figures by fixed rules. Try again in a minute.',
+  empty: 'The AI answer did not pass the number check, so the rule-written version is shown.',
+  limited: 'You have asked for fresh AI writing several times this hour. The latest version is shown.',
 } as const
 
 /**
- * The AI read for a fact sheet: from memory when it can be, from the model when it must.
- * `actor` is whoever is asking — for the throttle and the audit column.
+ * A written piece: the AI version from memory when it can be, from the model when it
+ * must, and the template `fallback` whenever there is no AI version to give. `actor`
+ * is whoever is asking — for the throttle and the audit column. `cron` skips the
+ * per-person throttle (a scheduled run writes one piece per recipient).
  */
-export async function aiBrief(pack: FactPack, opts: { actor: string | null; refresh?: boolean }): Promise<AiBriefResponse> {
-  if (!pack.facts.length) return { status: 'empty', brief: null, cached: false, stale: false, message: 'There are no figures here yet for the AI to read.' }
-  const scope = sha(`${PROMPT_VERSION}|${pack.scopeKey}`)
-  const fingerprint = sha([PROMPT_VERSION, pack.context.replace(/Today is [^.]*\./, ''), ...pack.facts.map(f => `${f.id}=${f.text}`), ...pack.signals.map(f => f.text)].join('\n'))
+export async function runTask<T>(task: Task<T>, fallback: T, opts: { actor: string | null; refresh?: boolean; cron?: boolean }): Promise<AiResponse<T>> {
+  const audience = task.pack.audience
+  if (!task.pack.facts.length) return { status: 'empty', result: fallback, cached: false, stale: false, message: 'There are no figures here yet.' }
+  const scope = sha(`${TASK_VERSION}|${task.kind}|${task.pack.scopeKey}`)
+  const fingerprint = sha([TASK_VERSION, task.kind, task.user.replace(/Today is [^.]*\./, '')].join('\n'))
   const prior = await readStored(scope)
+  const old = (stale: boolean) => ({ result: (prior?.result as T) ?? fallback, cached: !!prior, stale: !!prior && stale })
 
   if (prior && !opts.refresh) {
     const same = prior.fingerprint === fingerprint
-    if (same || Date.now() - prior.at < TTL_MS[pack.audience]) return { status: 'ok', brief: prior.brief, cached: true, stale: !same }
+    if (same || Date.now() - prior.at < TTL_MS[task.kind]) return { status: 'ok', result: prior.result as T, cached: true, stale: !same }
   }
-  if (!aiConfigured()) return { status: 'off', brief: prior?.brief ?? null, cached: !!prior, stale: !!prior, message: MESSAGES.off }
-  if (!allow(opts.actor || 'anonymous', !!opts.refresh)) {
-    return { status: prior ? 'ok' : 'limited', brief: prior?.brief ?? null, cached: !!prior, stale: !!prior && prior.fingerprint !== fingerprint, message: MESSAGES.limited }
-  }
+  if (!aiConfigured()) return { status: 'off', ...old(true), message: MESSAGES.off }
+  if (!opts.cron && !allow(opts.actor || 'anonymous', !!opts.refresh)) return { status: prior ? 'ok' : 'limited', ...old(prior?.fingerprint !== fingerprint), message: MESSAGES.limited }
 
   // Two tabs asking for the same picture at once share one call.
   const key = `${scope}|${fingerprint}`
   const running = inflight.get(key)
-  if (running) return running
-  const job = (async (): Promise<AiBriefResponse> => {
-    const asked = await askModel(systemPrompt(pack), userPrompt(pack))
-    if ('failed' in asked) {
-      return { status: asked.failed === 'NO_KEY' ? 'off' : 'busy', brief: prior?.brief ?? null, cached: !!prior, stale: !!prior, message: asked.failed === 'NO_KEY' ? MESSAGES.off : MESSAGES.busy }
+  if (running) return running as Promise<AiResponse<T>>
+  const job = (async (): Promise<AiResponse<T>> => {
+    const asked = await askModel(task.system, task.user)
+    if ('failed' in asked) return { status: asked.failed === 'NO_KEY' ? 'off' : 'busy', ...old(true), message: asked.failed === 'NO_KEY' ? MESSAGES.off : MESSAGES.busy }
+    const result = task.parse(asked.text, asked.model)
+    if (!result) {
+      console.error(`[analytics-ai] ${task.kind} answer failed validation:`, asked.text.slice(0, 300))
+      return { status: 'empty', ...old(true), message: MESSAGES.empty }
     }
-    const brief = toBrief(asked.text, pack, asked.model)
-    if (!brief) {
-      console.error('[analytics-ai] answer failed validation:', asked.text.slice(0, 300))
-      return { status: 'empty', brief: prior?.brief ?? null, cached: !!prior, stale: !!prior, message: MESSAGES.empty }
-    }
-    if (brief.dropped) console.warn(`[analytics-ai] ${brief.dropped} sentence(s) dropped by the number check (${pack.audience})`)
-    await store(scope, pack.audience, { fingerprint, brief, at: Date.now() }, opts.actor, asked.tokens)
-    return { status: 'ok', brief, cached: false, stale: false }
+    const dropped = (result as { dropped?: number }).dropped
+    if (dropped) console.warn(`[analytics-ai] ${dropped} item(s) dropped by the number check (${task.kind})`)
+    await store(scope, audience, { fingerprint, result, at: Date.now() }, asked.model, opts.actor, asked.tokens)
+    return { status: 'ok', result, cached: false, stale: false }
   })()
-  inflight.set(key, job)
+  inflight.set(key, job as Promise<AiResponse<unknown>>)
   try { return await job } finally { inflight.delete(key) }
 }

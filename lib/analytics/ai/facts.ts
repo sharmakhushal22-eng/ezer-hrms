@@ -59,7 +59,7 @@ const kpiLine = (k: Kpi) =>
 export function orgFacts(d: OrgAnalytics): FactPack {
   const s = new Sheet()
   const sc = d.scope
-  const filters = [sc.department && `department ${sc.department}`, sc.location && `location ${sc.location}`, sc.type && `employment type ${sc.type}`].filter(Boolean).join(', ')
+  const filters = [d.access.limitLabel && `limited to ${d.access.limitLabel}`, sc.department && `department ${sc.department}`, sc.location && `location ${sc.location}`, sc.type && `employment type ${sc.type}`].filter(Boolean).join(', ')
   const context = `Scope: ${sc.companyLabel}${filters ? ` (${filters})` : ''}. Period: ${sc.period.label}, ${dLabelLong(sc.period.from)} to ${dLabelLong(sc.period.to)}. Today is ${dLabelLong(sc.today)}.`
 
   // Headline figures
@@ -216,7 +216,7 @@ export function orgFacts(d: OrgAnalytics): FactPack {
   const noteAreas = ['workforce', 'attrition', 'attendance', 'performance', 'hiring', ...(c ? ['cost'] : [])]
   const scopeKey = JSON.stringify({
     a: 'org', companies: d.filters.companies.map(x => x.id).sort(), c: sc.company, d: sc.department, l: sc.location, t: sc.type,
-    p: sc.period.key, cy: p.cycle, cost: !!c,
+    p: sc.period.key, cy: p.cycle, cost: !!c, lim: d.access.limitLabel || '',
   })
   return {
     audience: 'org', scopeKey, context, facts: s.facts, signals,

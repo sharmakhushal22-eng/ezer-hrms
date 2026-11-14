@@ -75,11 +75,86 @@ export interface OrgScope {
 
 export interface FlowPoint { month: string; opening: number; joiners: number; exits: number; closing: number; attrition: number | null }
 
+// ── What moved: month against month, and which group moved it ───────────────
+
+/** Which two windows a comparison is between. `mtd` = this month so far against the
+ *  same days last month; `last` = the last full month against the one before. */
+export type MoverWindowKey = 'mtd' | 'last'
+
+export interface MoverWindow {
+  key: MoverWindowKey
+  /** "1–14 Nov against 1–14 Oct", "October against September". */
+  label: string
+  /** "Oct 2026" — the month the window is about. */
+  month: string
+  from: string; to: string
+  prevFrom: string; prevTo: string
+}
+
+/** One group's share of a change: a department, a weekday, a leave type… */
+export interface MoverRow {
+  label: string
+  now: number | null
+  before: number | null
+  /** now − before, in the measure's unit (points for a rate). */
+  delta: number | null
+  /** The group's size behind `now` (punch-ins, people, days…). */
+  n: number
+  nBefore: number
+  /** How much of the overall change this group accounts for, in the measure's unit. */
+  effect: number | null
+}
+
+export interface MoverBreakdown {
+  dim: 'department' | 'location' | 'weekday' | 'type' | 'reason' | 'source' | 'kind'
+  label: string
+  /** What `n` counts, for the table header ("punch-ins", "people"). */
+  unit: string
+  /** How the rows' figures print, when not the measure's own (leave days under a share). */
+  fmt?: Fmt
+  rows: MoverRow[]
+}
+
+export interface Mover {
+  key: string
+  area: Area
+  label: string
+  fmt: Fmt
+  good: 'up' | 'down' | 'neutral'
+  now: number | null
+  before: number | null
+  delta: number | null
+  /** Short context lines that are not breakdowns: coverage, volume, mix. */
+  notes: string[]
+  by: MoverBreakdown[]
+}
+
+export interface MoverSet { window: MoverWindow; items: Mover[] }
+
 export interface OrgAnalytics {
   generatedAt: string
   scope: OrgScope
-  filters: { companies: Option[]; departments: Option[]; locations: Option[]; types: string[]; canPickGroup: boolean }
-  access: { cost: boolean; people: boolean }
+  filters: { companies: Option[]; departments: Option[]; locations: Option[]; types: string[]; canPickGroup: boolean; groupLabel?: string }
+  access: {
+    cost: boolean
+    people: boolean
+    /** The tabs this reader may open (lib/analytics/access.ts). Absent = all. */
+    tabs?: string[]
+    /** Whether the PDF / Excel downloads are offered. Absent = yes. */
+    export?: boolean
+    /** How they got in: a reporting role, an analytics grant, or Super Admin. */
+    via?: 'super' | 'role' | 'grant'
+    /** The grant's data limit in words ("Pune · Sales"), when there is one. */
+    limitLabel?: string
+    /** Last day a grant applies. */
+    until?: string | null
+    /** May hand out analytics access (Manage access). */
+    manage?: boolean
+    /** The reader's name, for the PDF's byline. */
+    viewer?: string | null
+  }
+  /** Month-on-month changes with their breakdowns — what the briefing and "Why?" read. */
+  movers?: { mtd: MoverSet; last: MoverSet }
   pulse: {
     kpis: Kpi[]
     insights: Insight[]
