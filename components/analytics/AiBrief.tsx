@@ -14,6 +14,7 @@ import { C, F, W, R, S, E, Skeleton, IconAi, tone } from '@/lib/ui'
 import type { Insight } from '@/lib/analytics/types'
 import type { AiBriefResponse, AiFinding, AiNote as Note, AiAudience } from '@/lib/analytics/ai/types'
 import { InsightCard, EmptyChart } from './charts'
+import { usePrinting } from './printing'
 
 export type AiLoad = (refresh: boolean) => Promise<AiBriefResponse>
 
@@ -83,10 +84,13 @@ export function AiBriefCard({ state, audience, style }: { state: AiState; audien
   const { res, busy } = state
   const b = res?.brief
   const why = unavailable(state, audience)
-  const canRefresh = !!res && res.status !== 'off'
+  const printing = usePrinting()
+  const canRefresh = !!res && res.status !== 'off' && !printing
   // An employee or manager cannot switch AI on, so an "off" card would only be noise
   // there. HR and admins see it, with what to set.
   if (audience !== 'org' && res?.status === 'off' && !b) return null
+  // A PDF carries a read when there is one, and no "not switched on" card when not.
+  if (printing && !b) return null
   return (
     <section aria-live="polite" style={{
       background: C.surface, border: `1px solid ${C.line}`, borderRadius: R.lg, boxShadow: E.flat, padding: S.lg, marginBottom: S.lg, minWidth: 0, ...style,
@@ -115,7 +119,7 @@ export function AiBriefCard({ state, audience, style }: { state: AiState; audien
           {b.summary && <p style={{ margin: `${b.headline ? 6 : 0}px 0 0`, fontSize: F.small, color: C.inkSoft, lineHeight: 1.6 }}>{b.summary}</p>}
           <div style={{ marginTop: S.sm, fontSize: F.micro, color: C.faint, lineHeight: 1.5 }}>
             Written by AI ({MODEL_NAME(b.model)}) from the figures on this page at {when(b.generatedAt)}
-            {res?.stale ? ' — the figures may have moved since; "Read again" for a fresh read.' : '.'}
+            {res?.stale && !printing ? ' — the figures may have moved since; "Read again" for a fresh read.' : '.'}
             {' '}Every number it quotes was checked against those figures.
           </div>
         </div>
@@ -153,11 +157,12 @@ export function Findings({ state, rules, mode, setMode, onOpen, areaLabel, grid,
   state: AiState; rules: Insight[]; mode: 'ai' | 'rules'; setMode: (m: 'ai' | 'rules') => void
   onOpen?: (area: string) => void; areaLabel?: (area: string) => string | undefined; grid?: boolean; limit?: number; empty?: string
 }) {
+  const printing = usePrinting()
   const [all, setAll] = React.useState(false)
   const ai = state.res?.brief?.findings ?? []
   const showAi = mode === 'ai' && ai.length > 0
   const items: (AiFinding | Insight)[] = showAi ? ai : rules
-  const shown = limit && !all ? items.slice(0, limit) : items
+  const shown = limit && !all && !printing ? items.slice(0, limit) : items
   return (
     <div>
       {ai.length > 0 && (
@@ -165,7 +170,7 @@ export function Findings({ state, rules, mode, setMode, onOpen, areaLabel, grid,
           <span style={{ fontSize: F.micro, color: C.faint }}>
             {showAi ? 'Written by AI from the figures, with a next step for each.' : `The system's threshold checks — ${rules.length} fired.`}
           </span>
-          <Switch mode={mode} set={setMode} />
+          {!printing && <Switch mode={mode} set={setMode} />}
         </div>
       )}
       {items.length === 0
@@ -181,7 +186,7 @@ export function Findings({ state, rules, mode, setMode, onOpen, areaLabel, grid,
             ))}
           </div>
         )}
-      {limit != null && items.length > limit && (
+      {limit != null && items.length > limit && !printing && (
         <button onClick={() => setAll(a => !a)} style={{ marginTop: S.sm, background: 'none', border: 'none', color: C.brand, fontSize: F.tiny, fontWeight: W.semi, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
           {all ? 'Show fewer' : `Show all ${items.length}`}
         </button>

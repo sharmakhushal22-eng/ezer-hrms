@@ -18,6 +18,7 @@ import * as React from 'react'
 import { C, F, W, R, S, E, Z, VIZ, seriesColour, numeric, eyebrow, tone, type Tone } from '@/lib/ui'
 import { fmt as format, delta } from '@/lib/analytics/format'
 import type { Fmt, Kpi, Insight, DayKind } from '@/lib/analytics/types'
+import { usePrinting, nodeText, PRINT_ROWS } from './printing'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Plumbing
@@ -462,9 +463,11 @@ export interface HBarItem { key: string; label: string; value: number; sub?: str
 export function HBars({ items, f = 'count', max, emptyText, limit = 10, labelWidth = 150, total }: {
   items: HBarItem[]; f?: Fmt; max?: number; emptyText?: string; limit?: number; labelWidth?: number; total?: number
 }) {
+  const printing = usePrinting()
   const [open, setOpen] = React.useState(false)
   if (!items.length || items.every(i => !i.value)) return <EmptyChart text={emptyText} height={90} />
-  const shown = open ? items : items.slice(0, limit)
+  // Bars are short; the PDF carries all of them rather than a "Show all" it cannot press.
+  const shown = open || printing ? items : items.slice(0, limit)
   const top = max ?? Math.max(...items.map(i => i.value), 1)
   return (
     <div style={{ display: 'grid', gap: 8 }}>
@@ -481,7 +484,7 @@ export function HBars({ items, f = 'count', max, emptyText, limit = 10, labelWid
           </span>
         </div>
       ))}
-      {items.length > limit && (
+      {items.length > limit && !printing && (
         <button onClick={() => setOpen(o => !o)} style={{ justifySelf: 'start', background: 'none', border: 'none', color: C.brand, fontSize: F.tiny, fontWeight: W.semi, cursor: 'pointer', padding: 0, fontFamily: 'inherit' }}>
           {open ? 'Show fewer' : `Show all ${items.length}`}
         </button>
@@ -692,12 +695,18 @@ export function DayCalendar({ days, cell = 14, detail }: { days: { date: string;
 }
 
 /** A whole team across a month: one row per person, the ESS letter codes in each cell. */
-export function TeamDayGrid({ members, dates, today }: {
-  members: { id: string; name: string; days: DayKind[]; sub?: string }[]; dates: string[]; today: string
+export function TeamDayGrid({ members: everyone, dates, today, limit = 12 }: {
+  members: { id: string; name: string; days: DayKind[]; sub?: string }[]; dates: string[]; today: string; limit?: number
 }) {
-  if (!members.length) return <EmptyChart text="Nobody in this team yet." />
+  const printing = usePrinting()
+  const [all, setAll] = React.useState(false)
+  if (!everyone.length) return <EmptyChart text="Nobody in this team yet." />
+  const cap = printing ? 40 : limit
+  const big = all && !printing && everyone.length > 15
+  const members = all && !printing ? everyone : everyone.slice(0, cap)
   return (
-    <div style={{ overflowX: 'auto' }}>
+    <div>
+    <div style={{ overflowX: 'auto', ...(big ? { maxHeight: 520, overflowY: 'auto' } : {}) }}>
       <table style={{ borderCollapse: 'separate', borderSpacing: 2, fontSize: 10 }}>
         <thead>
           <tr>
@@ -733,6 +742,8 @@ export function TeamDayGrid({ members, dates, today }: {
           ))}
         </tbody>
       </table>
+    </div>
+    <MoreToggle total={everyone.length} limit={cap} open={all} setOpen={setAll} />
     </div>
   )
 }
@@ -822,30 +833,69 @@ export function Meter({ value, t = 'brand', height = 8 }: { value: number | null
 }
 
 /** A compact, sortable-looking table for the people lists beside a chart. */
-export function MiniTable({ head, rows, empty = 'Nobody to list.', align, limit = 12 }: { head: string[]; rows: React.ReactNode[][]; empty?: string; align?: ('left' | 'right' | 'center')[]; limit?: number }) {
+/** Long lists open short. "Show all" opens the rest inside the card, scrolling there
+ *  with the header pinned, so a 500-row list never pushes the rest of the page away;
+ *  past 15 rows a search box appears. In the PDF the first PRINT_ROWS print, with a
+ *  line saying where the rest are. */
+export function MiniTable({ head, rows, empty = 'Nobody to list.', align, limit = 10 }: { head: string[]; rows: React.ReactNode[][]; empty?: string; align?: ('left' | 'right' | 'center')[]; limit?: number }) {
+  const printing = usePrinting()
   const [all, setAll] = React.useState(false)
+  const [q, setQ] = React.useState('')
   if (!rows.length) return <div style={{ fontSize: F.small, color: C.muted, padding: '10px 0' }}>{empty}</div>
-  const shown = all ? rows : rows.slice(0, limit)
+  const open = all && !printing
+  const big = open && rows.length > 15
+  const needle = q.trim().toLowerCase()
+  const shown = printing ? rows.slice(0, PRINT_ROWS) : open ? (needle ? rows.filter(r => r.map(nodeText).join(' ').toLowerCase().includes(needle)) : rows) : rows.slice(0, limit)
   return (
-    <div style={{ overflowX: 'auto' }}>
-      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: F.tiny }}>
-        <thead>
-          <tr>{head.map((h, i) => <th key={h} style={{ ...eyebrow, fontSize: 10, textAlign: align?.[i] || 'left', padding: '6px 8px', borderBottom: `1px solid ${C.line}`, background: C.sunken, whiteSpace: 'nowrap' }}>{h}</th>)}</tr>
-        </thead>
-        <tbody>
-          {shown.map((r, i) => (
-            <tr key={i} className="ez-row">
-              {r.map((c, j) => <td key={j} style={{ padding: '7px 8px', borderBottom: `1px solid ${C.line}`, color: j === 0 ? C.ink : C.inkSoft, textAlign: align?.[j] || 'left', verticalAlign: 'top', ...numeric }}>{c}</td>)}
-            </tr>
-          ))}
-        </tbody>
-      </table>
-      {rows.length > limit && (
-        <button onClick={() => setAll(a => !a)} style={{ background: 'none', border: 'none', color: C.brand, fontSize: F.tiny, fontWeight: W.semi, cursor: 'pointer', padding: '8px 0 0', fontFamily: 'inherit' }}>
-          {all ? 'Show fewer' : `Show all ${rows.length}`}
-        </button>
-      )}
+    <div>
+      {big && <ListSearch value={q} onChange={setQ} found={shown.length} of={rows.length} />}
+      <div style={{ overflowX: 'auto', ...(big ? { maxHeight: 440, overflowY: 'auto', border: `1px solid ${C.line}`, borderRadius: R.md } : {}) }}>
+        <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: F.tiny }}>
+          <thead>
+            <tr>{head.map((h, i) => <th key={h + i} style={{ ...eyebrow, fontSize: 10, textAlign: align?.[i] || 'left', padding: '6px 8px', borderBottom: `1px solid ${C.line}`, background: C.sunken, whiteSpace: 'nowrap', ...(big ? { position: 'sticky', top: 0, zIndex: Z.raised } : {}) }}>{h}</th>)}</tr>
+          </thead>
+          <tbody>
+            {shown.map((r, i) => (
+              <tr key={i} className="ez-row">
+                {r.map((c, j) => <td key={j} style={{ padding: '7px 8px', borderBottom: `1px solid ${C.line}`, color: j === 0 ? C.ink : C.inkSoft, textAlign: align?.[j] || 'left', verticalAlign: 'top', ...numeric }}>{c}</td>)}
+              </tr>
+            ))}
+            {open && needle && !shown.length && <tr><td colSpan={head.length} style={{ padding: '10px 8px', color: C.muted }}>No match for “{q}”.</td></tr>}
+          </tbody>
+        </table>
+      </div>
+      <MoreToggle total={rows.length} limit={printing ? PRINT_ROWS : limit} open={all} setOpen={v => { setAll(v); if (!v) setQ('') }} />
     </div>
+  )
+}
+
+/** The search box above an opened long list. */
+export function ListSearch({ value, onChange, found, of }: { value: string; onChange: (v: string) => void; found: number; of: number }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', gap: S.sm, marginBottom: S.sm }}>
+      <input type="search" value={value} onChange={e => onChange(e.target.value)} placeholder="Search this list" aria-label="Search this list" style={{
+        flex: 1, minWidth: 0, maxWidth: 280, height: 30, padding: '0 10px', fontSize: F.tiny, fontFamily: 'inherit',
+        border: `1px solid ${C.lineStrong}`, borderRadius: R.sm, background: C.surface, color: C.ink, outline: 'none',
+      }} />
+      <span style={{ fontSize: F.micro, color: C.muted, ...numeric }}>{value.trim() ? `${found} of ${of}` : `${of} in all`}</span>
+    </div>
+  )
+}
+
+/** "Show all 53 ▾" / "Show fewer ▴" under a list — or, in the PDF, where the rest went. */
+export function MoreToggle({ total, limit, open, setOpen }: { total: number; limit: number; open: boolean; setOpen: (v: boolean) => void }) {
+  const printing = usePrinting()
+  if (total <= limit) return null
+  if (printing) return <div style={{ fontSize: F.micro, color: C.muted, paddingTop: 8 }}>Showing {limit} of {total}. The full list is in the Excel download.</div>
+  return (
+    <button type="button" onClick={() => setOpen(!open)} aria-expanded={open} className="ez-press" style={{
+      display: 'inline-flex', alignItems: 'center', gap: 6, marginTop: 8, padding: '5px 10px', borderRadius: R.pill,
+      background: open ? C.sunken : C.brandTint, border: `1px solid ${open ? C.line : C.brandEdge}`, color: open ? C.inkSoft : C.brandDeep,
+      fontSize: F.tiny, fontWeight: W.semi, cursor: 'pointer', fontFamily: 'inherit',
+    }}>
+      {open ? 'Show fewer' : `Show all ${total}`}
+      <span aria-hidden style={{ fontSize: 9 }}>{open ? '▲' : '▼'}</span>
+    </button>
   )
 }
 

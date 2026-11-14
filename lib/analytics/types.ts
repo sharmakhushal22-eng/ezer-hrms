@@ -78,8 +78,25 @@ export interface FlowPoint { month: string; opening: number; joiners: number; ex
 export interface OrgAnalytics {
   generatedAt: string
   scope: OrgScope
-  filters: { companies: Option[]; departments: Option[]; locations: Option[]; types: string[]; canPickGroup: boolean }
-  access: { cost: boolean; people: boolean }
+  filters: { companies: Option[]; departments: Option[]; locations: Option[]; types: string[]; canPickGroup: boolean; groupLabel?: string }
+  access: {
+    cost: boolean
+    people: boolean
+    /** The tabs this reader may open (lib/analytics/access.ts). Absent = all. */
+    tabs?: string[]
+    /** Whether the PDF / Excel downloads are offered. Absent = yes. */
+    export?: boolean
+    /** How they got in: a reporting role, an analytics grant, or Super Admin. */
+    via?: 'super' | 'role' | 'grant'
+    /** The grant's data limit in words ("Pune · Sales"), when there is one. */
+    limitLabel?: string
+    /** Last day a grant applies. */
+    until?: string | null
+    /** May hand out analytics access (Manage access). */
+    manage?: boolean
+    /** The reader's name, for the PDF's byline. */
+    viewer?: string | null
+  }
   pulse: {
     kpis: Kpi[]
     insights: Insight[]

@@ -9,7 +9,7 @@
 // AdminModules — the page carries no layout context, so both hosts work.
 
 import * as React from 'react'
-import { C, F, W, R, S, E, VIZ, seriesColour, eyebrow, numeric, Page, PageHeader, Tabs, Select, Button, Skeleton, Notice, IconDownload } from '@/lib/ui'
+import { C, F, W, R, S, E, VIZ, seriesColour, eyebrow, numeric, Page, PageHeader, Tabs, Select, Button, Skeleton, Notice } from '@/lib/ui'
 import { authHeaders } from '@/lib/auth-headers'
 import type { OrgAnalytics as Data, Area } from '@/lib/analytics/types'
 import { fmt, inr, clockOf, mLabel, dLabel, dLabelLong } from '@/lib/analytics/format'
@@ -21,6 +21,11 @@ import {
 import { RiskTable } from './RiskTable'
 import { AiBriefCard, AiNote, Findings, useAiBrief, useFindingsMode, type AiState } from './AiBrief'
 import type { AiBriefResponse } from '@/lib/analytics/ai/types'
+import { usePdfExport, DownloadMenu, bylineOf, type DownloadOption } from './export'
+import { TAB_LABEL } from '@/lib/analytics/access'
+import dynamic from 'next/dynamic'
+
+const AccessManager = dynamic(() => import('./AccessManager'), { ssr: false })
 
 type Tab = 'pulse' | 'workforce' | 'attrition' | 'attendance' | 'performance' | 'hiring' | 'cost'
 
@@ -89,7 +94,11 @@ export default function OrgAnalytics() {
     if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
     return body as AiBriefResponse
   }, data ? `${queryOf(f)}|${data.generatedAt}` : '')
-  const note = tab !== 'pulse' ? ai.res?.brief?.notes.find(n => n.area === tab) : undefined
+  const pdf = usePdfExport()
+  const [managing, setManaging] = React.useState(false)
+  // Tabs this reader may open (an analytics grant can limit them). Pulse always.
+  const allowed = React.useCallback((t: Tab) => t === 'pulse' || !data?.access.tabs || data.access.tabs.includes(t), [data])
+  const view: Tab = allowed(tab) ? tab : 'pulse'
 
   const set = (patch: Partial<Filters>) => setF(x => {
     const next = { ...x, ...patch }
@@ -98,7 +107,7 @@ export default function OrgAnalytics() {
   })
   const pick = (t: Tab) => { setTab(t); try { sessionStorage.setItem(KEY + ':tab', t) } catch { /* ignore */ } }
 
-  const tabs: { key: Tab; label: string; count?: number }[] = [
+  const tabs = ([
     { key: 'pulse', label: 'Pulse', count: data ? data.pulse.insights.filter(i => i.severity === 'critical' || i.severity === 'warning').length || undefined : undefined },
     { key: 'workforce', label: 'Workforce' },
     { key: 'attrition', label: 'Attrition & retention' },
@@ -106,7 +115,26 @@ export default function OrgAnalytics() {
     { key: 'performance', label: 'Performance & learning' },
     { key: 'hiring', label: 'Hiring' },
     ...(data?.access.cost !== false ? [{ key: 'cost' as Tab, label: 'Pay & cost' }] : []),
-  ]
+  ] as { key: Tab; label: string; count?: number }[]).filter(t => allowed(t.key))
+
+  const pdfJob = (which: Tab[], name: string) => {
+    if (!data) return Promise.resolve()
+    const sc = data.scope
+    const parts = [sc.companyLabel, data.access.limitLabel, sc.department, sc.location, sc.type, `${sc.period.label} (${dLabel(sc.period.from)} – ${dLabelLong(sc.period.to)})`].filter(Boolean)
+    return pdf.run({
+      title: 'People Analytics', subtitle: parts.join(' · '), byline: bylineOf(data.access.viewer),
+      filename: `EZER-People-Analytics-${name}-${sc.today}.pdf`,
+      sections: which.map(t => ({
+        key: t, title: t === 'pulse' ? 'Pulse' : TAB_LABEL[t as keyof typeof TAB_LABEL],
+        node: <TabBody t={t} d={data} ai={ai} go={() => {}} cycle={f.cycle} setCycle={() => {}} />,
+      })),
+    })
+  }
+  const downloads: DownloadOption[] = data ? [
+    { key: 'pdf-tab', label: `PDF — ${tabs.find(t => t.key === view)?.label || 'this tab'}`, hint: 'This tab, the way it looks here', run: () => pdfJob([view], view) },
+    { key: 'pdf-all', label: 'PDF — full report', hint: `Every tab you can open (${tabs.length}), one after another`, run: () => pdfJob(tabs.map(t => t.key), 'full-report') },
+    { key: 'xlsx', label: 'Excel workbook', hint: 'The figures and full lists, one sheet each', run: () => exportWorkbook(data, ai.res) },
+  ] : []
 
   return (
     <Page>
@@ -114,32 +142,56 @@ export default function OrgAnalytics() {
         title="People Analytics"
         context={data ? <>{data.scope.companyLabel} · {data.scope.period.label} ({dLabel(data.scope.period.from)} – {dLabelLong(data.scope.period.to)}) · updated {new Date(data.generatedAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</> : 'Workforce, attrition, attendance, performance, hiring and cost — in one place'}
         actions={<>
+          {data?.access.manage && <Button size="sm" onClick={() => setManaging(true)}>Manage access</Button>}
           <Button size="sm" onClick={() => load(f, true)} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</Button>
-          <Button size="sm" variant="primary" icon={<IconDownload size={14} />} disabled={!data} onClick={() => data && exportWorkbook(data, ai.res)}>Download Excel</Button>
+          {data?.access.export !== false && <DownloadMenu options={downloads} step={pdf.step} disabled={!data || busy} />}
         </>}
       />
 
+      {data?.access.via === 'grant' && (
+        <div style={{ marginTop: S.md }}>
+          <Notice t="info" title="Your view of People Analytics">
+            {data.access.limitLabel ? <>You see <strong>{data.access.limitLabel}</strong>. </> : 'You see every company, location and department. '}
+            {data.access.people ? '' : 'Lists of named people are hidden. '}
+            {data.access.until ? `This access ends on ${dLabelLong(data.access.until)}. ` : ''}
+            HR set this; ask them if you need more.
+          </Notice>
+        </div>
+      )}
+
       <FilterBar f={f} set={set} data={data} />
 
-      <Tabs tabs={tabs} value={tab} onChange={pick} />
+      <Tabs tabs={tabs} value={view} onChange={pick} />
 
       {err && <div style={{ marginBottom: S.lg }}><Notice t="critical" title="Analytics could not load">{err}</Notice></div>}
 
       {!data && busy && <Loading />}
 
       {data && (
-        <div style={{ opacity: busy ? 0.55 : 1, transition: 'opacity .2s', pointerEvents: busy ? 'none' : undefined }} className="ez-fade" key={tab}>
-          {note && <AiNote note={note} />}
-          {tab === 'pulse' && <PulseTab d={data} go={pick} ai={ai} />}
-          {tab === 'workforce' && <WorkforceTab d={data} />}
-          {tab === 'attrition' && <AttritionTab d={data} />}
-          {tab === 'attendance' && <AttendanceTab d={data} />}
-          {tab === 'performance' && <PerformanceTab d={data} cycle={f.cycle} setCycle={c => set({ cycle: c })} />}
-          {tab === 'hiring' && <HiringTab d={data} />}
-          {tab === 'cost' && <CostTab d={data} />}
+        <div style={{ opacity: busy ? 0.55 : 1, transition: 'opacity .2s', pointerEvents: busy ? 'none' : undefined }} className="ez-fade" key={view}>
+          <TabBody t={view} d={data} ai={ai} go={pick} cycle={f.cycle} setCycle={c => set({ cycle: c })} />
         </div>
       )}
+      {pdf.stage}
+      {managing && <AccessManager onClose={() => setManaging(false)} />}
     </Page>
+  )
+}
+
+/** One tab, with its AI note on top — the same on the page and in the PDF. */
+function TabBody({ t, d, ai, go, cycle, setCycle }: { t: Tab; d: Data; ai: AiState; go: (t: Tab) => void; cycle: string; setCycle: (c: string) => void }) {
+  const note = t !== 'pulse' ? ai.res?.brief?.notes.find(n => n.area === t) : undefined
+  return (
+    <>
+      {note && <AiNote note={note} />}
+      {t === 'pulse' && <PulseTab d={d} go={go} ai={ai} />}
+      {t === 'workforce' && <WorkforceTab d={d} />}
+      {t === 'attrition' && <AttritionTab d={d} />}
+      {t === 'attendance' && <AttendanceTab d={d} />}
+      {t === 'performance' && <PerformanceTab d={d} cycle={cycle} setCycle={setCycle} />}
+      {t === 'hiring' && <HiringTab d={d} />}
+      {t === 'cost' && <CostTab d={d} />}
+    </>
   )
 }
 
@@ -170,7 +222,7 @@ function FilterBar({ f, set, data }: { f: Filters; set: (p: Partial<Filters>) =>
       <span style={{ width: 1, height: 24, background: C.line, margin: '0 4px' }} />
       {opt && (opt.companies.length > 1 || opt.canPickGroup) && (
         <Select aria-label="Company" value={f.company} onChange={e => set({ company: e.target.value, department: '', location: '' })} style={sel}>
-          {opt.canPickGroup && <option value="">All group companies</option>}
+          {opt.canPickGroup && <option value="">{opt.groupLabel || 'All group companies'}</option>}
           {opt.companies.map(c => <option key={c.id} value={c.id}>{c.label}</option>)}
         </Select>
       )}
@@ -233,18 +285,22 @@ function PulseTab({ d, go, ai }: { d: Data; go: (t: Tab) => void; ai: AiState })
             <MiniTable head={['Measure', 'Last month', 'This month', 'Change']} align={['left', 'right', 'right', 'right']}
               rows={d.pulse.changes.map(c => [c.label, fmt(c.before, c.fmt), <strong key="n" style={{ color: C.ink }}>{fmt(c.now, c.fmt)}</strong>, <DeltaChip key="d" now={c.now} before={c.before} f={c.fmt} good={c.good} />])} />
           </ChartCard>
-          <ChartCard title="Headcount, last 12 months" sub="People on the books at each month end.">
-            <LineChart labels={flow.map(x => mLabel(x.month))} series={[{ key: 'hc', label: 'Headcount', values: flow.map(x => x.closing) }]} area height={170} zeroBase={false} />
-          </ChartCard>
+          {flow.length > 0 && (
+            <ChartCard title="Headcount, last 12 months" sub="People on the books at each month end.">
+              <LineChart labels={flow.map(x => mLabel(x.month))} series={[{ key: 'hc', label: 'Headcount', values: flow.map(x => x.closing) }]} area height={170} zeroBase={false} />
+            </ChartCard>
+          )}
         </div>
       </Grid>
       <Grid min={380}>
-        <ChartCard title="Joiners and exits" sub="Each month's movement in and out.">
-          <ColumnChart labels={flow.map(x => mLabel(x.month))} series={[
-            { key: 'j', label: 'Joiners', values: flow.map(x => x.joiners) },
-            { key: 'x', label: 'Exits', values: flow.map(x => x.exits) },
-          ]} emptyText="No joiners or exits in the last 12 months." />
-        </ChartCard>
+        {flow.length > 0 && (
+          <ChartCard title="Joiners and exits" sub="Each month's movement in and out.">
+            <ColumnChart labels={flow.map(x => mLabel(x.month))} series={[
+              { key: 'j', label: 'Joiners', values: flow.map(x => x.joiners) },
+              { key: 'x', label: 'Exits', values: flow.map(x => x.exits) },
+            ]} emptyText="No joiners or exits in the last 12 months." />
+          </ChartCard>
+        )}
         <ModuleSnapshot d={d} go={go} />
       </Grid>
     </>
@@ -252,13 +308,14 @@ function PulseTab({ d, go, ai }: { d: Data; go: (t: Tab) => void; ai: AiState })
 }
 
 function ModuleSnapshot({ d, go }: { d: Data; go: (t: Tab) => void }) {
-  const rows: { label: string; value: string; note: string; meter: number | null; tab: Tab }[] = [
+  const rows = ([
     { label: 'On-time punch-ins', value: fmt(d.attendance.summary.onTimeRate, 'pct'), note: `${d.attendance.coverage.tracked} of ${d.attendance.coverage.headcount} people tracked`, meter: d.attendance.summary.onTimeRate, tab: 'attendance' },
     { label: 'Review cycle complete', value: fmt(d.performance.completion, 'pct'), note: d.performance.cycle ? `${d.performance.cycle} · ${d.performance.enrolled} enrolled` : 'No cycle running', meter: d.performance.completion, tab: 'performance' },
     { label: 'Learning completion', value: fmt(d.learning.completion, 'pct'), note: `${d.learning.completed} of ${d.learning.enrolments} enrolments · ${d.learning.overdue} overdue`, meter: d.learning.completion, tab: 'performance' },
     { label: 'Offer acceptance', value: fmt(d.hiring.offers.acceptance, 'pct'), note: `${d.hiring.offers.accepted} accepted of ${d.hiring.offers.accepted + d.hiring.offers.backout + d.hiring.offers.declined} decided`, meter: d.hiring.offers.acceptance, tab: 'hiring' },
     { label: 'Regularisations approved', value: fmt(d.attendance.regularisation.approvalRate, 'pct'), note: `${d.attendance.regularisation.pending} pending of ${d.attendance.regularisation.total}`, meter: d.attendance.regularisation.approvalRate, tab: 'attendance' },
-  ]
+  ] as { label: string; value: string; note: string; meter: number | null; tab: Tab }[]).filter(r => !d.access.tabs || d.access.tabs.includes(r.tab))
+  if (!rows.length) return null
   return (
     <ChartCard title="Across the modules" sub="One line per module — click to open it.">
       <div style={{ display: 'grid', gap: S.md }}>
@@ -722,6 +779,14 @@ async function exportWorkbook(d: Data, ai: AiBriefResponse | null) {
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   const add = (name: string, rows: Record<string, unknown>[]) => { if (rows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name.slice(0, 31)) }
+  const sc = d.scope
+  add('About', [
+    { Item: 'Report', Value: 'People Analytics' },
+    { Item: 'Scope', Value: [sc.companyLabel, d.access.limitLabel, sc.department, sc.location, sc.type].filter(Boolean).join(' · ') },
+    { Item: 'Period', Value: `${sc.period.label} (${sc.period.from} to ${sc.period.to})` },
+    { Item: 'Downloaded', Value: bylineOf(d.access.viewer) },
+    { Item: 'Note', Value: 'Contains employee information — share only with people who may see it.' },
+  ])
   add('Summary', d.pulse.kpis.map(k => ({ Measure: k.label, Value: k.value, Previous: k.prev ?? '', Note: k.sub || '' })))
   const b = ai?.brief
   if (b) {
@@ -741,7 +806,16 @@ async function exportWorkbook(d: Data, ai: AiBriefResponse | null) {
   if (d.access.people) {
     add('Flight risk', d.attrition.risk.map(r => ({ Employee: r.name, Code: r.code, Department: r.department, Level: r.level, Score: r.score, Reasons: r.signals.map(s => s.label).join('; ') })))
     add('Probation overdue', d.workforce.probation.overdue.map(p => ({ Employee: p.name, Code: p.code, Designation: p.designation, Department: p.department })))
+    add('Confirmations due', d.workforce.probation.dueSoon.map(p => ({ Employee: p.name, Code: p.code, Designation: p.designation, Department: p.department })))
+    add('Serving notice', d.attrition.pipeline.map(p => ({ Employee: p.name, Department: p.department, Stage: p.stage, 'Last day': p.lwd, Regrettable: p.regrettable ? 'Yes' : '' })))
+    add('Recent exits', d.attrition.recentExits.map(x => ({ Employee: x.name, 'Last day': x.lwd, 'Tenure (yrs)': x.tenureYears, Type: x.kind, Reason: x.reason })))
+    add('Late marks', d.attendance.lateList.map(x => ({ Employee: x.name, Code: x.code, Department: x.department, 'Late marks': x.late, 'Days punched': x.days })))
+    add('Short absences', d.leave.bradford.map(b => ({ Employee: b.name, Code: b.code, Department: b.department, Spells: b.spells, Days: b.days, 'Bradford score': b.score })))
+    add('No leave 90 days', d.leave.noLeave90.people.map(p => ({ Employee: p.name, Code: p.code, Department: p.department, 'Earned leave available': p.balance })))
+    add('Manager ratings', d.performance.managerSkew.map(m => ({ Manager: m.name, Rated: m.rated, Average: m.avg, 'Against company': m.diff })))
   }
+  add('Oldest MRFs', d.hiring.oldestMrfs.map(m => ({ Role: m.title, MRF: m.number, Department: m.department, Openings: m.openings, 'Days open': m.days })))
+  add('Joining in 30 days', d.hiring.joiningSoon.map(j => ({ Name: j.name, Designation: j.designation, Department: j.department, Joins: j.doj })))
   add('Attendance by dept', d.attendance.byDepartment.map(x => ({ Department: x.label, Tracked: x.tracked, 'On time %': x.onTimeRate, 'Avg hours': x.avgHours, 'Missed punches': x.missPunch })))
   add('Leave by type', d.leave.byType.map(x => ({ 'Leave type': x.label, Days: x.days, Spells: x.spells })))
   add('Ratings', d.performance.distribution.map(x => ({ Rating: x.label, People: x.value, 'Share %': x.share, 'Reference %': x.reference })))

@@ -10,9 +10,10 @@ import { C, F, W, R, S, E, eyebrow, numeric, tone } from '@/lib/ui'
 import { api } from '@/lib/ess/api'
 import type { MyAnalytics } from '@/lib/analytics/types'
 import { fmt, inr, clockOf, mLabel, dLabel, dLabelLong } from '@/lib/analytics/format'
-import { ChartCard, Grid, Figure, Figures, ColumnChart, LineChart, Segmented, DayCalendar, DayLegend, Meter, MiniTable, Pill, EmptyChart } from './charts'
-import { AiBriefCard, Findings, useAiBrief, useFindingsMode } from './AiBrief'
+import { ChartCard, Grid, Figure, Figures, ColumnChart, LineChart, Segmented, DayCalendar, DayLegend, Meter, MiniTable, Pill, EmptyChart, DAY } from './charts'
+import { AiBriefCard, Findings, useAiBrief, useFindingsMode, type AiState } from './AiBrief'
 import type { AiBriefResponse } from '@/lib/analytics/ai/types'
+import { usePdfExport, DownloadMenu, bylineOf, istDay } from './export'
 
 /** Where a finding's click lands on this page. */
 const SECTION: Record<string, string> = { attendance: 'me-attendance', leave: 'me-leave', pay: 'me-pay', performance: 'me-performance', learning: 'me-learning', recognition: 'me-milestones' }
@@ -34,10 +35,35 @@ export default function MyInsights({ employeeId }: { employeeId: string }) {
     d ? `${employeeId}|${d.generatedAt}` : '',
   )
   const [mode, setMode] = useFindingsMode(!!ai.res?.brief?.findings.length)
+  const pdf = usePdfExport()
 
   if (err) return <EmptyChart text={err} />
   if (!d) return <Skeleton />
 
+  const downloads = [
+    {
+      key: 'pdf', label: 'PDF', hint: 'This page, the way it looks here',
+      run: () => pdf.run({
+        title: 'My insights', subtitle: [d.me.name, d.me.designation, d.me.department].filter(Boolean).join(' · '), byline: bylineOf(d.me.name),
+        filename: `EZER-my-insights-${istDay()}.pdf`,
+        sections: [{ key: 'me', node: <MyView d={d} ai={ai} mode={mode} setMode={setMode} /> }],
+      }),
+    },
+    { key: 'xlsx', label: 'Excel workbook', hint: 'Day by day attendance, leave, pay and reviews', run: () => myWorkbook(d, istDay()) },
+  ]
+  return (
+    <div>
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: S.sm }}>
+        <DownloadMenu options={downloads} step={pdf.step} variant="secondary" />
+      </div>
+      <MyView d={d} ai={ai} mode={mode} setMode={setMode} />
+      {pdf.stage}
+    </div>
+  )
+}
+
+/** The page itself — drawn on screen and, unchanged, in the PDF. */
+function MyView({ d, ai, mode, setMode }: { d: MyAnalytics; ai: AiState; mode: 'ai' | 'rules'; setMode: (m: 'ai' | 'rules') => void }) {
   const a = d.attendance
   const first = d.me.name.split(' ')[0]
   const inBy = new Map(a.days.map(x => [x.date, x]))
@@ -92,7 +118,7 @@ export default function MyInsights({ employeeId }: { employeeId: string }) {
           {d.leave.upcoming.length > 0 && <>
             <div style={{ ...eyebrow, margin: `${S.md}px 0 6px` }}>Coming up</div>
             <MiniTable head={['Leave', 'Dates', 'Days', 'Status']} align={['left', 'left', 'right', 'left']}
-              rows={d.leave.upcoming.slice(0, 5).map(u => [u.type, `${dLabel(u.from)} – ${dLabel(u.to)}`, fmt(u.days, 'days'), <Pill key="s" t={u.status === 'APPROVED' ? 'positive' : 'warning'}>{u.status === 'APPROVED' ? 'Approved' : 'Pending'}</Pill>])} />
+              rows={d.leave.upcoming.map(u => [u.type, `${dLabel(u.from)} – ${dLabel(u.to)}`, fmt(u.days, 'days'), <Pill key="s" t={u.status === 'APPROVED' ? 'positive' : 'warning'}>{u.status === 'APPROVED' ? 'Approved' : 'Pending'}</Pill>])} />
           </>}
         </ChartCard>
       </Grid>
@@ -198,4 +224,26 @@ function Skeleton() {
 function minsIst(ts: string): number {
   const d = new Date(Date.parse(ts) + 5.5 * 3600_000)
   return d.getUTCHours() * 60 + d.getUTCMinutes()
+}
+
+async function myWorkbook(d: MyAnalytics, stamp: string) {
+  const XLSX = await import('xlsx')
+  const wb = XLSX.utils.book_new()
+  const add = (name: string, rows: Record<string, unknown>[]) => { if (rows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name.slice(0, 31)) }
+  add('About', [
+    { Item: 'Report', Value: 'My insights' },
+    { Item: 'Employee', Value: d.me.name },
+    { Item: 'Designation', Value: d.me.designation || '' },
+    { Item: 'Department', Value: d.me.department || '' },
+    { Item: 'Downloaded', Value: bylineOf(d.me.name) },
+  ])
+  add('Attendance by month', d.attendance.monthly.map(m => ({ Month: mLabel(m.month), Present: m.present, Late: m.late, Absent: m.absent, Leave: m.leave, 'Working days': m.workdays, 'Usual in': clockOf(m.avgIn), 'Avg hours': m.avgHours, 'On time %': m.onTimeRate })))
+  add('Attendance by day', d.attendance.days.map(x => ({ Date: x.date, Mark: DAY[x.kind]?.label || x.kind, In: x.in ? clockOf(minsIst(x.in)) : '', 'Late minutes': x.late || '', Hours: x.hours ?? '' })))
+  add('Leave balances', d.leave.balances.map(b => ({ Leave: b.label, Available: b.available, Used: b.used, Accrued: b.accrued, 'Above carry-forward': b.lapse ?? '' })))
+  add('Leave coming up', d.leave.upcoming.map(u => ({ Leave: u.type, From: u.from, To: u.to, Days: u.days, Status: u.status })))
+  add('Pay by month', d.pay.months.map(m => ({ Month: mLabel(m.month), Gross: m.gross, Deductions: m.deductions, 'Take-home': m.net })))
+  add('Reviews', d.performance.history.map(h => ({ Cycle: h.name, Rating: h.rating || 'not published', Status: h.status })))
+  add('Learning', d.learning.recent.map(r => ({ Course: r.title, Status: r.status, 'Progress %': r.progress ?? '' })))
+  add('Nudges', d.nudges.map(n => ({ Severity: n.severity, Nudge: n.title, Detail: n.detail })))
+  XLSX.writeFile(wb, `EZER-my-insights-${stamp}.xlsx`)
 }
