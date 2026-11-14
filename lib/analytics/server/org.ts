@@ -28,6 +28,7 @@ import { riskSignals, riskLevel } from '../risk.ts'
 import { orgInsights } from '../insights.ts'
 import type { OrgAnalytics, PersonRef, Kpi, Change, RiskRow } from '../types.ts'
 import { sb, all, inChunks, soft, EMP_COLS, toEmp, floorHalf, leaveYear, one, OPEN_RESIGNATION, STAGE_LABEL } from './db.ts'
+import { allows, allowedPick, limitLabel, type OrgAccess } from '../access.ts'
 
 export interface OrgQuery {
   company?: string | null
@@ -43,7 +44,16 @@ export interface OrgQuery {
  *  enough to see a pattern without making the screen wait. */
 const ATT_MAX_DAYS = 92
 
-export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, access: { cost: boolean; people: boolean }): Promise<OrgAnalytics> {
+/** Named lists ("Show all" on the page) are capped here so one request cannot carry a
+ *  whole company's names; the Excel download gets the same rows. */
+const LIST_MAX = 500
+
+export async function orgAnalytics(grant: Grant, module: Module | null, q0: OrgQuery, acc: OrgAccess | { cost: boolean; people: boolean }): Promise<OrgAnalytics> {
+  const access = { cost: acc.cost, people: acc.people }
+  // A grant (analytics_access) carries its own data limit; a role has none beyond its
+  // company scope. Picks outside the limit are dropped, never honoured.
+  const lim = 'limit' in acc ? acc.limit : null
+  const q: OrgQuery = { ...q0, department: allowedPick(lim?.departments, q0.department), location: allowedPick(lim?.locations, q0.location), type: allowedPick(lim?.types, q0.type) }
   const today = istToday()
   const period = resolvePeriod(q.period || 'last_12', today)
   const prev = previousPeriod(period)
@@ -52,11 +62,22 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
   // ── Scope ────────────────────────────────────────────────────────────────
   const { data: compRows } = await sb.from('companies').select('id, company_code, company_name, short_name').order('company_name')
   const companiesAll = ((compRows || []) as any[]).map(c => ({ id: c.id as string, label: (c.short_name || c.company_code || c.company_name) as string, name: c.company_name as string }))
-  const companiesOk = scopedCompanies(grant, companiesAll, module)
-  const group = canPickGroup(grant, companiesAll, module)
-  const pinned = companyFilter(grant, q.company || null, module)
-  const companyIds = pinned ? [pinned] : companiesOk.map(c => c.id)
-  const companyLabel = pinned ? (companiesAll.find(c => c.id === pinned)?.name || 'Company') : 'All group companies'
+  let companiesOk: typeof companiesAll, group: boolean, pinned: string | null
+  if (lim) {
+    // The grant names its companies (none = all of them); the role's scope does not apply.
+    companiesOk = lim.companies ? companiesAll.filter(c => lim.companies!.includes(c.id)) : companiesAll
+    pinned = q.company && companiesOk.some(c => c.id === q.company) ? q.company : companiesOk.length === 1 ? companiesOk[0].id : null
+    group = companiesOk.length > 1
+  } else {
+    companiesOk = scopedCompanies(grant, companiesAll, module)
+    group = canPickGroup(grant, companiesAll, module)
+    pinned = companyFilter(grant, q.company || null, module)
+  }
+  // An empty list would read as no filter at all; a grant naming no company that exists sees nobody.
+  const companyIds = pinned ? [pinned] : companiesOk.length ? companiesOk.map(c => c.id) : ['00000000-0000-0000-0000-000000000000']
+  const someCompanies = companiesOk.length < companiesAll.length
+  const groupLabel = lim && someCompanies ? `All my companies (${companiesOk.length})` : 'All group companies'
+  const companyLabel = pinned ? (companiesAll.find(c => c.id === pinned)?.name || 'Company') : groupLabel.replace(/^All my/, 'Your')
 
   const [deptRows, locRows, empRows] = await Promise.all([
     all<any>(() => sb.from('departments').select('id, dept_name, company_id').in('company_id', companyIds).order('dept_name') as any, 'departments'),
@@ -69,11 +90,12 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
   const dn = (id: string | null) => (id ? deptName.get(id) || 'Unassigned' : 'Unassigned')
 
   const everyone = empRows.filter(r => r.is_test !== true).map(toEmp)
-  const types = [...new Set(everyone.map(e => e.type).filter(Boolean) as string[])].sort()
+  const types = [...new Set(everyone.map(e => e.type).filter(Boolean) as string[])].filter(t => allows(lim?.types, t)).sort()
   // Department and location filter by NAME: in the group view the same department
   // exists once per company, and "Finance & Accounts" means all of them.
   const ln = (id: string | null) => (id ? locName.get(id) || 'Unassigned' : 'Unassigned')
   const emps = everyone.filter(e =>
+    allows(lim?.departments, dn(e.department_id)) && allows(lim?.locations, ln(e.location_id)) && allows(lim?.types, e.type) &&
     (!q.department || dn(e.department_id) === q.department) &&
     (!q.location || ln(e.location_id) === q.location) &&
     (!q.type || e.type === q.type))
@@ -286,7 +308,7 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
       const e = byId.get(r.employee_id) as EmpLite
       return { ...ref(e), stage: STAGE_LABEL[String(r.status).toUpperCase()] || r.status, lwd: r.final_lwd || r.tentative_lwd || r.proposed_lwd || r.lwd_as_per_policy || null, regrettable: r.is_regrettable ?? null }
     }) : [],
-    recentExits: access.people ? exits.slice().sort((a, b) => String(b.exit).localeCompare(String(a.exit))).slice(0, 25).map(e => ({
+    recentExits: access.people ? exits.slice().sort((a, b) => String(b.exit).localeCompare(String(a.exit))).slice(0, LIST_MAX).map(e => ({
       ...ref(e), lwd: e.exit as string, reason: reasonOf(e)?.label || null,
       tenureYears: e.doj ? round(tenureYears(e.doj, e.exit as string), 1) : null, kind: kindOf(e),
     })) : [],
@@ -334,7 +356,7 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
     weekday: weekdayAll,
     heat,
     byDepartment: deptAtt.map(d => ({ key: d.key, label: d.label, tracked: d.tracked, onTimeRate: d.onTimeRate, avgHours: d.avgHours, missPunch: d.missPunch })),
-    lateList: access.people ? [...lateCount.entries()].filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]).slice(0, 12).map(([id, n]) => ({ ...ref(byId.get(id) as EmpLite), late: n, days: inDays.get(id) || 0 })) : [],
+    lateList: access.people ? [...lateCount.entries()].filter(([, n]) => n >= 3).sort((a, b) => b[1] - a[1]).slice(0, LIST_MAX).map(([id, n]) => ({ ...ref(byId.get(id) as EmpLite), late: n, days: inDays.get(id) || 0 })) : [],
     regularisation: {
       total: regList.length,
       approved: regStatus.get('APPROVED') || 0,
@@ -392,10 +414,10 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
     weekdayStarts: [1, 2, 3, 4, 5, 6].map(w => ({ key: String(w), label: weekdayName(w), value: inPeriod.filter(l => new Date(l.from_date + 'T00:00:00Z').getUTCDay() === w).length })),
     pending: { count: pending.length, olderThan3: pendAge.filter(d => d > 3).length, oldestDays: pendAge.length ? Math.max(...pendAge) : null },
     bradford: access.people ? [...brad.entries()].map(([id, l]) => ({ id, ...bradford(l) })).filter(b => b.score >= 50 && byId.has(b.id))
-      .sort((a, b) => b.score - a.score).slice(0, 10).map(b => ({ ...ref(byId.get(b.id) as EmpLite), spells: b.spells, days: b.days, score: b.score })) : [],
+      .sort((a, b) => b.score - a.score).slice(0, LIST_MAX).map(b => ({ ...ref(byId.get(b.id) as EmpLite), spells: b.spells, days: b.days, score: b.score })) : [],
     noLeave90: {
       count: noLeave.length, of: eligible90.length,
-      people: access.people ? noLeave.map(e => ({ ...ref(e), balance: balByEmp.get(e.id) ?? null })).sort((a, b) => (b.balance ?? -1) - (a.balance ?? -1)).slice(0, 12) : [],
+      people: access.people ? noLeave.map(e => ({ ...ref(e), balance: balByEmp.get(e.id) ?? null })).sort((a, b) => (b.balance ?? -1) - (a.balance ?? -1)).slice(0, LIST_MAX) : [],
     },
     balances: [...balType.entries()].map(([k, v]) => ({ key: k, label: v.label, available: round(v.total, 1), perHead: v.people.size ? round(v.total / v.people.size, 1) : null }))
       .filter(b => b.available > 0).sort((a, b) => b.available - a.available),
@@ -487,13 +509,13 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
   // ════════════════════════════════════════════════════════════════════════
   // HIRING
   // ════════════════════════════════════════════════════════════════════════
-  const mrfIn = (mrfs as any[]).filter(m => (!q.department || dn(m.department_id) === q.department) && (!q.location || ln(m.location_id) === q.location))
+  const mrfIn = (mrfs as any[]).filter(m => allows(lim?.departments, dn(m.department_id)) && allows(lim?.locations, ln(m.location_id)) && (!q.department || dn(m.department_id) === q.department) && (!q.location || ln(m.location_id) === q.location))
   const mrfIds = new Set(mrfIn.map(m => m.id))
   const openMrfs = mrfIn.filter(m => String(m.status).toUpperCase() === 'APPROVED')
   const ageOf = (m: any) => daysBetween(String(m.approved_at || m.created_at).slice(0, 10), today)
   const ageBandOf = (d: number) => (d <= 30 ? '0–30 days' : d <= 60 ? '31–60 days' : d <= 90 ? '61–90 days' : '90+ days')
   const ageCount = countBy(openMrfs, m => ageBandOf(ageOf(m)))
-  const candIn = (cands as any[]).filter(c => (!q.department && !q.location) || (c.mrf_id && mrfIds.has(c.mrf_id)))
+  const candIn = (cands as any[]).filter(c => (!q.department && !q.location && !lim?.departments && !lim?.locations) || (c.mrf_id && mrfIds.has(c.mrf_id)))
   const candPeriod = candIn.filter(c => String(c.applied_date || c.created_at).slice(0, 10) >= period.from && String(c.applied_date || c.created_at).slice(0, 10) <= period.to)
   const offerMade = (c: any) => !!c.offer_sent_at || ['offer sent', 'joined'].includes(String(c.stage).toLowerCase()) || !!c.offer_response
   const srcMap = new Map<string, { candidates: number; offers: number }>()
@@ -514,7 +536,8 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
     sources: [...srcMap.entries()].map(([k, v]) => ({ key: k, label: k, candidates: v.candidates, offers: v.offers, rate: pct(v.offers, v.candidates) })).sort((a, b) => b.candidates - a.candidates),
     offers: { made: offers.length, accepted: resp.get('ACCEPTED') || 0, backout: resp.get('BACKOUT') || 0, declined: resp.get('DECLINED') || 0, acceptance: pct(resp.get('ACCEPTED') || 0, decided) },
     timeToOffer: median(tto),
-    joiningSoon: (joiners as any[]).filter(j => !['REJECTED', 'CANCELLED'].includes(String(j.status).toUpperCase()) && (!q.department || dn(j.department_id) === q.department || j.department === q.department) && (!q.location || ln(j.location_id) === q.location))
+    joiningSoon: (joiners as any[]).filter(j => !['REJECTED', 'CANCELLED'].includes(String(j.status).toUpperCase()) &&
+      (allows(lim?.departments, dn(j.department_id)) || allows(lim?.departments, j.department)) && allows(lim?.locations, ln(j.location_id)) && (!q.department || dn(j.department_id) === q.department || j.department === q.department) && (!q.location || ln(j.location_id) === q.location))
       .map(j => ({ name: access.people ? j.full_name : 'New joiner', designation: j.designation, doj: j.date_of_joining, department: j.department_id ? dn(j.department_id) : (j.department || null) })),
     monthlyApplicants: trend.map(m => ({ month: m, value: candIn.filter(c => String(c.applied_date || c.created_at).slice(0, 7) === m).length })),
   }
@@ -562,12 +585,17 @@ export async function orgAnalytics(grant: Grant, module: Module, q: OrgQuery, ac
     },
     filters: {
       companies: companiesOk.map(c => ({ id: c.id, label: c.name })),
-      departments: uniqueNames(deptRows.map(d => d.dept_name)),
-      locations: uniqueNames(locRows.map(l => l.location_name)),
+      departments: uniqueNames(deptRows.map(d => d.dept_name)).filter(o => allows(lim?.departments, o.label)),
+      locations: uniqueNames(locRows.map(l => l.location_name)).filter(o => allows(lim?.locations, o.label)),
       types,
       canPickGroup: group,
+      groupLabel,
     },
-    access,
+    access: {
+      ...access,
+      ...('via' in acc ? { via: acc.via, export: acc.export, tabs: [...acc.tabs], until: acc.until } : {}),
+      limitLabel: limitLabel(lim && { ...lim, companies: lim.companies && someCompanies ? lim.companies : null }, id => coName.get(id)),
+    },
     workforce, attrition, attendance, leave, performance, learning, hiring, cost,
   }
   const insights = orgInsights(base)

@@ -4222,7 +4222,11 @@ export default function EmployeePortal({ employeeId, adminMode, onExit, urlSync,
   // returns true for everything while rms_config.enforce_module_access is off, which
   // is right for the dashboard's roll-out and wrong here: a portal must never offer
   // a module its owner was not granted.
+  // Insights is left out: in ESS, People Analytics lives in the Insights section
+  // (Insights → Organisation), for role holders and analytics grants alike — a second
+  // way in from the Manage bar only repeated it.
   const adminGroups = ADMIN_NAV_GROUPS
+    .filter(g => g.group !== 'Insights')
     .map(g => ({ group: g.group, items: g.items.filter(i => i.roles
       ? roleEntryOpen(i, essMenu.roles.map(r => r.code), !!essMenu.super_admin)   // role-gated (Help → TDS Calculator)
       : essMenu.super_admin || (i.anyModule || (i.module ? [i.module] : [])).some(m => atLeast(essMenu.modules[m] as AccessLevel, 'VIEW'))) }))
