@@ -26,6 +26,18 @@
     {
       "path": "/api/cron/lms-daily",
       "schedule": "30 0 * * *"
+    },
+    {
+      "path": "/api/cron/analytics-digest?kind=monday",
+      "schedule": "30 3 * * 1"
+    },
+    {
+      "path": "/api/cron/analytics-digest?kind=monday",
+      "schedule": "0 4 * * 1"
+    },
+    {
+      "path": "/api/cron/analytics-digest?kind=monthly",
+      "schedule": "30 4 1 * *"
     }
   ]
 }

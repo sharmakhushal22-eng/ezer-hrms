@@ -19,6 +19,7 @@ import { C, F, W, R, S, E, Z, VIZ, seriesColour, numeric, eyebrow, tone, type To
 import { fmt as format, delta } from '@/lib/analytics/format'
 import type { Fmt, Kpi, Insight, DayKind } from '@/lib/analytics/types'
 import { usePrinting, nodeText, PRINT_ROWS } from './printing'
+import { WhyButton } from './why'
 
 // ───────────────────────────────────────────────────────────────────────────
 // Plumbing
@@ -119,8 +120,10 @@ export function EmptyChart({ text = 'Nothing to show for this selection yet.', h
 // Cards and figures
 // ───────────────────────────────────────────────────────────────────────────
 
-export function ChartCard({ title, sub, right, children, style, id }: {
+export function ChartCard({ title, sub, right, children, style, id, why }: {
   title: string; sub?: React.ReactNode; right?: React.ReactNode; children: React.ReactNode; style?: React.CSSProperties; id?: string
+  /** A chart id from lib/analytics/topics.ts CHARTS — shows "Why?" where the page can answer. */
+  why?: string
 }) {
   return (
     <section id={id} style={{
@@ -132,7 +135,7 @@ export function ChartCard({ title, sub, right, children, style, id }: {
           <h3 style={{ margin: 0, fontSize: F.lead, fontWeight: W.semi, color: C.ink, letterSpacing: '-.01em' }}>{title}</h3>
           {sub != null && <div style={{ marginTop: 3, fontSize: F.tiny, color: C.muted, lineHeight: 1.45 }}>{sub}</div>}
         </div>
-        {right}
+        {(right || why) && <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexShrink: 0 }}>{right}{why && <WhyButton topic={`c:${why}`} />}</div>}
       </header>
       <div style={{ minWidth: 0, flex: 1 }}>{children}</div>
     </section>
@@ -195,6 +198,7 @@ export function KpiTile({ k, onClick }: { k: Kpi; onClick?: () => void }) {
         {k.prev !== undefined && <DeltaChip now={k.value} before={k.prev} f={k.fmt} good={k.good} label="Against the previous period" />}
         {k.sub && <span style={{ fontSize: F.tiny, color: C.muted }}>{k.sub}</span>}
       </div>
+      <div style={{ marginTop: 'auto', display: 'flex' }}><WhyButton topic={`k:${k.key}`} /></div>
     </div>
   )
 }
@@ -235,11 +239,13 @@ const SEV: Record<Insight['severity'], { t: Tone; label: string; glyph: string }
 
 /** A finding. Rule findings carry a title and a detail; AI findings add the next step
  *  and the fact lines they rest on ("Based on"), which open without following the card. */
-export function InsightCard({ i, onOpen, areaLabel, action, evidence }: {
+export function InsightCard({ i, onOpen, areaLabel, action, evidence, why }: {
   i: Pick<Insight, 'severity' | 'title' | 'detail'>; onOpen?: () => void; areaLabel?: string; action?: string | null; evidence?: string[]
+  /** A "Why?" topic (lib/analytics/topics.ts), shown where the page can answer. */
+  why?: string
 }) {
   const s = SEV[i.severity], k = tone(s.t)
-  const [why, setWhy] = React.useState(false)
+  const [figs, setFigs] = React.useState(false)
   return (
     <div onClick={onOpen} className={onOpen ? 'ez-lift' : undefined} style={{
       display: 'flex', gap: S.md, padding: '12px 14px', background: C.surface, border: `1px solid ${C.line}`,
@@ -253,6 +259,7 @@ export function InsightCard({ i, onOpen, areaLabel, action, evidence }: {
         <div style={{ display: 'flex', gap: 8, alignItems: 'baseline', flexWrap: 'wrap' }}>
           <span style={{ fontSize: F.micro, fontWeight: W.bold, color: k.fg, textTransform: 'uppercase', letterSpacing: '.06em' }}>{s.label}</span>
           {areaLabel && <span style={{ fontSize: F.micro, color: C.faint }}>· {areaLabel}</span>}
+          {why && <span style={{ marginLeft: 'auto' }}><WhyButton topic={why} /></span>}
         </div>
         <div style={{ fontSize: F.small, fontWeight: W.semi, color: C.ink, marginTop: 2, lineHeight: 1.4 }}>{i.title}</div>
         {i.detail && <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 2, lineHeight: 1.5 }}>{i.detail}</div>}
@@ -263,11 +270,11 @@ export function InsightCard({ i, onOpen, areaLabel, action, evidence }: {
         )}
         {evidence && evidence.length > 0 && (
           <div style={{ marginTop: 6 }}>
-            <button type="button" aria-expanded={why} onClick={e => { e.stopPropagation(); setWhy(w => !w) }}
+            <button type="button" aria-expanded={figs} onClick={e => { e.stopPropagation(); setFigs(w => !w) }}
               style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontFamily: 'inherit', fontSize: F.micro, fontWeight: W.semi, color: C.brand }}>
-              {why ? 'Hide the figures' : `Based on ${evidence.length} figure${evidence.length === 1 ? '' : 's'}`} {why ? '▴' : '▾'}
+              {figs ? 'Hide the figures' : `Based on ${evidence.length} figure${evidence.length === 1 ? '' : 's'}`} {figs ? '▴' : '▾'}
             </button>
-            {why && (
+            {figs && (
               <ul onClick={e => e.stopPropagation()} style={{ margin: '6px 0 0', padding: '8px 10px 8px 24px', background: C.sunken, borderRadius: R.sm, display: 'grid', gap: 4, cursor: 'default' }}>
                 {evidence.map((x, n) => <li key={n} style={{ fontSize: F.micro, color: C.inkSoft, lineHeight: 1.5 }}>{x}</li>)}
               </ul>

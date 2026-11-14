@@ -12,8 +12,10 @@ import type { TeamAnalytics } from '@/lib/analytics/types'
 import { fmt, clockOf, mLabel, dLabel, dLabelLong } from '@/lib/analytics/format'
 import { ChartCard, Grid, Figure, Figures, ColumnChart, ScoreRing, TeamDayGrid, DayLegend, Meter, MiniTable, Pill, EmptyChart, DAY } from './charts'
 import { RiskTable } from './RiskTable'
-import { AiBriefCard, Findings, useAiBrief, useFindingsMode, type AiState } from './AiBrief'
-import type { AiBriefResponse } from '@/lib/analytics/ai/types'
+import { Findings, useWritten, type WrittenState } from './Written'
+import { MondayNoteCard, MondayEmailToggle } from './MondayNote'
+import type { AiResponse } from '@/lib/analytics/ai/types'
+import type { MondayNote } from '@/lib/analytics/briefs'
 import { usePdfExport, DownloadMenu, bylineOf, istDay } from './export'
 
 /** Where a finding's click lands on this page. */
@@ -38,13 +40,12 @@ export default function TeamInsights({ employeeId }: { employeeId: string }) {
     return () => { live = false }
   }, [employeeId, scope])
 
-  // The AI read of the team, once the team has loaded. Names never reach the model —
-  // the server swaps them for P1, P2… and back (lib/analytics/ai/facts.ts).
-  const ai = useAiBrief(
-    refresh => api(`/api/analytics/team/ai?scope=${scope}${refresh ? '&refresh=1' : ''}`, employeeId) as Promise<AiBriefResponse>,
+  // The Monday note, once the team has loaded. Names never reach the model — the server
+  // swaps them for P1, P2… and back (lib/analytics/ai/facts.ts).
+  const note = useWritten<MondayNote>(
+    refresh => api(`/api/analytics/team/note?scope=${scope}${refresh ? '&refresh=1' : ''}`, employeeId) as Promise<AiResponse<MondayNote>>,
     d && d.members.length ? `${employeeId}|${d.scope}|${d.generatedAt}` : '',
   )
-  const [mode, setMode] = useFindingsMode(!!ai.res?.brief?.findings.length)
   const pdf = usePdfExport()
 
   if (err) return <EmptyChart text={err} />
@@ -58,10 +59,10 @@ export default function TeamInsights({ employeeId }: { employeeId: string }) {
       run: () => pdf.run({
         title: `${who} — insights`, subtitle: `${d.manager.name} · ${d.members.length} people · ${mLabel(d.month)}`, byline: bylineOf(d.manager.name),
         filename: `EZER-${d.scope === 'DEPT' ? 'department' : 'team'}-insights-${istDay()}.pdf`,
-        sections: [{ key: 'team', node: <TeamView d={d} ai={ai} mode={mode} setMode={setMode} today={today} /> }],
+        sections: [{ key: 'team', node: <TeamView d={d} note={note} today={today} /> }],
       }),
     },
-    { key: 'xlsx', label: 'Excel workbook', hint: 'Every person, the attendance grid and the lists', run: () => teamWorkbook(d, ai.res, who, istDay()) },
+    { key: 'xlsx', label: 'Excel workbook', hint: 'Every person, the attendance grid and the lists', run: () => teamWorkbook(d, note.res?.result || null, who, istDay()) },
   ]
   return (
     <div className="ez-fade" style={{ opacity: busy ? 0.55 : 1, transition: 'opacity .2s' }}>
@@ -79,17 +80,19 @@ export default function TeamInsights({ employeeId }: { employeeId: string }) {
         {d.members.length > 0 && <DownloadMenu options={downloads} step={pdf.step} variant="secondary" />}
       </div>
 
-      <TeamView d={d} ai={ai} mode={mode} setMode={setMode} today={today} />
+      <TeamView d={d} note={note} today={today} employeeId={employeeId} />
       {pdf.stage}
     </div>
   )
 }
 
 /** The page below the scope switch — drawn on screen and, unchanged, in the PDF. */
-function TeamView({ d, ai, mode, setMode, today }: { d: Data; ai: AiState; mode: 'ai' | 'rules'; setMode: (m: 'ai' | 'rules') => void; today: string }) {
+function TeamView({ d, note, today, employeeId }: { d: Data; note: WrittenState<MondayNote>; today: string; employeeId?: string }) {
+  const day = today || istDay()
   return (
     <div>
       {d.members.length === 0 ? <EmptyChart text="Nobody reports to you in this view yet." /> : <>
+        <MondayNoteCard d={d} state={note} today={day} extra={employeeId ? <MondayEmailToggle employeeId={employeeId} /> : null} />
         <Grid min={320}>
           <ChartCard title="Team health" sub="Average of the parts below that have enough data.">
             <div style={{ display: 'flex', gap: S.lg, alignItems: 'center', flexWrap: 'wrap' }}>
@@ -124,9 +127,8 @@ function TeamView({ d, ai, mode, setMode, today }: { d: Data; ai: AiState; mode:
           </ChartCard>
         </Grid>
 
-        <AiBriefCard state={ai} audience="team" />
         <div style={{ marginBottom: S.lg }}>
-          <Findings state={ai} rules={d.insights} mode={mode} setMode={setMode} grid onOpen={jump} areaLabel={a => AREA[a]}
+          <Findings rules={d.insights} grid onOpen={jump} areaLabel={a => AREA[a]}
             empty="Nothing in your team needs attention right now." />
         </div>
 
@@ -170,7 +172,7 @@ function TeamView({ d, ai, mode, setMode, today }: { d: Data; ai: AiState; mode:
   )
 }
 
-async function teamWorkbook(d: Data, ai: AiBriefResponse | null, who: string, stamp: string) {
+async function teamWorkbook(d: Data, n: MondayNote | null, who: string, stamp: string) {
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   const add = (name: string, rows: Record<string, unknown>[]) => { if (rows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name.slice(0, 31)) }
@@ -192,9 +194,11 @@ async function teamWorkbook(d: Data, ai: AiBriefResponse | null, who: string, st
   add('Needs a conversation', d.signals.map(r => ({ Name: r.name, Code: r.code, Level: r.level, Score: r.score, Reasons: r.signals.map(s => `${s.label} — ${s.detail}`).join('; ') })))
   add('Out this week', d.outThisWeek.map(o => ({ Name: o.name, Leave: o.type, From: o.from, To: o.to, Days: o.days })))
   add('Coming up', d.upcoming.map(u => ({ Date: u.date, Name: u.name, What: u.note })))
-  const b = ai?.brief
-  add('Findings', b?.findings.length
-    ? b.findings.map(f => ({ Source: 'AI read', Severity: f.severity, Finding: f.title, Detail: f.detail, 'Next step': f.action || '' }))
-    : d.insights.map(i => ({ Source: 'Rule check', Severity: i.severity, Finding: i.title, Detail: i.detail, 'Next step': '' })))
+  if (n) add('Monday note', [
+    { Part: 'Summary', Text: n.summary },
+    { Part: 'Start with', Text: n.focus },
+    ...n.openers.map(o => ({ Part: `Opener — ${o.name}`, Text: `${o.opener} (signs: ${o.signals.join(', ')})` })),
+  ])
+  add('Findings', d.insights.map(i => ({ Severity: i.severity, Finding: i.title, Detail: i.detail })))
   XLSX.writeFile(wb, `EZER-${d.scope === 'DEPT' ? 'department' : 'team'}-insights-${stamp}.xlsx`)
 }

@@ -5,7 +5,6 @@
 // draws). It answers with findings that cite those facts by id, and the server
 // throws away any sentence carrying a number that is not on the sheet.
 
-import type { Severity } from '../types.ts'
 
 export type AiAudience = 'org' | 'team' | 'me'
 
@@ -30,35 +29,14 @@ export interface FactPack {
   aliases: Record<string, string>
 }
 
-export interface AiFinding {
-  id: string
-  severity: Severity
-  area: string
-  title: string
-  detail: string
-  action: string | null
-  /** The fact lines this finding rests on, names restored. */
-  evidence: string[]
-}
-
-export interface AiNote { area: string; text: string; evidence: string[] }
-
-export interface AiBrief {
-  headline: string | null
-  summary: string | null
-  findings: AiFinding[]
-  notes: AiNote[]
-  model: string
-  generatedAt: string
-  /** Sentences the model wrote that failed the number check and were not shown. */
-  dropped: number
-}
-
 export type AiStatus = 'ok' | 'off' | 'busy' | 'empty' | 'limited'
 
-export interface AiBriefResponse {
+/** What every written-piece route returns. `result` is always there: the AI's version
+ *  when it answered and passed the number check, else the template version
+ *  (result.source says which). `status` says why, for the small print. */
+export interface AiResponse<T> {
   status: AiStatus
-  brief: AiBrief | null
+  result: T
   /** Served from the cache rather than written for this request. */
   cached: boolean
   /** Written on earlier figures — the page may have moved since. */

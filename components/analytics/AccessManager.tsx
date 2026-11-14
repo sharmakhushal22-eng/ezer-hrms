@@ -30,7 +30,7 @@ interface Manage {
   options: { companies: { id: string; label: string }[]; allCompanies: boolean; locations: Opt[]; departments: Opt[]; types: string[] }
   can: { pay: boolean; names: boolean }
 }
-interface Person { id: string; name: string; code: string | null; designation: string | null; company: string | null }
+export interface Person { id: string; name: string; code: string | null; designation: string | null; company: string | null }
 
 /** null = every value (including ones added later); [] = none picked yet. */
 type Pick = string[] | null
@@ -50,7 +50,7 @@ const emptyForm = (m: Manage): Form => ({
   until: '', reason: '', editing: false,
 })
 
-async function call(path: string, init?: RequestInit) {
+export async function call(path: string, init?: RequestInit) {
   const headers = new Headers((await authHeaders()) as Record<string, string>)
   headers.set('Content-Type', 'application/json')
   const res = await fetch(path, { ...init, headers, cache: 'no-store' })
@@ -310,7 +310,7 @@ function Toggle({ on, set, label, hint, disabled }: { on: boolean; set: (v: bool
   )
 }
 
-function PersonChip({ p, onRemove }: { p: Person; onRemove?: () => void }) {
+export function PersonChip({ p, onRemove }: { p: Person; onRemove?: () => void }) {
   return (
     <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, padding: '4px 6px 4px 10px', borderRadius: R.pill, background: C.sunken, border: `1px solid ${C.line}`, fontSize: F.tiny }}>
       <strong style={{ color: C.ink, fontWeight: W.semi }}>{p.name}</strong>
@@ -320,7 +320,7 @@ function PersonChip({ p, onRemove }: { p: Person; onRemove?: () => void }) {
   )
 }
 
-function PeoplePicker({ value, onChange, me }: { value: Person[]; onChange: (p: Person[]) => void; me: string | null }) {
+export function PeoplePicker({ value, onChange, me }: { value: Person[]; onChange: (p: Person[]) => void; me: string | null }) {
   const [q, setQ] = React.useState('')
   // Answers are kept with the term they answer, so a stale one is never shown.
   const [found, setFound] = React.useState<{ term: string; people: Person[] } | null>(null)

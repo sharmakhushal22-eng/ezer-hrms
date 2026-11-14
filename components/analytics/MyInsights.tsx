@@ -11,8 +11,10 @@ import { api } from '@/lib/ess/api'
 import type { MyAnalytics } from '@/lib/analytics/types'
 import { fmt, inr, clockOf, mLabel, dLabel, dLabelLong } from '@/lib/analytics/format'
 import { ChartCard, Grid, Figure, Figures, ColumnChart, LineChart, Segmented, DayCalendar, DayLegend, Meter, MiniTable, Pill, EmptyChart, DAY } from './charts'
-import { AiBriefCard, Findings, useAiBrief, useFindingsMode, type AiState } from './AiBrief'
-import type { AiBriefResponse } from '@/lib/analytics/ai/types'
+import { Findings, useWritten, type WrittenState } from './Written'
+import { MySummaryCard } from './MySummary'
+import type { AiResponse } from '@/lib/analytics/ai/types'
+import type { MySummary } from '@/lib/analytics/briefs'
 import { usePdfExport, DownloadMenu, bylineOf, istDay } from './export'
 
 /** Where a finding's click lands on this page. */
@@ -30,11 +32,10 @@ export default function MyInsights({ employeeId }: { employeeId: string }) {
   }, [employeeId])
 
   // The AI read of their own month, once the figures are in.
-  const ai = useAiBrief(
-    refresh => api(`/api/analytics/me/ai${refresh ? '?refresh=1' : ''}`, employeeId) as Promise<AiBriefResponse>,
+  const summary = useWritten<MySummary>(
+    refresh => api(`/api/analytics/me/summary${refresh ? '?refresh=1' : ''}`, employeeId) as Promise<AiResponse<MySummary>>,
     d ? `${employeeId}|${d.generatedAt}` : '',
   )
-  const [mode, setMode] = useFindingsMode(!!ai.res?.brief?.findings.length)
   const pdf = usePdfExport()
 
   if (err) return <EmptyChart text={err} />
@@ -46,7 +47,7 @@ export default function MyInsights({ employeeId }: { employeeId: string }) {
       run: () => pdf.run({
         title: 'My insights', subtitle: [d.me.name, d.me.designation, d.me.department].filter(Boolean).join(' · '), byline: bylineOf(d.me.name),
         filename: `EZER-my-insights-${istDay()}.pdf`,
-        sections: [{ key: 'me', node: <MyView d={d} ai={ai} mode={mode} setMode={setMode} /> }],
+        sections: [{ key: 'me', node: <MyView d={d} summary={summary} /> }],
       }),
     },
     { key: 'xlsx', label: 'Excel workbook', hint: 'Day by day attendance, leave, pay and reviews', run: () => myWorkbook(d, istDay()) },
@@ -56,14 +57,14 @@ export default function MyInsights({ employeeId }: { employeeId: string }) {
       <div style={{ display: 'flex', justifyContent: 'flex-end', marginBottom: S.sm }}>
         <DownloadMenu options={downloads} step={pdf.step} variant="secondary" />
       </div>
-      <MyView d={d} ai={ai} mode={mode} setMode={setMode} />
+      <MyView d={d} summary={summary} />
       {pdf.stage}
     </div>
   )
 }
 
 /** The page itself — drawn on screen and, unchanged, in the PDF. */
-function MyView({ d, ai, mode, setMode }: { d: MyAnalytics; ai: AiState; mode: 'ai' | 'rules'; setMode: (m: 'ai' | 'rules') => void }) {
+function MyView({ d, summary }: { d: MyAnalytics; summary: WrittenState<MySummary> }) {
   const a = d.attendance
   const first = d.me.name.split(' ')[0]
   const inBy = new Map(a.days.map(x => [x.date, x]))
@@ -71,9 +72,9 @@ function MyView({ d, ai, mode, setMode }: { d: MyAnalytics; ai: AiState; mode: '
     <div className="ez-fade">
       <Hero d={d} first={first} />
 
-      <AiBriefCard state={ai} audience="me" />
+      <MySummaryCard state={summary} first={first} />
       <div style={{ marginBottom: S.lg }}>
-        <Findings state={ai} rules={d.nudges} mode={mode} setMode={setMode} grid onOpen={jump} areaLabel={a => AREA[a]}
+        <Findings rules={d.nudges} grid onOpen={jump} areaLabel={a => AREA[a]}
           empty="All clear — nothing needs your attention this month." />
       </div>
 

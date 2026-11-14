@@ -9,15 +9,11 @@
 // held to the whole sheet. A sentence that fails is dropped, not corrected, and
 // counted, so a bad day shows up in the response.
 //
-// Then: severities and areas from a closed list, lengths capped, markdown and stray
-// fact ids stripped, each finding must cite at least one real fact, and finally the
-// P1/P2 tokens are turned back into names — here, on the server, after the model.
+// Then: lengths capped, markdown and stray fact ids stripped, each item must cite at
+// least one real fact, and finally the P1/P2 tokens are turned back into names — here,
+// on the server, after the model. The task parsers (./tasks.ts) apply these.
 
-import type { Severity } from '../types.ts'
-import type { AiBrief, AiFinding, AiNote, Fact, FactPack } from './types.ts'
-
-const SEVERITIES: Severity[] = ['critical', 'warning', 'info', 'positive']
-const RANK: Record<Severity, number> = { critical: 0, warning: 1, info: 2, positive: 3 }
+import type { Fact, FactPack } from './types.ts'
 
 const TOKEN = /\bP\d{1,3}\b/g
 const NUM = /\d(?:[\d,]*\d)?(?:\.\d+)?/g
@@ -26,7 +22,7 @@ const NUM = /\d(?:[\d,]*\d)?(?:\.\d+)?/g
  *  it. "one" is not on the list — it is far more often "one manager" or "no one". */
 const WORDS: Record<string, number> = {
   zero: 0, two: 2, three: 3, four: 4, five: 5, six: 6, seven: 7, eight: 8, nine: 9, ten: 10, eleven: 11, twelve: 12,
-  twice: 2, double: 2, triple: 3, thrice: 3,
+  twice: 2, double: 2, doubled: 2, triple: 3, tripled: 3, thrice: 3, quadrupled: 4,
 }
 const WORD = new RegExp(`\\b(${Object.keys(WORDS).join('|')})\\b`, 'gi')
 
@@ -102,7 +98,7 @@ export function restore(text: string, aliases: Record<string, string>): string {
   return text.replace(TOKEN, t => aliases[t] ?? t)
 }
 
-function citedFacts(raw: unknown, byId: Map<string, Fact>): Fact[] {
+export function citedFacts(raw: unknown, byId: Map<string, Fact>): Fact[] {
   const ids = Array.isArray(raw) ? raw.filter((x): x is string => typeof x === 'string') : []
   const out: Fact[] = []
   for (const id of ids) {
@@ -110,63 +106,4 @@ function citedFacts(raw: unknown, byId: Map<string, Fact>): Fact[] {
     if (f && !out.includes(f)) out.push(f)
   }
   return out.slice(0, 4)
-}
-
-/** Turn the model's text into a brief that is safe to show, or null if nothing is. */
-export function toBrief(raw: string, pack: FactPack, model: string, now = new Date()): AiBrief | null {
-  const j = parseJsonLoose(raw)
-  if (!j) return null
-  const ok = allowedNumbers(pack)
-  const byId = new Map([...pack.facts, ...pack.signals].map(f => [f.id, f]))
-  const R = (t: string) => restore(t, pack.aliases)
-  const evidence = (fs: Fact[]) => fs.map(f => R(f.text.replace(/^\[(critical|warning|info|positive)\]\s*/, '')))
-  let dropped = 0
-
-  const pass = (t: string) => { if (!t) return ''; if (grounded(t, ok)) return t; dropped++; return '' }
-  const headline = pass(clean(j.headline, 160)) || null
-  const summary = pass(clean(j.summary, 520)) || null
-
-  const findings: AiFinding[] = []
-  const seen = new Set<string>()
-  for (const x of Array.isArray(j.findings) ? j.findings.slice(0, 8) : []) {
-    if (!x || typeof x !== 'object') continue
-    const o = x as Record<string, unknown>
-    const title = clean(o.title, 120), detail = clean(o.detail, 360), action = clean(o.action, 200)
-    const facts = citedFacts(o.facts, byId)
-    if (!title || !facts.length) { dropped++; continue }
-    const own = numbersFrom([pack.context, ...facts.map(f => f.text)])
-    if (!grounded(title, own) || !grounded(detail, own) || !grounded(action, own, false)) { dropped++; continue }
-    const key = title.toLowerCase()
-    if (seen.has(key)) continue
-    seen.add(key)
-    const sev = String(o.severity || '').toLowerCase() as Severity
-    const asked = String(o.area || '').toLowerCase()
-    const area = pack.areas.includes(asked) ? asked : (facts.map(f => f.area).find(a => pack.areas.includes(a)) ?? null)
-    if (!area) { dropped++; continue }
-    findings.push({
-      id: `ai-${findings.length + 1}`,
-      severity: SEVERITIES.includes(sev) ? sev : 'info',
-      area, title: R(title), detail: R(detail), action: action ? R(action) : null, evidence: evidence(facts),
-    })
-  }
-  // Stable sort: severity first, the model's order within a severity.
-  findings.sort((a, b) => RANK[a.severity] - RANK[b.severity])
-
-  const notes: AiNote[] = []
-  for (const x of Array.isArray(j.notes) ? j.notes : []) {
-    if (!x || typeof x !== 'object') continue
-    const o = x as Record<string, unknown>
-    const area = String(o.area || '').toLowerCase()
-    if (!pack.noteAreas.includes(area) || notes.some(n => n.area === area)) continue
-    const text = clean(o.text, 360)
-    const facts = citedFacts(o.facts, byId)
-    if (!text || !facts.length || !grounded(text, numbersFrom([pack.context, ...facts.map(f => f.text)]))) { dropped++; continue }
-    notes.push({ area, text: R(text), evidence: evidence(facts) })
-  }
-
-  if (!findings.length && !headline && !summary) return null
-  return {
-    headline: headline && R(headline), summary: summary && R(summary), findings: findings.slice(0, 7), notes,
-    model, generatedAt: now.toISOString(), dropped,
-  }
 }

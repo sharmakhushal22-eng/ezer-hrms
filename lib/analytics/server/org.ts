@@ -29,6 +29,7 @@ import { orgInsights } from '../insights.ts'
 import type { OrgAnalytics, PersonRef, Kpi, Change, RiskRow } from '../types.ts'
 import { sb, all, inChunks, soft, EMP_COLS, toEmp, floorHalf, leaveYear, one, OPEN_RESIGNATION, STAGE_LABEL } from './db.ts'
 import { allows, allowedPick, limitLabel, type OrgAccess } from '../access.ts'
+import { computeMovers, moversReadFrom, type MoverInput } from '../movers.ts'
 
 export interface OrgQuery {
   company?: string | null
@@ -111,7 +112,8 @@ export async function orgAnalytics(grant: Grant, module: Module | null, q0: OrgQ
   const attFrom = daysBetween(period.from, period.to) + 1 > ATT_MAX_DAYS ? addDays(period.to, -(ATT_MAX_DAYS - 1)) : period.from
   const attLen = daysBetween(attFrom, attTo) + 1
   const attPrevFrom = addDays(attFrom, -attLen)
-  const readFrom = [attPrevFrom, addDays(today, -60)].sort()[0]
+  // Also far enough back for "last month against the month before" (lib/analytics/movers.ts).
+  const readFrom = [attPrevFrom, addDays(today, -60), moversReadFrom(today)].sort()[0]
   const leaveFrom = [period.from, prev.from, addDays(today, -365)].sort()[0]
   const fy = fyLabel(today)
 
@@ -119,7 +121,7 @@ export async function orgAnalytics(grant: Grant, module: Module | null, q0: OrgQ
     soft(inChunks<any>(ids, c => sb.from('employee_resignation').select('employee_id, status, date_of_resignation, final_lwd, tentative_lwd, proposed_lwd, lwd_as_per_policy, reason_code, is_regrettable, created_at').in('employee_id', c).order('created_at') as any, 'resignations')),
     soft(all<any>(() => sb.from('hr_exit_requests').select('employee_id, status, reason_code, reason_label, last_working_day').in('company_id', companyIds).order('created_at') as any, 'hr exits')),
     soft(all<any>(() => sb.from('exit_reason_master').select('code, category, label').order('code') as any, 'exit reasons')),
-    all<any>(() => sb.from('attendance_records').select('employee_id, attendance_date, work_in, work_out, total_minutes, late_minutes, overtime_minutes, status').gte('attendance_date', readFrom).lte('attendance_date', attTo).order('attendance_date').order('employee_id') as any, 'attendance'),
+    all<any>(() => sb.from('attendance_records').select('employee_id, attendance_date, work_in, work_out, total_minutes, late_minutes, overtime_minutes, status').gte('attendance_date', readFrom).lte('attendance_date', [attTo, today].sort()[1]).order('attendance_date').order('employee_id') as any, 'attendance'),
     all<any>(() => sb.from('leave_applications').select('employee_id, from_date, to_date, days, half_day, status, applied_at, resolved_at, leave_types(short_name, name)').lte('from_date', [period.to, today].sort()[1]).gte('to_date', leaveFrom).order('from_date').order('employee_id') as any, 'leave'),
     soft(inChunks<any>(ids, c => sb.from('leave_balances').select('employee_id, leave_type_id, opening, accrued, used, encashed, leave_types(short_name, name)').eq('year', leaveYear(today)).in('employee_id', c).order('employee_id') as any, 'balances')),
     soft(all<any>(() => sb.from('attendance_regularisation').select('employee_id, attendance_date, status').gte('attendance_date', period.from).lte('attendance_date', period.to).order('attendance_date') as any, 'regularisations')),
@@ -548,6 +550,27 @@ export async function orgAnalytics(grant: Grant, module: Module | null, q0: OrgQ
   const cost = access.cost ? await costSection(companyIds, emps, byId, inPop, dn, ctc as any[], fy, today) : null
 
   // ════════════════════════════════════════════════════════════════════════
+  // WHAT MOVED — month against month, by group (the briefing and "Why?")
+  // ════════════════════════════════════════════════════════════════════════
+  const mrfDept = new Map<string, string>(mrfIn.map(m => [m.id, m.department_id ? dn(m.department_id) : 'Unassigned']))
+  const moverInput: MoverInput = {
+    today, emps, att, approved,
+    candidates: candIn.map(c => ({
+      applied: String(c.applied_date || c.created_at || '').slice(0, 10),
+      offered: c.offer_sent_at ? String(c.offer_sent_at).slice(0, 10) : null,
+      source: c.source || null,
+      department: c.mrf_id ? mrfDept.get(c.mrf_id) || null : null,
+    })),
+    runs: cost?.runs.map(r => ({ month: r.month, cost: r.cost, employees: r.employees })) || null,
+    dept: e => (e.department_id ? dn(e.department_id) : 'Unassigned'),
+    loc: e => ln(e.location_id),
+    reason: e => reasonOf(e)?.label || 'Not recorded',
+    kind: e => kindOf(e),
+    leaveType: code => leaveTypeName.get(code) || code,
+  }
+  const movers = { mtd: computeMovers(moverInput, 'mtd'), last: computeMovers(moverInput, 'last') }
+
+  // ════════════════════════════════════════════════════════════════════════
   // PULSE
   // ════════════════════════════════════════════════════════════════════════
   const thisM = monthOf(today), lastM = addMonths(thisM, -1)
@@ -596,7 +619,7 @@ export async function orgAnalytics(grant: Grant, module: Module | null, q0: OrgQ
       ...('via' in acc ? { via: acc.via, export: acc.export, tabs: [...acc.tabs], until: acc.until } : {}),
       limitLabel: limitLabel(lim && { ...lim, companies: lim.companies && someCompanies ? lim.companies : null }, id => coName.get(id)),
     },
-    workforce, attrition, attendance, leave, performance, learning, hiring, cost,
+    workforce, attrition, attendance, leave, performance, learning, hiring, cost, movers,
   }
   const insights = orgInsights(base)
   return { ...base, pulse: { kpis, insights, changes, flow: trendFlow } }

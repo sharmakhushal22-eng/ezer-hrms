@@ -164,6 +164,10 @@ export function redactTabs(body: OrgAnalytics, tabs: OrgTab[]): OrgAnalytics {
     if (ok.has(t)) continue
     for (const k of TAB_SECTIONS[t]) out[k] = k === 'cost' ? null : blank(body[k])
   }
+  if (body.movers) {
+    const only = (set: NonNullable<OrgAnalytics['movers']>['mtd']) => ({ ...set, items: set.items.filter(m => ok.has(AREA_TAB[m.area])) })
+    out.movers = { mtd: only(body.movers.mtd), last: only(body.movers.last) }
+  }
   const keep = (key: string) => { const t = KPI_TAB[key]; return !t || ok.has(t) }
   out.pulse = {
     kpis: body.pulse.kpis.filter(k => keep(k.key)),

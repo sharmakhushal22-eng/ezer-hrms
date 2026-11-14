@@ -19,13 +19,16 @@ import {
   RatingCurve, Meter, MiniTable, Pill, DeltaChip, EmptyChart,
 } from './charts'
 import { RiskTable } from './RiskTable'
-import { AiBriefCard, AiNote, Findings, useAiBrief, useFindingsMode, type AiState } from './AiBrief'
-import type { AiBriefResponse } from '@/lib/analytics/ai/types'
+import { Findings } from './Written'
+import { ExecutiveBriefing, useBriefing, type BriefingHandle } from './Briefing'
+import { ExplainProvider } from './Explain'
+import type { Briefing } from '@/lib/analytics/briefs'
 import { usePdfExport, DownloadMenu, bylineOf, type DownloadOption } from './export'
 import { TAB_LABEL } from '@/lib/analytics/access'
 import dynamic from 'next/dynamic'
 
 const AccessManager = dynamic(() => import('./AccessManager'), { ssr: false })
+const DigestSettings = dynamic(() => import('./DigestSettings'), { ssr: false })
 
 type Tab = 'pulse' | 'workforce' | 'attrition' | 'attendance' | 'performance' | 'hiring' | 'cost'
 
@@ -84,18 +87,13 @@ export default function OrgAnalytics() {
 
   React.useEffect(() => { load(f) }, [f, load])
 
-  // The AI read follows the figures: asked for once they have loaded, never before,
-  // so the page is never held up by the model.
-  const ai = useAiBrief(async (refresh: boolean) => {
-    const qs = queryOf(f)
-    if (refresh) qs.set('refresh', '1')
-    const res = await fetch(`/api/analytics/org/ai?${qs}`, { headers: await authHeaders(), cache: 'no-store' })
-    const body = await res.json().catch(() => ({}))
-    if (!res.ok) throw new Error(body?.error || `HTTP ${res.status}`)
-    return body as AiBriefResponse
-  }, data ? `${queryOf(f)}|${data.generatedAt}` : '')
+  // The executive briefing follows the figures: asked for once they have loaded, never
+  // before, so the page is never held up by the model.
+  const query = queryOf(f).toString()
+  const briefing = useBriefing(query, data?.generatedAt || '')
   const pdf = usePdfExport()
   const [managing, setManaging] = React.useState(false)
+  const [digests, setDigests] = React.useState(false)
   // Tabs this reader may open (an analytics grant can limit them). Pulse always.
   const allowed = React.useCallback((t: Tab) => t === 'pulse' || !data?.access.tabs || data.access.tabs.includes(t), [data])
   const view: Tab = allowed(tab) ? tab : 'pulse'
@@ -126,14 +124,14 @@ export default function OrgAnalytics() {
       filename: `EZER-People-Analytics-${name}-${sc.today}.pdf`,
       sections: which.map(t => ({
         key: t, title: t === 'pulse' ? 'Pulse' : TAB_LABEL[t as keyof typeof TAB_LABEL],
-        node: <TabBody t={t} d={data} ai={ai} go={() => {}} cycle={f.cycle} setCycle={() => {}} />,
+        node: <TabBody t={t} d={data} briefing={briefing} go={() => {}} cycle={f.cycle} setCycle={() => {}} />,
       })),
     })
   }
   const downloads: DownloadOption[] = data ? [
     { key: 'pdf-tab', label: `PDF — ${tabs.find(t => t.key === view)?.label || 'this tab'}`, hint: 'This tab, the way it looks here', run: () => pdfJob([view], view) },
     { key: 'pdf-all', label: 'PDF — full report', hint: `Every tab you can open (${tabs.length}), one after another`, run: () => pdfJob(tabs.map(t => t.key), 'full-report') },
-    { key: 'xlsx', label: 'Excel workbook', hint: 'The figures and full lists, one sheet each', run: () => exportWorkbook(data, ai.res) },
+    { key: 'xlsx', label: 'Excel workbook', hint: 'The figures and full lists, one sheet each', run: () => exportWorkbook(data, briefing.state.res?.result || null) },
   ] : []
 
   return (
@@ -143,6 +141,7 @@ export default function OrgAnalytics() {
         context={data ? <>{data.scope.companyLabel} · {data.scope.period.label} ({dLabel(data.scope.period.from)} – {dLabelLong(data.scope.period.to)}) · updated {new Date(data.generatedAt).toLocaleTimeString('en-IN', { hour: 'numeric', minute: '2-digit' })}</> : 'Workforce, attrition, attendance, performance, hiring and cost — in one place'}
         actions={<>
           {data?.access.manage && <Button size="sm" onClick={() => setManaging(true)}>Manage access</Button>}
+          {data?.access.manage && <Button size="sm" onClick={() => setDigests(true)}>Email digests</Button>}
           <Button size="sm" onClick={() => load(f, true)} disabled={busy}>{busy ? 'Refreshing…' : 'Refresh'}</Button>
           {data?.access.export !== false && <DownloadMenu options={downloads} step={pdf.step} disabled={!data || busy} />}
         </>}
@@ -169,22 +168,24 @@ export default function OrgAnalytics() {
 
       {data && (
         <div style={{ opacity: busy ? 0.55 : 1, transition: 'opacity .2s', pointerEvents: busy ? 'none' : undefined }} className="ez-fade" key={view}>
-          <TabBody t={view} d={data} ai={ai} go={pick} cycle={f.cycle} setCycle={c => set({ cycle: c })} />
+          <ExplainProvider query={query} dataKey={data.generatedAt}>
+            <TabBody t={view} d={data} briefing={briefing} go={pick} cycle={f.cycle} setCycle={c => set({ cycle: c })} />
+          </ExplainProvider>
         </div>
       )}
       {pdf.stage}
       {managing && <AccessManager onClose={() => setManaging(false)} />}
+      {digests && <DigestSettings onClose={() => setDigests(false)} />}
     </Page>
   )
 }
 
 /** One tab, with its AI note on top — the same on the page and in the PDF. */
-function TabBody({ t, d, ai, go, cycle, setCycle }: { t: Tab; d: Data; ai: AiState; go: (t: Tab) => void; cycle: string; setCycle: (c: string) => void }) {
-  const note = t !== 'pulse' ? ai.res?.brief?.notes.find(n => n.area === t) : undefined
+/** One tab — the same on the page and in the PDF. */
+function TabBody({ t, d, briefing, go, cycle, setCycle }: { t: Tab; d: Data; briefing: BriefingHandle; go: (t: Tab) => void; cycle: string; setCycle: (c: string) => void }) {
   return (
     <>
-      {note && <AiNote note={note} />}
-      {t === 'pulse' && <PulseTab d={d} go={go} ai={ai} />}
+      {t === 'pulse' && <PulseTab d={d} go={go} briefing={briefing} />}
       {t === 'workforce' && <WorkforceTab d={d} />}
       {t === 'attrition' && <AttritionTab d={d} />}
       {t === 'attendance' && <AttendanceTab d={d} />}
@@ -264,29 +265,29 @@ function Loading() {
 
 const KPI_TAB: Record<string, Tab> = { headcount: 'workforce', joiners: 'attrition', exits: 'attrition', attrition: 'attrition', ontime: 'attendance', leave: 'attendance', open: 'hiring', cost: 'cost', pms: 'performance' }
 
-function PulseTab({ d, go, ai }: { d: Data; go: (t: Tab) => void; ai: AiState }) {
-  const aiFindings = ai.res?.brief?.findings ?? []
-  const [mode, setMode] = useFindingsMode(aiFindings.length > 0)
-  const ins: { severity: string }[] = mode === 'ai' && aiFindings.length ? aiFindings : d.pulse.insights
+function PulseTab({ d, go, briefing }: { d: Data; go: (t: Tab) => void; briefing: BriefingHandle }) {
+  const ins = d.pulse.insights
+  const sc = d.scope
   const flow = d.pulse.flow
   return (
     <>
       <KpiRow items={d.pulse.kpis} onPick={k => KPI_TAB[k] && go(KPI_TAB[k])} />
-      <AiBriefCard state={ai} audience="org" />
+      <ExecutiveBriefing handle={briefing} kpis={d.pulse.kpis} viewer={d.access.viewer} canDownload={d.access.export !== false}
+        scopeLine={[sc.companyLabel, d.access.limitLabel, sc.department, sc.location, sc.type].filter(Boolean).join(' · ')} />
       <Grid min={380}>
         <ChartCard title="What needs attention" sub="Click one to open its detail."
                    right={<Pill t={ins.some(i => i.severity === 'critical') ? 'critical' : ins.some(i => i.severity === 'warning') ? 'warning' : 'positive'}>{ins.length} finding{ins.length === 1 ? '' : 's'}</Pill>}>
-          <Findings state={ai} rules={d.pulse.insights} mode={mode} setMode={setMode} limit={7}
+          <Findings rules={d.pulse.insights} limit={7} why={i => `i:${i.id}`}
             onOpen={a => go(TAB_OF[a as Area] || 'pulse')} areaLabel={a => AREA_LABEL[a as Area]}
             empty="Nothing stands out for this selection — every measure is inside its normal range." />
         </ChartCard>
         <div style={{ display: 'grid', gap: S.lg, alignContent: 'start' }}>
-          <ChartCard title="This month against last month" sub="Month to date, compared with the same days last month where the figure is a flow.">
+          <ChartCard why="pulse-changes" title="This month against last month" sub="Month to date, compared with the same days last month where the figure is a flow.">
             <MiniTable head={['Measure', 'Last month', 'This month', 'Change']} align={['left', 'right', 'right', 'right']}
               rows={d.pulse.changes.map(c => [c.label, fmt(c.before, c.fmt), <strong key="n" style={{ color: C.ink }}>{fmt(c.now, c.fmt)}</strong>, <DeltaChip key="d" now={c.now} before={c.before} f={c.fmt} good={c.good} />])} />
           </ChartCard>
           {flow.length > 0 && (
-            <ChartCard title="Headcount, last 12 months" sub="People on the books at each month end.">
+            <ChartCard why="pulse-headcount" title="Headcount, last 12 months" sub="People on the books at each month end.">
               <LineChart labels={flow.map(x => mLabel(x.month))} series={[{ key: 'hc', label: 'Headcount', values: flow.map(x => x.closing) }]} area height={170} zeroBase={false} />
             </ChartCard>
           )}
@@ -294,7 +295,7 @@ function PulseTab({ d, go, ai }: { d: Data; go: (t: Tab) => void; ai: AiState })
       </Grid>
       <Grid min={380}>
         {flow.length > 0 && (
-          <ChartCard title="Joiners and exits" sub="Each month's movement in and out.">
+          <ChartCard why="pulse-flow" title="Joiners and exits" sub="Each month's movement in and out.">
             <ColumnChart labels={flow.map(x => mLabel(x.month))} series={[
               { key: 'j', label: 'Joiners', values: flow.map(x => x.joiners) },
               { key: 'x', label: 'Exits', values: flow.map(x => x.exits) },
@@ -355,11 +356,11 @@ function WorkforceTab({ d }: { d: Data }) {
         <Figure label="No manager" value={w.noManager} sub="nobody to approve for them" t={w.noManager ? 'warning' : 'neutral'} />
       </Figures>
       <Grid>
-        <ChartCard title="Headcount by department"><HBars items={w.byDepartment.map(b => ({ ...b }))} total={w.headcount} limit={12} /></ChartCard>
-        <ChartCard title="Headcount by location"><HBars items={w.byLocation} total={w.headcount} /></ChartCard>
+        <ChartCard why="wf-dept" title="Headcount by department"><HBars items={w.byDepartment.map(b => ({ ...b }))} total={w.headcount} limit={12} /></ChartCard>
+        <ChartCard why="wf-location" title="Headcount by location"><HBars items={w.byLocation} total={w.headcount} /></ChartCard>
       </Grid>
       <Grid>
-        <ChartCard title="Gender" sub="Across the selection, then by department.">
+        <ChartCard why="wf-gender" title="Gender" sub="Across the selection, then by department.">
           <Segmented parts={w.gender} />
           <div style={{ marginTop: S.lg, display: 'grid', gap: 7 }}>
             {w.genderByDepartment.map(g => {
@@ -377,7 +378,7 @@ function WorkforceTab({ d }: { d: Data }) {
             })}
           </div>
         </ChartCard>
-        <ChartCard title="Employment type and company">
+        <ChartCard why="wf-type" title="Employment type and company">
           <div style={{ ...eyebrow, marginBottom: 6 }}>Employment type</div>
           <Segmented parts={w.byType} />
           {w.byCompany.length > 1 && <>
@@ -389,19 +390,19 @@ function WorkforceTab({ d }: { d: Data }) {
         </ChartCard>
       </Grid>
       <Grid>
-        <ChartCard title="Tenure" sub="How long people have been with the company.">
+        <ChartCard why="wf-tenure" title="Tenure" sub="How long people have been with the company.">
           <ColumnChart labels={w.tenure.map(t => SHORT_TENURE[t.key] || t.label)} series={[{ key: 't', label: 'People', values: w.tenure.map(t => t.value) }]} height={190} />
         </ChartCard>
-        <ChartCard title="Age" sub="From date of birth; placeholder dates are left out.">
+        <ChartCard why="wf-age" title="Age" sub="From date of birth; placeholder dates are left out.">
           <ColumnChart labels={w.age.map(t => t.label)} series={[{ key: 'a', label: 'People', values: w.age.map(t => t.value) }]} height={190} />
         </ChartCard>
-        <ChartCard title="Span of control" sub={`${w.span.managers} managers · median ${w.span.medianSpan ?? '—'} direct reports. ${w.span.narrow} have one or two; ${w.span.wide} have more than twelve.`}>
+        <ChartCard why="wf-span" title="Span of control" sub={`${w.span.managers} managers · median ${w.span.medianSpan ?? '—'} direct reports. ${w.span.narrow} have one or two; ${w.span.wide} have more than twelve.`}>
           <ColumnChart labels={w.span.distribution.map(t => t.key)} series={[{ key: 's', label: 'Managers', values: w.span.distribution.map(t => t.value) }]} height={190} />
         </ChartCard>
       </Grid>
       {d.access.people && (w.probation.overdue.length > 0 || w.probation.dueSoon.length > 0) && (
         <Grid>
-          <ChartCard title="Probation past its end date" sub="Still on probation after the period ended — confirm, extend or close.">
+          <ChartCard why="wf-probation" title="Probation past its end date" sub="Still on probation after the period ended — confirm, extend or close.">
             <PeopleTable rows={w.probation.overdue} />
           </ChartCard>
           <ChartCard title="Confirmations due in 30 days"><PeopleTable rows={w.probation.dueSoon} empty="None due in the next 30 days." /></ChartCard>
@@ -434,30 +435,30 @@ function AttritionTab({ d }: { d: Data }) {
         <Figure label="Serving notice" value={a.pipelineCount} sub="open resignations" />
       </Figures>
       <Grid min={380}>
-        <ChartCard title="Monthly attrition rate" sub="Exits ÷ average headcount each month (not annualised).">
+        <ChartCard why="at-rate" title="Monthly attrition rate" sub="Exits ÷ average headcount each month (not annualised).">
           <LineChart labels={a.flow.map(x => mLabel(x.month))} series={[{ key: 'r', label: 'Attrition', values: a.flow.map(x => x.attrition) }]} f="pct" area height={190} />
         </ChartCard>
-        <ChartCard title="Headcount bridge" sub="Opening + joiners − exits = closing, month by month.">
+        <ChartCard why="at-bridge" title="Headcount bridge" sub="Opening + joiners − exits = closing, month by month.">
           <MiniTable head={['Month', 'Opening', 'Joiners', 'Exits', 'Closing']} align={['left', 'right', 'right', 'right', 'right']}
             rows={a.flow.slice().reverse().slice(0, 6).map(x => [mLabel(x.month), x.opening, x.joiners ? `+${x.joiners}` : '0', x.exits ? `−${x.exits}` : '0', <strong key="c" style={{ color: C.ink }}>{x.closing}</strong>])} />
         </ChartCard>
       </Grid>
       <Grid>
-        <ChartCard title="Why people left" sub="Reason recorded on the resignation or the HR exit.">
+        <ChartCard why="at-reasons" title="Why people left" sub="Reason recorded on the resignation or the HR exit.">
           {a.categories.length > 0 && <div style={{ marginBottom: S.md }}><Segmented parts={a.categories} height={22} /></div>}
           <HBars items={a.reasons.map(r => ({ key: r.key, label: r.label, value: r.value }))} emptyText="No exits in this period." />
         </ChartCard>
-        <ChartCard title="Tenure when they left" sub="Short tenures point at hiring fit and onboarding.">
+        <ChartCard why="at-tenure" title="Tenure when they left" sub="Short tenures point at hiring fit and onboarding.">
           <ColumnChart labels={a.tenureAtExit.map(t => SHORT_TENURE[t.key] || t.label)} series={[{ key: 'x', label: 'Exits', values: a.tenureAtExit.map(t => t.value) }]} height={200} emptyText="No exits in this period." />
         </ChartCard>
-        <ChartCard title="By department" sub="Period attrition rate, not annualised.">
+        <ChartCard why="at-dept" title="By department" sub="Period attrition rate, not annualised.">
           <MiniTable head={['Department', 'Exits', 'Headcount', 'Rate']} align={['left', 'right', 'right', 'right']} empty="No exits in this period."
             rows={a.byDepartment.map(x => [x.label, x.exits, x.headcount, fmt(x.rate, 'pct')])} />
         </ChartCard>
       </Grid>
       {d.access.people && (
         <>
-          <ChartCard title="Flight-risk watchlist" style={{ marginBottom: S.lg }}
+          <ChartCard why="at-risk" title="Flight-risk watchlist" style={{ marginBottom: S.lg }}
                      sub="People on the books showing two or more warning signs from attendance, leave, ratings, pay revisions and their reporting line. A prompt for a conversation, not a verdict — every reason is listed.">
             <RiskTable rows={a.risk} />
           </ChartCard>
@@ -500,24 +501,24 @@ function AttendanceTab({ d }: { d: Data }) {
         <Figure label="Corrections filed" value={a.regularisation.total} sub={`${a.regularisation.pending} pending · ${fmt(a.regularisation.approvalRate, 'pct')} approved`} />
       </Figures>
       <Grid min={380}>
-        <ChartCard title="Punctuality by month" sub="Share of punch-ins with no late minutes.">
+        <ChartCard why="att-monthly" title="Punctuality by month" sub="Share of punch-ins with no late minutes.">
           <LineChart labels={a.monthly.map(x => mLabel(x.month))} series={[{ key: 'o', label: 'On time', values: a.monthly.map(x => x.onTimeRate) }]} f="pct" yMax={100} height={190} emptyText="No punches in this window." />
         </ChartCard>
-        <ChartCard title="Late marks by weekday" sub="Share of that weekday's punch-ins that were late.">
+        <ChartCard why="att-weekday" title="Late marks by weekday" sub="Share of that weekday's punch-ins that were late.">
           <ColumnChart labels={a.weekday.map(x => x.label)} series={[{ key: 'r', label: 'Late rate', values: a.weekday.map(x => x.rate) }]} f="pct" height={190} emptyText="No late marks in this window." />
         </ChartCard>
       </Grid>
       <Grid min={380}>
-        <ChartCard title="Where and when people are late" sub="Late-mark rate by department and weekday. Darker = later more often.">
+        <ChartCard why="att-heat" title="Where and when people are late" sub="Late-mark rate by department and weekday. Darker = later more often.">
           <HeatGrid rows={a.heat.rows.map(r => ({ key: r.key, label: r.label, cells: r.cells, counts: r.days }))} cols={a.heat.cols} note="Hover a cell for the day count" emptyText="No punches in this window." />
         </ChartCard>
-        <ChartCard title="By department">
+        <ChartCard why="att-dept" title="By department">
           <MiniTable head={['Department', 'Tracked', 'On time', 'Avg hours', 'Missed punches']} align={['left', 'right', 'right', 'right', 'right']} empty="No punches in this window."
             rows={a.byDepartment.map(x => [x.label, x.tracked, fmt(x.onTimeRate, 'pct'), x.avgHours != null ? `${x.avgHours} h` : '—', x.missPunch])} />
         </ChartCard>
       </Grid>
       {d.access.people && a.lateList.length > 0 && (
-        <ChartCard title="Most late marks" sub="Three or more in the window." style={{ marginBottom: S.lg }}>
+        <ChartCard why="att-late" title="Most late marks" sub="Three or more in the window." style={{ marginBottom: S.lg }}>
           <MiniTable head={['Employee', 'Department', 'Late marks', 'Days punched', 'Late share']} align={['left', 'left', 'right', 'right', 'right']}
             rows={a.lateList.map(x => [x.name, x.department || '—', x.late, x.days, fmt(x.days ? (x.late / x.days) * 100 : null, 'pct')])} />
         </ChartCard>
@@ -533,33 +534,33 @@ function AttendanceTab({ d }: { d: Data }) {
         <Figure label="No leave in 90 days" value={`${l.noLeave90.count}`} sub={`of ${l.noLeave90.of} people here 4+ months`} />
       </Figures>
       <Grid min={380}>
-        <ChartCard title="Planned and unplanned leave by month" sub="Approved leave days.">
+        <ChartCard why="lv-monthly" title="Planned and unplanned leave by month" sub="Approved leave days.">
           <ColumnChart stacked labels={l.monthly.map(x => mLabel(x.month))} series={[
             { key: 'p', label: 'Planned', values: l.monthly.map(x => x.planned) },
             { key: 'u', label: 'Unplanned', values: l.monthly.map(x => x.unplanned) },
           ]} f="days" emptyText="No approved leave in this period." />
         </ChartCard>
-        <ChartCard title="By leave type">
+        <ChartCard why="lv-type" title="By leave type">
           <HBars items={l.byType.map(t => ({ key: t.key, label: t.label, value: t.days, sub: `· ${t.spells} spell${t.spells === 1 ? '' : 's'}` }))} f="days" emptyText="No approved leave in this period." />
           <div style={{ ...eyebrow, margin: `${S.lg}px 0 6px` }}>Day the leave starts</div>
           <ColumnChart labels={l.weekdayStarts.map(x => x.label)} series={[{ key: 'w', label: 'Leaves starting', values: l.weekdayStarts.map(x => x.value) }]} height={140} />
         </ChartCard>
       </Grid>
       <Grid min={380}>
-        <ChartCard title="Balances on the books" sub="Available days across current employees, this leave year.">
+        <ChartCard why="lv-balances" title="Balances on the books" sub="Available days across current employees, this leave year.">
           <MiniTable head={['Leave type', 'Days available', 'Per person']} align={['left', 'right', 'right']} empty="No balances recorded."
             rows={l.balances.map(b => [b.label, fmt(b.available, 'days'), fmt(b.perHead, 'days')])} />
           <div style={{ fontSize: F.micro, color: C.faint, marginTop: 6 }}>Large earned-leave balances are a liability at encashment and a sign people are not resting.</div>
         </ChartCard>
         {d.access.people ? (
-          <ChartCard title="Short-absence pattern (Bradford factor)" sub="S² × D over 52 weeks from unplanned spells. A pattern to discuss, never a disciplinary score.">
+          <ChartCard why="lv-bradford" title="Short-absence pattern (Bradford factor)" sub="S² × D over 52 weeks from unplanned spells. A pattern to discuss, never a disciplinary score.">
             <MiniTable head={['Employee', 'Spells', 'Days', 'Score']} align={['left', 'right', 'right', 'right']} empty="No one scores 50 or more."
               rows={l.bradford.map(b => [b.name, b.spells, b.days, <strong key="s" style={{ color: C.ink }}>{b.score}</strong>])} />
           </ChartCard>
         ) : <div />}
       </Grid>
       {d.access.people && l.noLeave90.people.length > 0 && (
-        <ChartCard title="Longest without a break" sub="No approved leave in 90 days; largest earned-leave balance first." style={{ marginBottom: S.lg }}>
+        <ChartCard why="lv-rest" title="Longest without a break" sub="No approved leave in 90 days; largest earned-leave balance first." style={{ marginBottom: S.lg }}>
           <MiniTable head={['Employee', 'Department', 'Earned leave available']} align={['left', 'left', 'right']}
             rows={l.noLeave90.people.map(p => [p.name, p.department || '—', fmt(p.balance, 'days')])} />
         </ChartCard>
@@ -593,20 +594,20 @@ function PerformanceTab({ d, cycle, setCycle }: { d: Data; cycle: string; setCyc
         <Figure label="Recognitions" value={p.recognitions} sub="recommended this cycle" />
       </Figures>
       <Grid min={380}>
-        <ChartCard title="Where the cycle stands" sub="Everyone enrolled, by the stage they have reached.">
+        <ChartCard why="pf-stage" title="Where the cycle stands" sub="Everyone enrolled, by the stage they have reached.">
           <HBars items={p.stages.map((s, i) => ({ key: s.key, label: s.label, value: s.value, colour: i === 0 ? VIZ.other : VIZ.series[0] }))} total={p.enrolled} emptyText="Nobody is enrolled in this cycle." />
         </ChartCard>
-        <ChartCard title="Rating distribution" sub="Final ratings against a common calibration guideline. The guideline is a reference, not a quota.">
+        <ChartCard why="pf-dist" title="Rating distribution" sub="Final ratings against a common calibration guideline. The guideline is a reference, not a quota.">
           <RatingCurve dist={p.distribution} />
         </ChartCard>
       </Grid>
       <Grid min={380}>
-        <ChartCard title="By department">
+        <ChartCard why="pf-dept" title="By department">
           <MiniTable head={['Department', 'Rated', 'Average (1–5)', 'O · EE · ME · NI · U']} align={['left', 'right', 'right', 'left']} empty="No ratings yet."
             rows={p.byDepartment.map(x => [x.label, x.rated, x.avg != null ? x.avg.toFixed(2) : '—', <MiniDist key="d" dist={x.dist} />])} />
         </ChartCard>
         {d.access.people ? (
-          <ChartCard title="How managers rate" sub="Managers with three or more rated reports, furthest from the company average first.">
+          <ChartCard why="pf-skew" title="How managers rate" sub="Managers with three or more rated reports, furthest from the company average first.">
             <MiniTable head={['Manager', 'Rated', 'Average', 'Against company']} align={['left', 'right', 'right', 'right']} empty="No manager has three rated reports yet."
               rows={p.managerSkew.slice(0, 12).map(m => [m.name, m.rated, m.avg.toFixed(2), <Pill key="s" t={Math.abs(m.diff) >= 0.6 ? 'warning' : 'neutral'}>{m.diff > 0 ? '+' : ''}{m.diff.toFixed(2)}</Pill>])} />
           </ChartCard>
@@ -627,7 +628,7 @@ function PerformanceTab({ d, cycle, setCycle }: { d: Data; cycle: string; setCyc
         <Figure label="Average score" value={ln.avgScore != null ? `${ln.avgScore}%` : '—'} />
       </Figures>
       <Grid min={380}>
-        <ChartCard title="Status of every enrolment">
+        <ChartCard why="ln-status" title="Status of every enrolment">
           <Segmented parts={[
             { key: 'c', label: 'Completed', value: ln.completed },
             { key: 'i', label: 'In progress', value: ln.inProgress },
@@ -635,7 +636,7 @@ function PerformanceTab({ d, cycle, setCycle }: { d: Data; cycle: string; setCyc
             { key: 'o', label: 'Other (failed, expired)', value: Math.max(0, ln.enrolments - ln.completed - ln.inProgress - ln.notStarted) },
           ]} />
         </ChartCard>
-        <ChartCard title="Learning by department">
+        <ChartCard why="ln-dept" title="Learning by department">
           <MiniTable head={['Department', 'Enrolments', 'Completed', 'Overdue']} align={['left', 'right', 'right', 'right']} empty="No enrolments yet."
             rows={ln.byDepartment.map(x => [x.label, x.enrolments, fmt(x.completion, 'pct'), x.overdue])} />
         </ChartCard>
@@ -671,25 +672,25 @@ function HiringTab({ d }: { d: Data }) {
         <Figure label="Joining in 30 days" value={h.joiningSoon.length} />
       </Figures>
       <Grid min={380}>
-        <ChartCard title="Hiring funnel" sub="Candidates who applied in the period, by the furthest stage reached.">
+        <ChartCard why="hr-funnel" title="Hiring funnel" sub="Candidates who applied in the period, by the furthest stage reached.">
           <Funnel steps={h.funnel} />
           {h.rejected > 0 && <div style={{ fontSize: F.tiny, color: C.muted, marginTop: 8 }}>{h.rejected} rejected along the way.</div>}
         </ChartCard>
-        <ChartCard title="Which sources work" sub="Candidates and how many reached an offer.">
+        <ChartCard why="hr-sources" title="Which sources work" sub="Candidates and how many reached an offer.">
           <MiniTable head={['Source', 'Candidates', 'Offers', 'Offer rate']} align={['left', 'right', 'right', 'right']} empty="No candidates in this period."
             rows={h.sources.map(s => [s.label, s.candidates, s.offers, fmt(s.rate, 'pct')])} />
         </ChartCard>
       </Grid>
       <Grid min={380}>
-        <ChartCard title="Applicants per month">
+        <ChartCard why="hr-applicants" title="Applicants per month">
           <ColumnChart labels={h.monthlyApplicants.map(x => mLabel(x.month))} series={[{ key: 'a', label: 'Applicants', values: h.monthlyApplicants.map(x => x.value) }]} emptyText="No applicants in the last 12 months." />
         </ChartCard>
-        <ChartCard title="How long requisitions stay open" sub="Approved MRFs, by days since approval.">
+        <ChartCard why="hr-mrfage" title="How long requisitions stay open" sub="Approved MRFs, by days since approval.">
           <ColumnChart labels={h.mrfAge.map(x => x.label)} series={[{ key: 'm', label: 'Open MRFs', values: h.mrfAge.map(x => x.value) }]} height={170} emptyText="No open requisitions." />
         </ChartCard>
       </Grid>
       <Grid min={380}>
-        <ChartCard title="Oldest open requisitions">
+        <ChartCard why="hr-oldest" title="Oldest open requisitions">
           <MiniTable head={['Role', 'MRF', 'Department', 'Openings', 'Days open']} align={['left', 'left', 'left', 'right', 'right']} empty="No open requisitions."
             rows={h.oldestMrfs.map(m => [m.title, m.number || '—', m.department || '—', m.openings, <Pill key="d" t={m.days > 60 ? 'warning' : 'neutral'}>{m.days}</Pill>])} />
         </ChartCard>
@@ -731,7 +732,7 @@ function CostTab({ d }: { d: Data }) {
             <Figure label="Cost per employee" value={L.perHead != null ? inr(L.perHead) : '—'} sub={`${L.employees} on payroll`} />
           </Figures>
           <Grid min={380}>
-            <ChartCard title="Payroll cost by month" sub="Cost to company for each processed month.">
+            <ChartCard why="cs-trend" title="Payroll cost by month" sub="Cost to company for each processed month.">
               <ColumnChart labels={c.runs.map(r => mLabel(r.month))} series={[{ key: 'c', label: 'Cost to company', values: c.runs.map(r => r.cost) }]} f="money" height={200} />
             </ChartCard>
             <ChartCard title="What the gross is made of">
@@ -742,7 +743,7 @@ function CostTab({ d }: { d: Data }) {
           </Grid>
           <Grid min={380}>
             <ChartCard title="Deductions from pay"><HBars items={L.deductions} f="money" /></ChartCard>
-            <ChartCard title="Gross pay by department">
+            <ChartCard why="cs-dept" title="Gross pay by department">
               <HBars items={L.byDepartment.map(x => ({ key: x.key, label: x.label, value: x.gross, sub: `· ${x.employees}` }))} f="money" limit={10} />
             </ChartCard>
           </Grid>
@@ -755,7 +756,7 @@ function CostTab({ d }: { d: Data }) {
         <Figure label="Median CTC" value={c.ctc.median != null ? inr(c.ctc.median) : '—'} />
       </Figures>
       <Grid min={380}>
-        <ChartCard title="Median CTC by grade" sub="Grades with fewer than three people are not shown, to protect individual pay.">
+        <ChartCard why="cs-ctc" title="Median CTC by grade" sub="Grades with fewer than three people are not shown, to protect individual pay.">
           <MiniTable head={['Grade', 'People', 'Median CTC']} align={['left', 'right', 'right']} empty="No CTC records."
             rows={c.ctc.byGrade.map(g => [g.label, g.n, g.median != null ? inr(g.median) : <span key="h" style={{ color: C.faint }}>hidden</span>])} />
         </ChartCard>
@@ -775,7 +776,7 @@ function CostTab({ d }: { d: Data }) {
 // Excel download
 // ───────────────────────────────────────────────────────────────────────────
 
-async function exportWorkbook(d: Data, ai: AiBriefResponse | null) {
+async function exportWorkbook(d: Data, b: Briefing | null) {
   const XLSX = await import('xlsx')
   const wb = XLSX.utils.book_new()
   const add = (name: string, rows: Record<string, unknown>[]) => { if (rows.length) XLSX.utils.book_append_sheet(wb, XLSX.utils.json_to_sheet(rows), name.slice(0, 31)) }
@@ -788,14 +789,14 @@ async function exportWorkbook(d: Data, ai: AiBriefResponse | null) {
     { Item: 'Note', Value: 'Contains employee information — share only with people who may see it.' },
   ])
   add('Summary', d.pulse.kpis.map(k => ({ Measure: k.label, Value: k.value, Previous: k.prev ?? '', Note: k.sub || '' })))
-  const b = ai?.brief
   if (b) {
-    add('AI briefing', [
-      ...(b.headline ? [{ Kind: 'Headline', Area: '', Text: b.headline, 'Next step': '', 'Based on': '' }] : []),
-      ...(b.summary ? [{ Kind: 'Summary', Area: '', Text: b.summary, 'Next step': '', 'Based on': '' }] : []),
-      ...b.findings.map(f => ({ Kind: f.severity, Area: AREA_LABEL[f.area as Area] || f.area, Text: `${f.title}. ${f.detail}`, 'Next step': f.action || '', 'Based on': f.evidence.join(' | ') })),
-      ...b.notes.map(n => ({ Kind: 'Tab note', Area: n.area, Text: n.text, 'Next step': '', 'Based on': n.evidence.join(' | ') })),
-      { Kind: 'About', Area: '', Text: `Written by AI (${b.model}) at ${b.generatedAt}; every number checked against the figures.`, 'Next step': '', 'Based on': '' },
+    add('Executive briefing', [
+      { Part: 'Window', Text: `${b.window.month} — ${b.window.label}`, Owner: '', When: '', 'Based on': '' },
+      { Part: 'Headline', Text: b.headline, Owner: '', When: '', 'Based on': '' },
+      ...b.changes.map(c => ({ Part: 'What changed', Text: `${c.title}. ${c.detail}`, Owner: '', When: '', 'Based on': c.evidence.join(' | ') })),
+      ...b.causes.map(c => ({ Part: 'Likely cause', Text: c.text, Owner: '', When: '', 'Based on': c.evidence.join(' | ') })),
+      ...b.actions.map((a, n) => ({ Part: `Action ${n + 1}`, Text: `${a.action}${a.why ? ` — why: ${a.why}` : ''}`, Owner: a.owner, When: a.when, 'Based on': a.evidence.join(' | ') })),
+      { Part: 'About', Text: b.source === 'ai' ? `Written by AI (${b.model}) at ${b.generatedAt}; every number checked against the figures.` : 'Written from the figures by fixed rules.', Owner: '', When: '', 'Based on': '' },
     ])
   }
   add('Findings', d.pulse.insights.map(i => ({ Severity: i.severity, Area: AREA_LABEL[i.area], Finding: i.title, Detail: i.detail })))
